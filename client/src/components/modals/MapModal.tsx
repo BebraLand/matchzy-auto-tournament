@@ -282,8 +282,19 @@ export default function MapModal({ open, map, onClose, onSave }: MapModalProps) 
 
     try {
       let finalImageUrl = imageUrl.trim() || null;
+      let createdMap = false;
 
-      // If there's a selected file, upload it first
+      // A new map must exist before its image can be uploaded. The upload API
+      // also writes the resulting local URL back to the map record.
+      if (!isEditing) {
+        await api.post<MapResponse>('/api/maps', {
+          id: id.trim(),
+          displayName: displayName.trim(),
+          imageUrl: selectedFile ? null : finalImageUrl,
+        });
+        createdMap = true;
+      }
+
       if (selectedFile) {
         try {
           const uploadedUrl = await uploadImageFile(id.trim(), selectedFile);
@@ -295,6 +306,11 @@ export default function MapModal({ open, map, onClose, onSave }: MapModalProps) 
             fileInputRef.current.value = '';
           }
         } catch (err) {
+          // Do not leave an unusable map behind if creating its first preview
+          // fails. Existing maps keep their current image on a failed replace.
+          if (createdMap) {
+            await api.delete(`/api/maps/${id.trim()}`).catch(() => undefined);
+          }
           const error = err as Error;
           setError(error.message || t('mapModal.errors.uploadFailed'));
           setSaving(false);
@@ -302,17 +318,14 @@ export default function MapModal({ open, map, onClose, onSave }: MapModalProps) 
         }
       }
 
-      const payload = {
-        id: id.trim(),
-        displayName: displayName.trim(),
-        imageUrl: finalImageUrl,
-      };
-
       if (isEditing) {
-        await api.put<MapResponse>(`/api/maps/${map.id}`, payload);
+        await api.put<MapResponse>(`/api/maps/${map.id}`, {
+          id: id.trim(),
+          displayName: displayName.trim(),
+          imageUrl: finalImageUrl,
+        });
         showSuccess(t('mapModal.success.mapUpdated'));
       } else {
-        await api.post<MapResponse>('/api/maps', payload);
         showSuccess(t('mapModal.success.mapCreated'));
       }
 

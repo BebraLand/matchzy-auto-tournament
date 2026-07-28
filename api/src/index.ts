@@ -388,8 +388,10 @@ app.use('/api/matchzy', matchzyRoutes); // MatchZy Enhanced version info
 const publicPath = path.join(__dirname, '..', 'public');
 app.use('/app', express.static(publicPath));
 
-// Serve map images statically
-app.use('/map-images', express.static(path.join(publicPath, 'map-images')));
+// Serve uploaded map images from the same persistent location used by the
+// upload route. In production this resolves to /app/data/map-images.
+const mapImagesPath = process.env.MAP_IMAGES_DIR || path.join(process.cwd(), 'data', 'map-images');
+app.use('/map-images', express.static(mapImagesPath));
 app.get('/app/*', (_req: Request, res: Response) => {
   res.sendFile(path.join(publicPath, 'index.html'));
 });

@@ -9,8 +9,10 @@ import fs from 'fs';
 
 const router = Router();
 
-// Directory for storing map images - under api/public
-const MAP_IMAGES_DIR = path.join(__dirname, '..', '..', 'public', 'map-images');
+// Keep uploaded map images in the persistent data volume instead of the built
+// frontend directory. `process.cwd()` is /app in the production container and
+// the repository root in local development.
+const MAP_IMAGES_DIR = process.env.MAP_IMAGES_DIR || path.join(process.cwd(), 'data', 'map-images');
 
 // Ensure map images directory exists
 if (!fs.existsSync(MAP_IMAGES_DIR)) {

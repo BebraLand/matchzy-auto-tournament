@@ -23,24 +23,28 @@
 # ========================================
 
 :3069 {
-	# API and WebSocket proxying (must come before file_server)
-	reverse_proxy /api/* localhost:3000
-	reverse_proxy /socket.io/* localhost:3000
-	reverse_proxy /health localhost:3000
+	# Keep routing order explicit: a map image must reach Express before the
+	# SPA fallback has a chance to rewrite it to index.html.
+	route {
+		reverse_proxy /api/* localhost:3000
+		reverse_proxy /socket.io/* localhost:3000
+		reverse_proxy /health localhost:3000
+		reverse_proxy /map-images/* localhost:3000
 
-	# Serve React frontend from /app/public
-	root * /app/public
+		# Serve React frontend from /app/public.
+		root * /app/public
 
-	# Handle SPA routing: try file, then fallback to index.html
-	@notAPI {
-		not path /api/*
-		not path /socket.io/*
-		not path /health
-		file {
-			try_files {path} /index.html
+		# Handle SPA routing: try file, then fallback to index.html.
+		@notAPI {
+			not path /api/*
+			not path /socket.io/*
+			not path /health
+			not path /map-images/*
+			file {
+				try_files {path} /index.html
+			}
 		}
+		rewrite @notAPI {http.matchers.file.relative}
+		file_server
 	}
-	rewrite @notAPI {http.matchers.file.relative}
-
-	file_server
 }
