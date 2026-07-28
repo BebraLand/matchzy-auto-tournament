@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/auth';
 import { log } from '../utils/logger';
 import { fetchCS2MapCatalog } from '../utils/fetchCS2Maps';
 import { ensureMapImagesDirectory, getMapImagesDirectory } from '../config/storage';
-import { CURATED_ACTIVE_DUTY_MAP_IDS } from '../config/mapCatalog';
+import { CURATED_ACTIVE_DUTY_MAP_IDS, isCuratedMap } from '../config/mapCatalog';
 import { mapPoolService } from '../services/mapPoolService';
 import path from 'path';
 import fs from 'fs';
@@ -332,7 +332,8 @@ router.post('/sync', async (_req: Request, res: Response) => {
           continue;
         }
 
-        const keepsUploadedPreview = storedPreviewExists(existingMap.imageUrl);
+        const keepsUploadedPreview =
+          !isCuratedMap(mapData.id) && storedPreviewExists(existingMap.imageUrl);
         const nextImageUrl = keepsUploadedPreview ? existingMap.imageUrl : mapData.imageUrl;
         if (
           existingMap.displayName !== mapData.displayName ||
