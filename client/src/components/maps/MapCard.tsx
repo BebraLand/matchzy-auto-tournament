@@ -45,7 +45,7 @@ export function MapCard({ map, onClick }: MapCardProps) {
     >
       <Box
         sx={{
-          height: '140px',
+          aspectRatio: '16 / 9',
           width: '100%',
           position: 'relative',
           display: 'flex',
