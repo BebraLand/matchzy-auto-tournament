@@ -18,9 +18,7 @@ import { io } from 'socket.io-client';
 import { VetoMapCard } from './VetoMapCard';
 import { getMapData } from '../../constants/maps';
 import { getVetoOrder } from '../../constants/vetoOrders';
-import { api } from '../../utils/api';
 import type { VetoState, MapSide } from '../../types';
-import type { MapsResponse } from '../../types/api.types';
 import { FadeInImage } from '../common/FadeInImage';
 
 interface VetoInterfaceProps {
@@ -80,27 +78,6 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
   const isRepoImageUrl = (url: string | null | undefined): boolean =>
     !!url && url.includes('cs2-server-manager') && url.includes('map_thumbnails');
 
-  const loadMaps = useCallback(async () => {
-    try {
-      const response = await api.get<MapsResponse>('/api/maps');
-      const mapsMap = new Map<
-        string,
-        { id: string; displayName: string; imageUrl: string | null }
-      >();
-      response.maps?.forEach((map) => {
-        mapsMap.set(map.id, {
-          id: map.id,
-          displayName: map.displayName,
-          imageUrl: map.imageUrl,
-        });
-      });
-      setAllMaps(mapsMap);
-    } catch (err) {
-      console.error('Error loading maps:', err);
-      // Continue without map data - will use fallback display names
-    }
-  }, []);
-
   const loadVetoState = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -111,6 +88,18 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
 
       if (data.success) {
         setVetoState(data.veto);
+        const mapsMap = new Map<
+          string,
+          { id: string; displayName: string; imageUrl: string | null }
+        >();
+        if (Array.isArray(data.maps)) {
+          data.maps.forEach(
+            (map: { id: string; displayName: string; imageUrl: string | null }) => {
+              mapsMap.set(map.id, map);
+            }
+          );
+        }
+        setAllMaps(mapsMap);
         if (data.veto.status === 'completed') {
           onCompleteRef.current?.(data.veto);
         }
@@ -125,9 +114,6 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
     }
   }, [matchSlug, t, translateVetoError]);
 
-  useEffect(() => {
-    loadMaps();
-  }, [loadMaps]);
 
   useEffect(() => {
     loadVetoState();
