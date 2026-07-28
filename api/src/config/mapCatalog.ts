@@ -5,7 +5,7 @@ const CURATED_MAPS: MapData[] = [
     id: 'de_cache',
     displayName: 'Cache',
     imageUrl:
-      'https://raw.githubusercontent.com/auuruum/matchzy-auto-tournament/fix/maps-production-persistence/map_thumbnails/de_cache.webp',
+      'https://raw.githubusercontent.com/auuruum/matchzy-auto-tournament/main/map_thumbnails/de_cache.webp',
   },
 ];
 
@@ -24,8 +24,4 @@ export const CURATED_ACTIVE_DUTY_MAP_IDS = [
  */
 export function getCuratedMaps(): MapData[] {
   return CURATED_MAPS;
-}
-
-export function isCuratedMap(mapId: string): boolean {
-  return CURATED_MAPS.some((map) => map.id === mapId);
 }
