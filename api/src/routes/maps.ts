@@ -3,12 +3,20 @@ import { mapService } from '../services/mapService';
 import { CreateMapInput, UpdateMapInput } from '../types/map.types';
 import { requireAuth } from '../middleware/auth';
 import { log } from '../utils/logger';
-import { fetchCS2MapsFromWiki } from '../utils/fetchCS2Maps';
+import { fetchCS2MapCatalog } from '../utils/fetchCS2Maps';
 import { ensureMapImagesDirectory, getMapImagesDirectory } from '../config/storage';
+import { CURATED_ACTIVE_DUTY_MAP_IDS } from '../config/mapCatalog';
+import { mapPoolService } from '../services/mapPoolService';
 import path from 'path';
 import fs from 'fs';
 
 const router = Router();
+
+function storedPreviewExists(imageUrl: string | null): boolean {
+  if (!imageUrl?.startsWith('/map-images/')) return false;
+  const filename = path.basename(imageUrl);
+  return fs.existsSync(path.join(getMapImagesDirectory(), filename));
+}
 
 // Protect all map routes
 router.use(requireAuth);
@@ -289,7 +297,7 @@ router.post('/sync', async (_req: Request, res: Response) => {
     log.info('Starting map sync from GitHub repository...');
 
     // Fetch maps from GitHub
-    const fetchedMaps = await fetchCS2MapsFromWiki();
+    const fetchedMaps = await fetchCS2MapCatalog();
 
     if (fetchedMaps.length === 0) {
       return res.status(400).json({
@@ -298,31 +306,47 @@ router.post('/sync', async (_req: Request, res: Response) => {
       });
     }
 
-    // Get all existing maps to check for duplicates
+    // Refresh catalog-managed records while preserving locally uploaded images.
     const existingMaps = await mapService.getAllMaps();
-    const existingMapIds = new Set(existingMaps.map((m) => m.id));
+    const existingMapsById = new Map(existingMaps.map((map) => [map.id, map]));
 
-    // Add only new maps (that don't already exist)
     let addedCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
     const errors: string[] = [];
 
     for (const mapData of fetchedMaps) {
-      if (existingMapIds.has(mapData.id)) {
-        // Map already exists, skip it
-        continue;
-      }
-
       try {
-        await mapService.createMap(
-          {
-            id: mapData.id,
+        const existingMap = existingMapsById.get(mapData.id);
+        if (!existingMap) {
+          await mapService.createMap(
+            {
+              id: mapData.id,
+              displayName: mapData.displayName,
+              imageUrl: mapData.imageUrl,
+            },
+            false
+          );
+          addedCount++;
+          log.info(`Added new map: ${mapData.displayName} (${mapData.id})`);
+          continue;
+        }
+
+        const keepsUploadedPreview = storedPreviewExists(existingMap.imageUrl);
+        const nextImageUrl = keepsUploadedPreview ? existingMap.imageUrl : mapData.imageUrl;
+        if (
+          existingMap.displayName !== mapData.displayName ||
+          existingMap.imageUrl !== nextImageUrl
+        ) {
+          await mapService.updateMap(mapData.id, {
             displayName: mapData.displayName,
-            imageUrl: mapData.imageUrl,
-          },
-          false // Don't upsert - we already checked it doesn't exist
-        );
-        addedCount++;
-        log.info(`Added new map: ${mapData.displayName} (${mapData.id})`);
+            imageUrl: nextImageUrl,
+          });
+          updatedCount++;
+          log.info(`Updated catalog map: ${mapData.displayName} (${mapData.id})`);
+        } else {
+          skippedCount++;
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         errors.push(`${mapData.id}: ${errorMessage}`);
@@ -330,18 +354,60 @@ router.post('/sync', async (_req: Request, res: Response) => {
       }
     }
 
-    const skippedCount = fetchedMaps.length - addedCount - errors.length;
+    // Synchronizing the catalog is an explicit organizer action, so it also
+    // refreshes this fork's curated Active Duty pool. Restarts never do this.
+    let activeDutyUpdated = false;
+    try {
+      const availableMapIds = new Set((await mapService.getAllMaps()).map((map) => map.id));
+      const activeDutyMapIds = CURATED_ACTIVE_DUTY_MAP_IDS.filter((id) => availableMapIds.has(id));
+      let activeDutyPool = await mapPoolService.getMapPoolByName('Active Duty');
 
-    log.success(`Map sync completed: ${addedCount} added, ${skippedCount} skipped, ${errors.length} errors`);
+      if (!activeDutyPool) {
+        activeDutyPool = await mapPoolService.createMapPool({
+          name: 'Active Duty',
+          mapIds: activeDutyMapIds,
+          enabled: true,
+        });
+        activeDutyUpdated = true;
+      } else {
+        const mapsChanged =
+          JSON.stringify(activeDutyPool.mapIds) !== JSON.stringify(activeDutyMapIds);
+        if (mapsChanged || !activeDutyPool.enabled) {
+          activeDutyPool = await mapPoolService.updateMapPool(activeDutyPool.id, {
+            mapIds: activeDutyMapIds,
+            enabled: true,
+          });
+          activeDutyUpdated = true;
+        }
+      }
+
+      if (!activeDutyPool.isDefault) {
+        await mapPoolService.setDefaultMapPool(activeDutyPool.id);
+        activeDutyUpdated = true;
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      errors.push(`Active Duty: ${errorMessage}`);
+      log.warn('Failed to synchronize the curated Active Duty pool', { error });
+    }
+
+    log.success(
+      `Map sync completed: ${addedCount} added, ${updatedCount} updated, ` +
+        `${skippedCount} unchanged, ${errors.length} errors`
+    );
 
     return res.json({
       success: true,
-      message: `Sync completed: ${addedCount} new map(s) added, ${skippedCount} already existed`,
+      message:
+        `Sync completed: ${addedCount} added, ${updatedCount} updated, ` +
+        `${skippedCount} unchanged`,
       stats: {
         total: fetchedMaps.length,
         added: addedCount,
+        updated: updatedCount,
         skipped: skippedCount,
         errors: errors.length,
+        activeDutyUpdated,
       },
       errors: errors.length > 0 ? errors : undefined,
     });

@@ -406,6 +406,17 @@ export async function getDefaultMapsSQL(): Promise<string> {
       'Failed to fetch maps from GitHub repository. Using fallback maps that match the repository.'
     );
     const fallbackMaps = getFallbackMaps();
+    const { getCuratedMaps } = await import('./mapCatalog');
+    const knownMapIds = new Set(fallbackMaps.map((map) => map.id));
+    for (const map of getCuratedMaps()) {
+      if (!knownMapIds.has(map.id)) {
+        fallbackMaps.push({
+          id: map.id,
+          display_name: map.displayName,
+          image_url: map.imageUrl,
+        });
+      }
+    }
     return generateMapsSQL(fallbackMaps);
   }
 

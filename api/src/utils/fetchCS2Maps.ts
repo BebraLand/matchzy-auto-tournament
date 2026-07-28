@@ -5,6 +5,7 @@
 
 import fetch from 'node-fetch';
 import { log } from './logger';
+import { getCuratedMaps } from '../config/mapCatalog';
 
 const GITHUB_REPO_API =
   'https://api.github.com/repos/sivert-io/cs2-server-manager/contents/map_thumbnails';
@@ -230,6 +231,13 @@ export async function fetchCS2MapsFromWiki(): Promise<MapData[]> {
         })
       );
 
+      // Add maps maintained by this fork when upstream does not provide them.
+      // Upstream wins automatically if it starts shipping the same map later.
+      const knownMapIds = new Set(maps.map((map) => map.id));
+      for (const curatedMap of getCuratedMaps()) {
+        if (!knownMapIds.has(curatedMap.id)) maps.push(curatedMap);
+      }
+
       if (maps.length === 0) {
         throw new Error(
           'No maps found in repository. ' +
@@ -238,7 +246,7 @@ export async function fetchCS2MapsFromWiki(): Promise<MapData[]> {
         );
       }
 
-      log.success(`Successfully fetched ${maps.length} maps from GitHub repository`);
+      log.success(`Successfully assembled ${maps.length} maps from the map catalogs`);
       return maps;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -263,4 +271,21 @@ export async function fetchCS2MapsFromWiki(): Promise<MapData[]> {
 
   // This should never be reached, but TypeScript needs it
   throw new Error('Failed to fetch maps from GitHub repository');
+}
+
+/**
+ * Assemble the complete map catalog used by manual synchronization.
+ * Curated maps remain available when the optional upstream source is down or
+ * rate-limited, so an existing installation can still repair fork-owned maps.
+ */
+export async function fetchCS2MapCatalog(): Promise<MapData[]> {
+  try {
+    return await fetchCS2MapsFromWiki();
+  } catch (error) {
+    const curatedMaps = getCuratedMaps();
+    if (curatedMaps.length === 0) throw error;
+
+    log.warn('Upstream map sync failed; continuing with the curated map catalog', { error });
+    return curatedMaps;
+  }
 }
