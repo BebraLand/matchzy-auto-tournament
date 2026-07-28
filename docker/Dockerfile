@@ -113,6 +113,7 @@ COPY --from=build /app/package.json ./
 # We copy them into /app/dist and /app/public so runtime paths stay consistent.
 COPY --from=build /app/api/dist ./dist
 COPY --from=build /app/api/public ./public
+COPY --from=build /app/assets ./assets
 
 # Copy Caddy configuration
 COPY docker/Caddyfile /app/Caddyfile
