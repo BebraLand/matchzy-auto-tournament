@@ -23,24 +23,24 @@
 # ========================================
 
 :3069 {
-	# API and WebSocket proxying (must come before file_server)
-	reverse_proxy /api/* localhost:3000
-	reverse_proxy /socket.io/* localhost:3000
-	reverse_proxy /health localhost:3000
-
-	# Serve React frontend from /app/public
-	root * /app/public
-
-	# Handle SPA routing: try file, then fallback to index.html
-	@notAPI {
-		not path /api/*
-		not path /socket.io/*
-		not path /health
-		file {
-			try_files {path} /index.html
-		}
+	# These mutually exclusive handlers prevent API and uploaded-image requests
+	# from falling through to the React SPA.
+	handle /api/* {
+		reverse_proxy localhost:3000
 	}
-	rewrite @notAPI {http.matchers.file.relative}
+	handle /socket.io/* {
+		reverse_proxy localhost:3000
+	}
+	handle /health {
+		reverse_proxy localhost:3000
+	}
+	handle /map-images/* {
+		reverse_proxy localhost:3000
+	}
 
-	file_server
+	handle {
+		root * /app/public
+		try_files {path} /index.html
+		file_server
+	}
 }

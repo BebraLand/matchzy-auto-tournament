@@ -4,19 +4,11 @@ import { CreateMapInput, UpdateMapInput } from '../types/map.types';
 import { requireAuth } from '../middleware/auth';
 import { log } from '../utils/logger';
 import { fetchCS2MapsFromWiki } from '../utils/fetchCS2Maps';
+import { ensureMapImagesDirectory, getMapImagesDirectory } from '../config/storage';
 import path from 'path';
 import fs from 'fs';
 
 const router = Router();
-
-// Directory for storing map images - under api/public
-const MAP_IMAGES_DIR = path.join(__dirname, '..', '..', 'public', 'map-images');
-
-// Ensure map images directory exists
-if (!fs.existsSync(MAP_IMAGES_DIR)) {
-  fs.mkdirSync(MAP_IMAGES_DIR, { recursive: true });
-  log.server(`Created map images directory: ${MAP_IMAGES_DIR}`);
-}
 
 // Protect all map routes
 router.use(requireAuth);
@@ -87,6 +79,13 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: id, displayName',
+      });
+    }
+
+    if (!/^[a-z0-9_]+$/.test(input.id)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Map ID may only contain lowercase letters, numbers, and underscores',
       });
     }
 
@@ -174,6 +173,13 @@ router.post('/:id/upload-image', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { imageData, imageType } = req.body;
 
+    if (!/^[a-z0-9_]+$/.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid map ID',
+      });
+    }
+
     // Check if map exists
     const map = await mapService.getMapById(id);
     if (!map) {
@@ -237,10 +243,20 @@ router.post('/:id/upload-image', async (req: Request, res: Response) => {
       });
     }
 
-    // Save image file
+    // Save atomically so readers never observe a partially written image.
+    ensureMapImagesDirectory();
     const filename = `${id}.${imageExtension}`;
-    const filepath = path.join(MAP_IMAGES_DIR, filename);
-    fs.writeFileSync(filepath, imageBuffer);
+    const filepath = path.join(getMapImagesDirectory(), filename);
+    const temporaryFilepath = `${filepath}.${process.pid}.tmp`;
+    fs.writeFileSync(temporaryFilepath, imageBuffer);
+    fs.renameSync(temporaryFilepath, filepath);
+
+    // Remove old variants when replacing an image with another format.
+    for (const extension of validExtensions) {
+      if (extension === imageExtension) continue;
+      const staleFilepath = path.join(getMapImagesDirectory(), `${id}.${extension}`);
+      if (fs.existsSync(staleFilepath)) fs.unlinkSync(staleFilepath);
+    }
 
     // Generate URL (relative to public directory)
     const imageUrl = `/map-images/${filename}`;
@@ -385,7 +401,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       // Check if it's a local image (starts with /map-images/)
       if (map.imageUrl.startsWith('/map-images/')) {
         const filename = map.imageUrl.replace('/map-images/', '');
-        const imagePath = path.join(MAP_IMAGES_DIR, filename);
+        const imagePath = path.join(getMapImagesDirectory(), filename);
         if (fs.existsSync(imagePath)) {
           try {
             fs.unlinkSync(imagePath);
@@ -401,7 +417,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     // Also try to delete by pattern (fallback in case imageUrl wasn't set correctly)
     const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
     for (const ext of imageExtensions) {
-      const imagePath = path.join(MAP_IMAGES_DIR, `${id}.${ext}`);
+      const imagePath = path.join(getMapImagesDirectory(), `${id}.${ext}`);
       if (fs.existsSync(imagePath)) {
         try {
           fs.unlinkSync(imagePath);

@@ -651,9 +651,6 @@ export async function getDefaultMapPoolsSQL(client: {
     INSERT INTO map_pools (name, map_ids, is_default, enabled, created_at, updated_at)
     VALUES
       ${values}
-    ON CONFLICT (name) DO UPDATE SET
-      map_ids = EXCLUDED.map_ids,
-      enabled = EXCLUDED.enabled,
-      updated_at = EXCLUDED.updated_at;
+    ON CONFLICT (name) DO NOTHING;
   `;
 }
