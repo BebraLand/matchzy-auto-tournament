@@ -284,6 +284,26 @@ class DatabaseManager {
         // Don't throw for other errors - continue
       }
 
+      // Cache is part of BebraLand's competitive pool, but it is not currently
+      // present in the upstream thumbnail repository. Seed the map record
+      // independently so fresh installs and existing databases can use it.
+      try {
+        await client.query(`
+          INSERT INTO maps (id, display_name, image_url, created_at, updated_at)
+          VALUES (
+            'de_cache',
+            'Cache',
+            NULL,
+            EXTRACT(EPOCH FROM NOW())::INTEGER,
+            EXTRACT(EPOCH FROM NOW())::INTEGER
+          )
+          ON CONFLICT (id) DO NOTHING
+        `);
+      } catch (err) {
+        const error = err as Error;
+        log.warn(`[PostgreSQL] Failed to seed Cache map: ${error.message}`);
+      }
+
       // Insert default map pools
       try {
         const defaultMapPoolsSQL = await getDefaultMapPoolsSQL(client);
