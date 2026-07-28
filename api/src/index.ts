@@ -10,6 +10,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import swaggerUi from 'swagger-ui-express';
 import { db } from './config/database';
+import { ensureMapImagesDirectory, getMapImagesDirectory } from './config/storage';
 import { swaggerSpec } from './config/swagger';
 import { log, logger, LOG_HTTP_REQUESTS, LOG_DB_VERBOSE, LOG_DB_VALUES } from './utils/logger';
 import { cleanupOldLogs } from './utils/eventLogger';
@@ -389,7 +390,8 @@ const publicPath = path.join(__dirname, '..', 'public');
 app.use('/app', express.static(publicPath));
 
 // Serve map images statically
-app.use('/map-images', express.static(path.join(publicPath, 'map-images')));
+ensureMapImagesDirectory();
+app.use('/map-images', express.static(getMapImagesDirectory()));
 app.get('/app/*', (_req: Request, res: Response) => {
   res.sendFile(path.join(publicPath, 'index.html'));
 });
