@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { tournamentService } from '../services/tournamentService';
 import { matchAllocationService } from '../services/matchAllocationService';
+import { operatorControlService } from '../services/operatorControlService';
 import { rconService } from '../services/rconService';
 import { db } from '../config/database';
 import { requireAuth } from '../middleware/auth';
@@ -480,6 +481,18 @@ router.put('/', async (req: Request, res: Response) => {
   try {
     const input: UpdateTournamentInput = req.body;
     const tournament = await tournamentService.updateTournament(input);
+
+    if (input.settings?.controlMode === 'automatic') {
+      setImmediate(() => {
+        void matchAllocationService.tryImmediateAllocation();
+      });
+    } else if (
+      input.settings?.controlMode === 'assisted' ||
+      input.settings?.controlMode === 'manual'
+    ) {
+      matchAllocationService.stopAllPolling();
+      await operatorControlService.ensureQueuePositions();
+    }
 
     // Emit updates to all clients
     emitTournamentUpdate({ action: 'tournament_updated', ...tournament });

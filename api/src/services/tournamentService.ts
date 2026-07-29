@@ -23,6 +23,7 @@ export const DEFAULT_SETTINGS: TournamentSettings = {
   checkInRequired: false,
   seedingMethod: 'random',
   grandFinalMode: 'simple',
+  controlMode: 'assisted',
 };
 
 class TournamentService {

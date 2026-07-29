@@ -17,6 +17,11 @@ import { api } from '../utils/api';
 import type { Match, MatchEvent, MatchesResponse, ServerAvailabilityResponse } from '../types';
 import ConfirmDialog from '../components/modals/ConfirmDialog';
 import { useTranslation } from 'react-i18next';
+import {
+  OperatorControlRoom,
+  type OperatorAction,
+  type TournamentControlMode,
+} from '../components/matches/OperatorControlRoom';
 
 export default function Matches() {
   const navigate = useNavigate();
@@ -41,6 +46,8 @@ export default function Matches() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMatchSlugs, setSelectedMatchSlugs] = useState<Set<string>>(() => new Set());
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+  const [controlMode, setControlMode] = useState<TournamentControlMode>('automatic');
+  const [operatorBusyKey, setOperatorBusyKey] = useState<string | null>(null);
   const { t } = useTranslation();
   
   // Local countdown state for match allocation ETAs (match.id -> seconds remaining)
@@ -49,11 +56,12 @@ export default function Matches() {
   // Fetch matches
   const fetchMatches = useCallback(async () => {
     try {
-      const data = await api.get<MatchesResponse & { tournamentStatus?: string }>('/api/matches');
+      const data = await api.get<MatchesResponse>('/api/matches');
 
       if (data.success) {
         const matches = data.matches || [];
         setTournamentStatus(data.tournamentStatus || 'setup');
+        setControlMode(data.controlMode || 'automatic');
 
         const hasTeams = (m: Match) => {
           // Manual matches (round = 0) don't have bracket-seeded teams; rely on
@@ -437,6 +445,51 @@ export default function Matches() {
   // Get all matches for numbering context
   const allMatches = [...upcomingMatches, ...liveMatches, ...matchHistory];
 
+  const handleControlModeChange = async (mode: TournamentControlMode) => {
+    setOperatorBusyKey('mode');
+    try {
+      await api.put('/api/tournament', { settings: { controlMode: mode } });
+      setControlMode(mode);
+      showSuccess(`Control mode changed to ${mode === 'manual' ? 'Full Manual' : mode}`);
+      await fetchMatches();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to change control mode');
+    } finally {
+      setOperatorBusyKey(null);
+    }
+  };
+
+  const handleOperatorAction = async (match: Match, action: OperatorAction) => {
+    setOperatorBusyKey(match.slug);
+    try {
+      if (action === 'go_live') {
+        if (!match.serverId) throw new Error('Match does not have a prepared server');
+        await api.post('/api/rcon/start-match', { serverId: match.serverId });
+      } else {
+        await api.post(`/api/matches/${match.slug}/operator-action`, { action });
+      }
+      showSuccess(`${action.replace(/_/g, ' ')}: ${match.slug}`);
+      await fetchMatches();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Operator action failed');
+    } finally {
+      setOperatorBusyKey(null);
+    }
+  };
+
+  const handleQueueReorder = async (slugs: string[]) => {
+    setOperatorBusyKey('queue');
+    try {
+      await api.patch('/api/matches/operator-queue', { slugs });
+      await fetchMatches();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to reorder match queue');
+      await fetchMatches();
+    } finally {
+      setOperatorBusyKey(null);
+    }
+  };
+
   const toggleMatchSelected = (match: Match) => {
     if (!isManualMatchFlag(match)) {
       // For safety, only allow bulk deletion of manual matches.
@@ -508,6 +561,16 @@ export default function Matches() {
   return (
     <Box data-testid="matches-page" sx={{ width: '100%', height: '100%' }}>
       {renderAllocationBanner()}
+      {hasMatches && tournamentStatus !== 'setup' && (
+        <OperatorControlRoom
+          matches={[...upcomingMatches, ...liveMatches]}
+          controlMode={controlMode}
+          busyKey={operatorBusyKey}
+          onModeChange={handleControlModeChange}
+          onAction={handleOperatorAction}
+          onReorder={handleQueueReorder}
+        />
+      )}
       {/* Manual match creation + allocation countdown */}
       {hasMatches && (
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>

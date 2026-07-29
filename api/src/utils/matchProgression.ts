@@ -12,6 +12,7 @@ import type { DbMatchRow, DbTeamRow, DbTournamentRow } from '../types/database.t
 import type { TournamentResponse } from '../types/tournament.types';
 import { settingsService } from '../services/settingsService';
 import { autoCompleteVetoForMatch } from '../services/vetoSimulationService';
+import { operatorControlService } from '../services/operatorControlService';
 
 /**
  * Advance winner to next match in bracket
@@ -473,7 +474,7 @@ async function makeMatchReady(match: DbMatchRow): Promise<void> {
     const simulationEnabled = await settingsService.isSimulationModeEnabled();
     const usesVeto =
       tournament.format === 'bo1' || tournament.format === 'bo3' || tournament.format === 'bo5';
-    if (simulationEnabled && usesVeto) {
+    if (simulationEnabled && usesVeto && !(await operatorControlService.usesOperatorQueue())) {
       log.info(
         `[VETO-SIM] Simulation mode active – auto-completing veto for newly ready match ${match.slug}`
       );

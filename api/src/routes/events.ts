@@ -59,7 +59,7 @@ router.get('/test', (req: Request, res: Response) => {
  * POST /api/events
  * Receive MatchZy events via webhook (legacy endpoint without server ID)
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', validateServerToken, async (req: Request, res: Response) => {
   await handleEventRequest(req, res, undefined);
 });
 
@@ -136,7 +136,7 @@ router.post('/report', validateServerToken, async (req: Request, res: Response) 
  * POST /api/events/:matchSlugOrServerId
  * Receive MatchZy events via webhook with match slug or server ID in URL
  */
-router.post('/:matchSlugOrServerId', async (req: Request, res: Response) => {
+router.post('/:matchSlugOrServerId', validateServerToken, async (req: Request, res: Response) => {
   const identifier = req.params.matchSlugOrServerId;
   await handleEventRequest(req, res, identifier);
 });

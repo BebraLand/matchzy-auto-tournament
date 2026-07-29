@@ -10,6 +10,7 @@ import { getVetoOrder } from '../utils/vetoConfig';
 import { settingsService } from '../services/settingsService';
 import { normalizeConfigPlayers } from '../utils/playerTransform';
 import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
+import { operatorControlService } from '../services/operatorControlService';
 
 const router = Router();
 
@@ -238,6 +239,14 @@ router.get('/:matchSlug', async (req: Request, res: Response) => {
       });
     }
 
+    if (!(await operatorControlService.isVetoOpen(match))) {
+      return res.status(423).json({
+        success: false,
+        vetoOpen: false,
+        error: 'Veto is waiting for the tournament operator to open it.',
+      });
+    }
+
     const isManualMatch = match.round === 0 || match.tournament_id == null;
     const config = match.config
       ? (JSON.parse(match.config) as {
@@ -385,6 +394,14 @@ router.post('/:matchSlug/action', async (req: Request, res: Response) => {
       return res.status(404).json({
         success: false,
         error: 'Match not found',
+      });
+    }
+
+    if (!(await operatorControlService.isVetoOpen(match))) {
+      return res.status(409).json({
+        success: false,
+        vetoOpen: false,
+        error: 'Veto has not been opened by the tournament operator.',
       });
     }
 

@@ -100,6 +100,10 @@ export function getSchemaSQL(): string {
       server_id TEXT,
       config TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
+      operator_state TEXT NOT NULL DEFAULT 'queued',
+      queue_position INTEGER,
+      veto_opened_at INTEGER,
+      postponed_at INTEGER,
       -- Optional explicit slot wiring: where the inputs for this match come from.
       -- When populated, runtime progression can be driven entirely by these
       -- fields instead of inferring from slug/round patterns.
@@ -130,6 +134,7 @@ export function getSchemaSQL(): string {
     CREATE INDEX IF NOT EXISTS idx_matches_tournament ON matches(tournament_id);
     CREATE INDEX IF NOT EXISTS idx_matches_round ON matches(round);
     CREATE INDEX IF NOT EXISTS idx_matches_status ON matches(status);
+    CREATE INDEX IF NOT EXISTS idx_matches_operator_queue ON matches(operator_state, queue_position);
     CREATE INDEX IF NOT EXISTS idx_matches_team_from_match1 ON matches(team1_from_match_id);
     CREATE INDEX IF NOT EXISTS idx_matches_team_from_match2 ON matches(team2_from_match_id);
 

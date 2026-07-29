@@ -33,6 +33,9 @@ export interface Match {
   mapResults?: MatchMapResult[];
   maps?: string[];
   queuePosition?: number | null; // Position in allocation queue (1 = first in queue, null = already allocated)
+  operatorState?: 'queued' | 'postponed' | 'held';
+  vetoOpenedAt?: number | null;
+  postponedAt?: number | null;
 }
 
 export interface MatchConfigPlayer {

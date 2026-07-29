@@ -13,7 +13,11 @@ export interface DbMatchRow {
   team2_id?: string;
   winner_id?: string;
   server_id?: string;
-  status: 'pending' | 'ready' | 'live' | 'completed';
+  status: 'pending' | 'ready' | 'loaded' | 'live' | 'completed' | 'cancelled';
+  operator_state?: 'queued' | 'postponed' | 'held' | null;
+  queue_position?: number | null;
+  veto_opened_at?: number | null;
+  postponed_at?: number | null;
   config?: string;
   next_match_id?: number;
   team1_from_match_id?: number | null;

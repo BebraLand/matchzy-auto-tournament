@@ -18,6 +18,7 @@ import { teamService } from '../services/teamService';
 import { playerService } from '../services/playerService';
 import { getMapResults } from '../services/matchMapResultService';
 import { serverAllocationTracker } from '../services/serverAllocationTracker';
+import { operatorControlService } from '../services/operatorControlService';
 
 const router = Router();
 
@@ -273,6 +274,10 @@ async function getMatchDetailsBySlug(slug: string): Promise<MatchListItem | null
     currentMap: row.current_map ?? undefined,
     mapNumber: typeof row.map_number === 'number' ? row.map_number : undefined,
     maps: undefined,
+    operatorState: row.operator_state ?? 'queued',
+    queuePosition: row.queue_position,
+    vetoOpenedAt: row.veto_opened_at,
+    postponedAt: row.postponed_at,
   };
 
   const mapResults = await getMapResults(row.slug);
@@ -678,6 +683,11 @@ router.post('/bulk-delete', requireAuth, async (req: Request, res: Response) => 
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
+    const controlMode = await operatorControlService.getControlMode();
+    if (controlMode !== 'automatic') {
+      await operatorControlService.ensureQueuePositions();
+    }
+
     const serverId = req.query.serverId as string | undefined;
 
     // Fetch matches with tournament and server information
@@ -896,6 +906,10 @@ router.get('/', async (req: Request, res: Response) => {
           currentMap: row.current_map ?? undefined,
           mapNumber: typeof row.map_number === 'number' ? row.map_number : undefined,
           maps: undefined,
+          operatorState: row.operator_state ?? 'queued',
+          queuePosition: row.queue_position,
+          vetoOpenedAt: row.veto_opened_at,
+          postponedAt: row.postponed_at,
         };
 
         const mapResults = await getMapResults(row.slug);
@@ -1021,31 +1035,25 @@ router.get('/', async (req: Request, res: Response) => {
     // Queue positions should match the display order (by round, then match_number)
     // Include all matches that are waiting for allocation (pending, ready, or any status without a server)
     // Exclude completed, cancelled, live, and loaded matches
-    const queueableStatuses = ['pending', 'ready'];
-    const waitingMatches = matches
-      .filter((m) => !m.serverId && queueableStatuses.includes(m.status))
-      .sort((a, b) => {
-        // Sort by round first, then by match_number
-        // For manual matches (round=0, match_number=0), use database ID to maintain consistent order
-        if (a.round !== b.round) return a.round - b.round;
-        if (a.matchNumber !== b.matchNumber) return a.matchNumber - b.matchNumber;
-        // If round and match_number are the same (e.g., manual matches), sort by ID
-        return a.id - b.id;
+    if (controlMode === 'automatic') {
+      const queueableStatuses = ['pending', 'ready'];
+      const waitingMatches = matches
+        .filter((m) => !m.serverId && queueableStatuses.includes(m.status))
+        .sort((a, b) => {
+          if (a.round !== b.round) return a.round - b.round;
+          if (a.matchNumber !== b.matchNumber) return a.matchNumber - b.matchNumber;
+          return a.id - b.id;
+        });
+
+      const queuePositionMap = new Map<number, number>();
+      waitingMatches.forEach((match, index) => {
+        queuePositionMap.set(match.id, index + 1);
       });
 
-    const queuePositionMap = new Map<number, number>();
-    waitingMatches.forEach((match, index) => {
-      queuePositionMap.set(match.id, index + 1);
-    });
-
-    // Apply queue positions to all matches
-    matches.forEach((match) => {
-      if (queuePositionMap.has(match.id)) {
-        match.queuePosition = queuePositionMap.get(match.id)!;
-      } else {
-        match.queuePosition = null;
-      }
-    });
+      matches.forEach((match) => {
+        match.queuePosition = queuePositionMap.get(match.id) ?? null;
+      });
+    }
 
     // Get tournament status
     const tournamentStatus = await db.queryOneAsync<{ status: string }>(
@@ -1056,6 +1064,7 @@ router.get('/', async (req: Request, res: Response) => {
       success: true,
       count: matches.length,
       tournamentStatus: tournamentStatus?.status || 'setup',
+      controlMode,
       matches,
     });
   } catch (error) {
@@ -1064,6 +1073,126 @@ router.get('/', async (req: Request, res: Response) => {
       success: false,
       error: 'Failed to fetch matches',
     });
+  }
+});
+
+/**
+ * PATCH /api/matches/operator-queue
+ * Persist a complete execution order independently from the tournament bracket.
+ */
+router.patch('/operator-queue', requireAuth, async (req: Request, res: Response) => {
+  try {
+    if (!(await operatorControlService.usesOperatorQueue())) {
+      return res.status(409).json({
+        success: false,
+        error: 'Execution queue controls are disabled in Automatic mode.',
+      });
+    }
+    const slugs = Array.isArray(req.body?.slugs) ? req.body.slugs.map(String) : [];
+    await operatorControlService.reorderQueue(slugs);
+    emitBracketUpdate({ action: 'operator_queue_reordered', matchSlugs: slugs });
+    return res.json({ success: true, slugs });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to reorder match queue';
+    return res.status(message.includes('changed') ? 409 : 400).json({
+      success: false,
+      error: message,
+    });
+  }
+});
+
+/**
+ * POST /api/matches/:slug/operator-action
+ * Explicit operator transitions used by Assisted and Full Manual modes.
+ */
+router.post('/:slug/operator-action', requireAuth, async (req: Request, res: Response) => {
+  try {
+    if (!(await operatorControlService.usesOperatorQueue())) {
+      return res.status(409).json({
+        success: false,
+        error: 'Operator actions are disabled in Automatic mode.',
+      });
+    }
+    const { slug } = req.params;
+    const action = String(req.body?.action ?? '');
+    let match = await operatorControlService.getMatchOrThrow(slug);
+
+    if (action === 'set_next') {
+      await operatorControlService.setNext(slug);
+    } else if (action === 'hold') {
+      match = await operatorControlService.hold(slug);
+    } else if (action === 'resume') {
+      match = await operatorControlService.resume(slug);
+    } else if (action === 'open_veto') {
+      match = await operatorControlService.openVeto(slug);
+    } else if (action === 'postpone') {
+      if (match.status === 'live') {
+        return res.status(409).json({
+          success: false,
+          error: 'A live match cannot be postponed. Use emergency live-match controls.',
+        });
+      }
+
+      if (match.server_id) {
+        try {
+          const { rconService } = await import('../services/rconService');
+          await rconService.sendCommand(match.server_id, 'css_restart');
+        } catch (error) {
+          return res.status(502).json({
+            success: false,
+            error:
+              'The match is loaded and its server could not be reset. It was not postponed, so MAT does not lose track of the active server.',
+            details: error instanceof Error ? error.message : String(error),
+          });
+        }
+        serverAllocationTracker.markIdle(match.server_id);
+      }
+
+      matchAllocationService.stopPollingForServer(slug);
+      match = await operatorControlService.postpone(slug);
+    } else if (action === 'prepare') {
+      if (match.operator_state === 'postponed' || match.operator_state === 'held') {
+        return res.status(409).json({
+          success: false,
+          error: 'Resume the match before preparing a server.',
+        });
+      }
+      await operatorControlService.ensureQueuePositions();
+      match = await operatorControlService.getMatchOrThrow(slug);
+      if (match.queue_position !== 1) {
+        return res.status(409).json({
+          success: false,
+          error: 'Set this match as Next before preparing its server.',
+        });
+      }
+
+      const allocation = await matchAllocationService.allocateSingleMatch(
+        slug,
+        await getWebhookBaseUrl(req),
+        {
+          operatorApproved: true,
+          preferredServerId:
+            typeof req.body?.serverId === 'string' ? req.body.serverId : undefined,
+        }
+      );
+      if (!allocation.success) {
+        return res.status(409).json({ success: false, error: allocation.error });
+      }
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Unknown operator action',
+      });
+    }
+
+    const updatedMatch = await getMatchDetailsBySlug(slug);
+    emitMatchUpdate(updatedMatch ?? { slug });
+    emitBracketUpdate({ action: `operator_${action}`, matchSlug: slug });
+    return res.json({ success: true, action, match: updatedMatch });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Operator action failed';
+    const status = message.includes('not found') ? 404 : message.includes('live') ? 409 : 400;
+    return res.status(status).json({ success: false, error: message });
   }
 });
 
@@ -1394,9 +1523,19 @@ router.post('/:slug/reallocate', requireAuth, async (req: Request, res: Response
     const load = await loadMatchOnServer(slug, fallback.id, { baseUrl });
 
     if (!load.success) {
-      // Roll back the tracker reservation; keep match assigned to the new server
-      // so the admin can retry once the underlying issue is fixed.
+      // Roll back the tracker reservation. In operator-controlled modes, return
+      // the match to the execution queue instead of leaving it in an assigned
+      // but unloaded state that Control Room cannot prepare again.
       serverAllocationTracker.markIdle(fallback.id);
+      if (await operatorControlService.usesOperatorQueue()) {
+        await db.updateAsync(
+          'matches',
+          { server_id: null, status: 'ready', loaded_at: null },
+          'slug = ?',
+          [slug]
+        );
+        await operatorControlService.ensureQueuePositions();
+      }
       return res.status(400).json({
         success: false,
         error: load.error || 'Failed to load match on the reallocated server',

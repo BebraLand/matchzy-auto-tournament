@@ -10,6 +10,7 @@ import { log } from '../utils/logger';
 import { getLastServerTestEvent } from './serverConnectivityService';
 import { settingsService } from './settingsService';
 import { autoCompleteVetoForMatch } from './vetoSimulationService';
+import { operatorControlService } from './operatorControlService';
 import type { ServerResponse } from '../types/server.types';
 import type { DbMatchRow } from '../types/database.types';
 import type { BracketMatch } from '../types/tournament.types';
@@ -537,7 +538,8 @@ export class MatchAllocationService {
        WHERE tournament_id = 1 
        AND status = 'ready' 
        AND (server_id IS NULL OR server_id = '')
-       ORDER BY round, match_number`
+       AND COALESCE(operator_state, 'queued') = 'queued'
+       ORDER BY queue_position NULLS LAST, round, match_number`
     );
 
     return Promise.all(matches.map((row) => this.rowToMatch(row)));
@@ -714,6 +716,11 @@ export class MatchAllocationService {
       error?: string;
     }>
   > {
+    if (await operatorControlService.usesOperatorQueue()) {
+      log.info('[ALLOCATION] Automatic bulk allocation skipped in operator-controlled mode');
+      return [];
+    }
+
     log.info('[ALLOCATION] Getting available servers...');
     let availableServers = await this.getAvailableServers();
     log.info(`Found ${availableServers.length} available server(s)`);
@@ -808,6 +815,15 @@ export class MatchAllocationService {
       error?: string;
     }>
   > {
+    if (await operatorControlService.usesOperatorQueue()) {
+      log.info('[ALLOCATION] Automatic batch allocation skipped in operator-controlled mode');
+      return matchSlugs.map((matchSlug) => ({
+        matchSlug,
+        success: false,
+        error: 'Operator approval is required before server preparation',
+      }));
+    }
+
     const uniqueSlugs = Array.from(new Set(matchSlugs));
     if (uniqueSlugs.length === 0) {
       return [];
@@ -919,7 +935,8 @@ export class MatchAllocationService {
    */
   async allocateSingleMatch(
     matchSlug: string,
-    baseUrl: string
+    baseUrl: string,
+    options: { operatorApproved?: boolean; preferredServerId?: string } = {}
   ): Promise<{
     success: boolean;
     serverId?: string;
@@ -950,6 +967,24 @@ export class MatchAllocationService {
       const isBracketMatch =
         typeof match.round === 'number' && match.round >= 1 && match.tournament_id !== null;
 
+      if (
+        isBracketMatch &&
+        (await operatorControlService.usesOperatorQueue()) &&
+        !options.operatorApproved
+      ) {
+        return {
+          success: false,
+          error: 'Operator approval is required before server preparation',
+        };
+      }
+
+      if (match.operator_state === 'postponed' || match.operator_state === 'held') {
+        return {
+          success: false,
+          error: 'Resume the match before server preparation',
+        };
+      }
+
       if (isBracketMatch) {
         if (!match.team1_id || !match.team2_id) {
           return {
@@ -973,7 +1008,10 @@ export class MatchAllocationService {
       }
 
       let server: ServerResponse | null = null;
-      for (const candidate of availableServers) {
+      const candidates = options.preferredServerId
+        ? availableServers.filter((candidate) => candidate.id === options.preferredServerId)
+        : availableServers;
+      for (const candidate of candidates) {
         // Skip servers that are already in the process of being allocated by
         // this service instance.
         if (this.allocatingServers.has(candidate.id)) {
@@ -1016,7 +1054,12 @@ export class MatchAllocationService {
       if (!server) {
         // All currently available servers are either being allocated right now
         // or already have an active match attached in the DB.
-        return { success: false, error: 'No available servers' };
+        return {
+          success: false,
+          error: options.preferredServerId
+            ? 'Selected server is not available'
+            : 'No available servers',
+        };
       }
 
       // Track server allocation for higher‑level views
@@ -1295,6 +1338,8 @@ export class MatchAllocationService {
     let results = [];
     let allocated = 0;
     let failed = 0;
+    const controlMode = await operatorControlService.getControlMode();
+    const operatorControlled = controlMode !== 'automatic';
 
     if (requiresVeto) {
       // ALL BO formats (BO1/BO3/BO5) require veto - applies to all tournament types
@@ -1317,6 +1362,17 @@ export class MatchAllocationService {
         // Emit tournament update so teams know veto is available
         emitTournamentUpdate({ id: 1, status: 'in_progress' });
         emitBracketUpdate({ action: 'tournament_started' });
+      }
+
+      if (operatorControlled) {
+        await operatorControlService.ensureQueuePositions();
+        return {
+          success: true,
+          message: `Tournament started in ${controlMode} mode. Matches are queued, and veto requires operator approval.`,
+          allocated: 0,
+          failed: 0,
+          results: [],
+        };
       }
 
       // In simulation mode, automatically perform veto and side picks for all matches
@@ -1416,6 +1472,17 @@ export class MatchAllocationService {
 
         emitTournamentUpdate({ id: 1, status: 'in_progress' });
         emitBracketUpdate({ action: 'tournament_started' });
+      }
+
+      if (operatorControlled) {
+        await operatorControlService.ensureQueuePositions();
+        return {
+          success: true,
+          message: `Tournament started in ${controlMode} mode. Matches are queued and require operator preparation.`,
+          allocated: 0,
+          failed: 0,
+          results: [],
+        };
       }
 
       // Check server availability
@@ -1774,6 +1841,12 @@ export class MatchAllocationService {
 
     const pollInterval = setInterval(async () => {
       try {
+        if (await operatorControlService.usesOperatorQueue()) {
+          log.debug(`[POLLING] Operator-controlled mode enabled; stopping polling for ${matchSlug}`);
+          this.stopPollingForServer(matchSlug);
+          return;
+        }
+
         // Check if match still exists and is ready
         const match = await db.queryOneAsync<DbMatchRow>('SELECT * FROM matches WHERE slug = ?', [
           matchSlug,
@@ -1861,6 +1934,10 @@ export class MatchAllocationService {
       createdAt: row.created_at,
       loadedAt: row.loaded_at,
       completedAt: row.completed_at,
+      operatorState: row.operator_state ?? 'queued',
+      queuePosition: row.queue_position,
+      vetoOpenedAt: row.veto_opened_at,
+      postponedAt: row.postponed_at,
     };
 
     // Attach team info if available
@@ -1896,6 +1973,11 @@ export class MatchAllocationService {
    */
   async tryImmediateAllocation(): Promise<void> {
     try {
+      if (await operatorControlService.usesOperatorQueue()) {
+        log.debug('[ALLOCATION] Immediate allocation skipped in operator-controlled mode');
+        return;
+      }
+
       const webhookUrl = await settingsService.getWebhookUrl();
       if (!webhookUrl) {
         return;

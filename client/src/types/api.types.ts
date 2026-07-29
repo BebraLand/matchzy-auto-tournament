@@ -164,6 +164,8 @@ export interface TeamLeaderboardResponse extends ApiResponse {
 export interface MatchesResponse extends ApiResponse {
   matches: Match[];
   count?: number;
+  tournamentStatus?: string;
+  controlMode?: 'automatic' | 'assisted' | 'manual';
 }
 
 export interface MatchResponse extends ApiResponse {

@@ -13,6 +13,8 @@ export type TournamentStatus = 'setup' | 'ready' | 'in_progress' | 'completed' |
 
 export type MatchFormat = 'bo1' | 'bo3' | 'bo5';
 
+export type TournamentControlMode = 'automatic' | 'assisted' | 'manual';
+
 export interface VetoStep {
   step: number;
   team: 'team1' | 'team2';
@@ -25,6 +27,13 @@ export interface TournamentSettings {
   autoAdvance: boolean;
   checkInRequired: boolean;
   seedingMethod: 'random' | 'manual';
+  /**
+   * Controls operational automation without changing bracket generation.
+   * - automatic: preserve upstream MAT behaviour
+   * - assisted: build the bracket and queue automatically, but require operator approval
+   * - manual: require operator approval for every veto/allocation transition
+   */
+  controlMode?: TournamentControlMode;
   /**
    * Grand final behaviour for double elimination tournaments.
    * - 'none'   -> Winners bracket final decides champion (no cross‑bracket GF)
@@ -146,7 +155,11 @@ export interface BracketMatch {
     tag?: string;
   } | null;
   serverId?: string | null;
-  status: 'pending' | 'ready' | 'loaded' | 'live' | 'completed';
+  status: 'pending' | 'ready' | 'loaded' | 'live' | 'completed' | 'cancelled';
+  operatorState?: 'queued' | 'postponed' | 'held';
+  queuePosition?: number | null;
+  vetoOpenedAt?: number | null;
+  postponedAt?: number | null;
   nextMatchId?: number | null;
   createdAt?: number;
   loadedAt?: number;

@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://localhost:3000';
+
 // Read client package.json to get version
 const packageJson = JSON.parse(
   readFileSync(resolve(__dirname, 'package.json'), 'utf-8')
@@ -30,16 +32,16 @@ export default defineConfig({
     // Production: Caddy proxies both to Express on same port (no proxy needed)
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: apiProxyTarget,
         changeOrigin: true,
       },
       '/socket.io': {
-        target: 'http://localhost:3000',
+        target: apiProxyTarget,
         changeOrigin: true,
         ws: true, // Enable WebSocket proxying
       },
       '/map-images': {
-        target: 'http://localhost:3000',
+        target: apiProxyTarget,
         changeOrigin: true,
       },
     },

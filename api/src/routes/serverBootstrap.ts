@@ -6,6 +6,7 @@ import { log } from '../utils/logger';
 import {
   getMatchZyWebhookCommands,
   getMatchZyLoadMatchAuthCommands,
+  getMatchZyReportUploadCommands,
   getMatchZyCoreSettingsCommands,
   getMatchZyServerConfigCommands,
 } from '../utils/matchzyRconCommands';
@@ -65,6 +66,7 @@ router.get('/:id/bootstrap', validateServerToken, async (req: Request, res: Resp
       `matchzy_server_id "${serverId}"`,
       ...getMatchZyWebhookCommands(baseUrl, serverToken, null),
       ...getMatchZyLoadMatchAuthCommands(serverToken),
+      ...getMatchZyReportUploadCommands(baseUrl, serverToken, serverId),
       ...getMatchZyCoreSettingsCommands({
         chatPrefix,
         adminChatPrefix,
