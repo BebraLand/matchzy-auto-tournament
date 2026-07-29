@@ -550,6 +550,11 @@ export default function PlayerProfile() {
 
   // Lazily create a shared Socket.IO connection for this page once per mount.
   useEffect(() => {
+    // React StrictMode runs effect setup -> cleanup -> setup once on mount in
+    // development. Reset this guard on every setup so the first cleanup does
+    // not permanently disable all subsequent silent realtime refreshes.
+    unmountedRef.current = false;
+
     if (!socketRef.current) {
       socketRef.current = io();
     }

@@ -100,8 +100,12 @@ export function useCurrentMatchStatus(
       }, 50);
     };
 
-    // Any veto update can affect whose turn it is (and thus match-status labels).
+    // Veto actions affect whose turn it is. Match updates also matter because
+    // operator Hold/Postpone/Resume changes whether this match should appear at
+    // all in the player navbar.
     socket.on('veto:update', scheduleSilentRefetch);
+    socket.on('match:update', scheduleSilentRefetch);
+    socket.on('tournament:update', scheduleSilentRefetch);
 
     return () => {
       if (refreshTimerRef.current) {
@@ -109,6 +113,8 @@ export function useCurrentMatchStatus(
         refreshTimerRef.current = null;
       }
       socket.off('veto:update', scheduleSilentRefetch);
+      socket.off('match:update', scheduleSilentRefetch);
+      socket.off('tournament:update', scheduleSilentRefetch);
       // Keep socket open for reuse; it will be closed when playerSteamId becomes null.
     };
   }, [playerSteamId, fetchStatus]);

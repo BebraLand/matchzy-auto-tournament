@@ -15,6 +15,7 @@ import type { ServerResponse } from '../types/server.types';
 import type { DbMatchRow } from '../types/database.types';
 import type { BracketMatch } from '../types/tournament.types';
 import { serverAllocationTracker } from './serverAllocationTracker';
+import { matchExecutionLockService } from './matchExecutionLockService';
 
 /**
  * Service for automatic server allocation to tournament matches
@@ -567,9 +568,54 @@ export class MatchAllocationService {
     success: boolean;
     error?: string;
   }> {
+    return matchExecutionLockService.runExclusive(match.slug, () =>
+      this.allocateMatchToServerOnceUnlocked(match, server, baseUrl, context)
+    );
+  }
+
+  private async allocateMatchToServerOnceUnlocked(
+    match: BracketMatch,
+    server: ServerResponse,
+    baseUrl: string,
+    context: 'bulk' | 'specific'
+  ): Promise<{
+    matchSlug: string;
+    serverId?: string;
+    success: boolean;
+    error?: string;
+  }> {
     const ctxLabel = context === 'specific' ? ' (specific)' : '';
 
     try {
+      // The bulk/specific task may have been queued from an Automatic-mode
+      // snapshot and then waited behind another match operation. Revalidate the
+      // live row under the match lock before assigning a server.
+      if (await operatorControlService.usesOperatorQueue()) {
+        return {
+          matchSlug: match.slug,
+          success: false,
+          error: 'Automatic allocation stopped after switching to operator-controlled mode',
+        };
+      }
+
+      const currentMatch = await db.queryOneAsync<DbMatchRow>(
+        'SELECT * FROM matches WHERE slug = ?',
+        [match.slug]
+      );
+      if (
+        !currentMatch ||
+        currentMatch.status !== 'ready' ||
+        currentMatch.server_id ||
+        currentMatch.operator_state === 'held' ||
+        currentMatch.operator_state === 'postponed'
+      ) {
+        return {
+          matchSlug: match.slug,
+          success: false,
+          error: 'Match is no longer eligible for automatic allocation',
+        };
+      }
+
       // Final live status check right before allocation so we don't rely on
       // the older snapshot returned from getAvailableServers.
       const statusInfo = await serverStatusService.getServerStatus(server.id);
@@ -942,6 +988,24 @@ export class MatchAllocationService {
     serverId?: string;
     error?: string;
   }> {
+    return matchExecutionLockService.runExclusive(matchSlug, () =>
+      this.allocateSingleMatchUnlocked(matchSlug, baseUrl, options)
+    );
+  }
+
+  /**
+   * The full allocation/load transaction. Call through allocateSingleMatch so
+   * operator parking actions cannot interleave with its async DB/RCON steps.
+   */
+  private async allocateSingleMatchUnlocked(
+    matchSlug: string,
+    baseUrl: string,
+    options: { operatorApproved?: boolean; preferredServerId?: string } = {}
+  ): Promise<{
+    success: boolean;
+    serverId?: string;
+    error?: string;
+  }> {
     let allocatedServerId: string | null = null;
     try {
       // Check if match already has a server and is structurally valid
@@ -975,6 +1039,17 @@ export class MatchAllocationService {
         return {
           success: false,
           error: 'Operator approval is required before server preparation',
+        };
+      }
+
+      if (
+        isBracketMatch &&
+        (await operatorControlService.usesOperatorQueue()) &&
+        match.queue_position !== 1
+      ) {
+        return {
+          success: false,
+          error: 'Set this match as Next before preparing its server',
         };
       }
 
@@ -1729,6 +1804,19 @@ export class MatchAllocationService {
    * Restart a single match - end it and reload it on the same server
    */
   async restartMatch(
+    matchSlug: string,
+    baseUrl: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    error?: string;
+  }> {
+    return matchExecutionLockService.runExclusive(matchSlug, () =>
+      this.restartMatchUnlocked(matchSlug, baseUrl)
+    );
+  }
+
+  private async restartMatchUnlocked(
     matchSlug: string,
     baseUrl: string
   ): Promise<{

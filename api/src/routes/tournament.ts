@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { tournamentService } from '../services/tournamentService';
 import { matchAllocationService } from '../services/matchAllocationService';
 import { operatorControlService } from '../services/operatorControlService';
+import { matchExecutionLockService } from '../services/matchExecutionLockService';
 import { rconService } from '../services/rconService';
 import { db } from '../config/database';
 import { requireAuth } from '../middleware/auth';
@@ -478,39 +479,44 @@ router.post('/', async (req: Request, res: Response) => {
  *         description: Invalid input or tournament already started
  */
 router.put('/', async (req: Request, res: Response) => {
-  try {
-    const input: UpdateTournamentInput = req.body;
-    const tournament = await tournamentService.updateTournament(input);
+  return matchExecutionLockService.runControlTransitionExclusive(async () => {
+    try {
+      const input: UpdateTournamentInput = req.body;
+      const tournament = await tournamentService.updateTournament(input);
 
-    if (input.settings?.controlMode === 'automatic') {
-      setImmediate(() => {
-        void matchAllocationService.tryImmediateAllocation();
+      if (input.settings?.controlMode === 'automatic') {
+        // Automatic mode hides the Operator Control Room. Resume every parked
+        // unstarted match first so none become permanently invisible/unrunnable.
+        await operatorControlService.resumeAllParked();
+        setImmediate(() => {
+          void matchAllocationService.tryImmediateAllocation();
+        });
+      } else if (
+        input.settings?.controlMode === 'assisted' ||
+        input.settings?.controlMode === 'manual'
+      ) {
+        matchAllocationService.stopAllPolling();
+        await operatorControlService.ensureQueuePositions();
+      }
+
+      // Emit updates to all clients
+      emitTournamentUpdate({ action: 'tournament_updated', ...tournament });
+      emitBracketUpdate({ action: 'tournament_updated' });
+
+      return res.json({
+        success: true,
+        tournament,
+        message: 'Tournament updated successfully',
       });
-    } else if (
-      input.settings?.controlMode === 'assisted' ||
-      input.settings?.controlMode === 'manual'
-    ) {
-      matchAllocationService.stopAllPolling();
-      await operatorControlService.ensureQueuePositions();
+    } catch (error) {
+      log.error('Error updating tournament', error as Error);
+      const err = error as Error;
+      return res.status(400).json({
+        success: false,
+        error: err.message || 'Failed to update tournament',
+      });
     }
-
-    // Emit updates to all clients
-    emitTournamentUpdate({ action: 'tournament_updated', ...tournament });
-    emitBracketUpdate({ action: 'tournament_updated' });
-
-    return res.json({
-      success: true,
-      tournament,
-      message: 'Tournament updated successfully',
-    });
-  } catch (error) {
-    log.error('Error updating tournament', error as Error);
-    const err = error as Error;
-    return res.status(400).json({
-      success: false,
-      error: err.message || 'Failed to update tournament',
-    });
-  }
+  });
 });
 
 /**

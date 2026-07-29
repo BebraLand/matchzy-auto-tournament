@@ -259,25 +259,37 @@ export function OperatorControlRoom({
                           </Button>
                         )}
                         {unstarted && (
-                          <Button
-                            size="small"
-                            color="inherit"
-                            startIcon={<PauseCircleOutline />}
-                            disabled={busy}
-                            onClick={() => void onAction(match, 'hold')}
+                          <Tooltip
+                            title="Temporarily remove this unstarted match from the execution queue. Resume returns it to the end and continues any saved veto."
                           >
-                            Hold
-                          </Button>
+                            <span>
+                              <Button
+                                size="small"
+                                color="inherit"
+                                startIcon={<PauseCircleOutline />}
+                                disabled={busy}
+                                onClick={() => void onAction(match, 'hold')}
+                              >
+                                Hold
+                              </Button>
+                            </span>
+                          </Tooltip>
                         )}
                         {match.status !== 'live' && (
-                          <Button
-                            size="small"
-                            color="warning"
-                            disabled={busy}
-                            onClick={() => void onAction(match, 'postpone')}
+                          <Tooltip
+                            title="Defer this match. If it was prepared, MAT resets and releases its server. Resume returns it to the end and continues any saved veto."
                           >
-                            Postpone
-                          </Button>
+                            <span>
+                              <Button
+                                size="small"
+                                color="warning"
+                                disabled={busy}
+                                onClick={() => void onAction(match, 'postpone')}
+                              >
+                                Postpone
+                              </Button>
+                            </span>
+                          </Tooltip>
                         )}
                       </>
                     )}

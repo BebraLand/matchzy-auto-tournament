@@ -139,6 +139,7 @@ router.get('/:teamId/match', async (req: Request, res: Response) => {
         LEFT JOIN servers s ON m.server_id = s.id
         WHERE (m.team1_id = ? OR m.team2_id = ?)
           AND m.status IN ('pending', 'ready')
+          AND COALESCE(m.operator_state, 'queued') = 'queued'
         ORDER BY m.round ASC, m.match_number ASC
         LIMIT 1`,
         [teamId, teamId]

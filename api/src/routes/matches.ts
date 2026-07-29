@@ -19,6 +19,7 @@ import { playerService } from '../services/playerService';
 import { getMapResults } from '../services/matchMapResultService';
 import { serverAllocationTracker } from '../services/serverAllocationTracker';
 import { operatorControlService } from '../services/operatorControlService';
+import { matchExecutionLockService } from '../services/matchExecutionLockService';
 
 const router = Router();
 
@@ -1081,24 +1082,26 @@ router.get('/', async (req: Request, res: Response) => {
  * Persist a complete execution order independently from the tournament bracket.
  */
 router.patch('/operator-queue', requireAuth, async (req: Request, res: Response) => {
-  try {
-    if (!(await operatorControlService.usesOperatorQueue())) {
-      return res.status(409).json({
+  return matchExecutionLockService.runControlTransitionExclusive(async () => {
+    try {
+      if (!(await operatorControlService.usesOperatorQueue())) {
+        return res.status(409).json({
+          success: false,
+          error: 'Execution queue controls are disabled in Automatic mode.',
+        });
+      }
+      const slugs = Array.isArray(req.body?.slugs) ? req.body.slugs.map(String) : [];
+      await operatorControlService.reorderQueue(slugs);
+      emitBracketUpdate({ action: 'operator_queue_reordered', matchSlugs: slugs });
+      return res.json({ success: true, slugs });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to reorder match queue';
+      return res.status(message.includes('changed') ? 409 : 400).json({
         success: false,
-        error: 'Execution queue controls are disabled in Automatic mode.',
+        error: message,
       });
     }
-    const slugs = Array.isArray(req.body?.slugs) ? req.body.slugs.map(String) : [];
-    await operatorControlService.reorderQueue(slugs);
-    emitBracketUpdate({ action: 'operator_queue_reordered', matchSlugs: slugs });
-    return res.json({ success: true, slugs });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to reorder match queue';
-    return res.status(message.includes('changed') ? 409 : 400).json({
-      success: false,
-      error: message,
-    });
-  }
+  });
 });
 
 /**
@@ -1106,50 +1109,63 @@ router.patch('/operator-queue', requireAuth, async (req: Request, res: Response)
  * Explicit operator transitions used by Assisted and Full Manual modes.
  */
 router.post('/:slug/operator-action', requireAuth, async (req: Request, res: Response) => {
-  try {
-    if (!(await operatorControlService.usesOperatorQueue())) {
-      return res.status(409).json({
-        success: false,
-        error: 'Operator actions are disabled in Automatic mode.',
-      });
-    }
-    const { slug } = req.params;
-    const action = String(req.body?.action ?? '');
-    let match = await operatorControlService.getMatchOrThrow(slug);
+  return matchExecutionLockService.runControlTransitionExclusive(async () => {
+    try {
+      if (!(await operatorControlService.usesOperatorQueue())) {
+        return res.status(409).json({
+          success: false,
+          error: 'Operator actions are disabled in Automatic mode.',
+        });
+      }
+      const { slug } = req.params;
+      const action = String(req.body?.action ?? '');
+      let match = await operatorControlService.getMatchOrThrow(slug);
 
     if (action === 'set_next') {
       await operatorControlService.setNext(slug);
     } else if (action === 'hold') {
-      match = await operatorControlService.hold(slug);
+      match = await matchExecutionLockService.runExclusive(slug, () =>
+        operatorControlService.hold(slug)
+      );
     } else if (action === 'resume') {
-      match = await operatorControlService.resume(slug);
+      match = await matchExecutionLockService.runExclusive(slug, () =>
+        operatorControlService.resume(slug)
+      );
     } else if (action === 'open_veto') {
       match = await operatorControlService.openVeto(slug);
     } else if (action === 'postpone') {
-      if (match.status === 'live') {
-        return res.status(409).json({
-          success: false,
-          error: 'A live match cannot be postponed. Use emergency live-match controls.',
-        });
-      }
-
-      if (match.server_id) {
-        try {
-          const { rconService } = await import('../services/rconService');
-          await rconService.sendCommand(match.server_id, 'css_restart');
-        } catch (error) {
-          return res.status(502).json({
-            success: false,
-            error:
-              'The match is loaded and its server could not be reset. It was not postponed, so MAT does not lose track of the active server.',
-            details: error instanceof Error ? error.message : String(error),
-          });
+      match = await matchExecutionLockService.runExclusive(slug, async () => {
+        // Re-read inside the same lock used by allocation. The route-level
+        // snapshot may have become stale while another Prepare was finishing.
+        const current = await operatorControlService.getMatchOrThrow(slug);
+        if (current.status === 'live') {
+          throw new Error(
+            'A live match cannot be postponed. Use emergency live-match controls.'
+          );
         }
-        serverAllocationTracker.markIdle(match.server_id);
-      }
 
-      matchAllocationService.stopPollingForServer(slug);
-      match = await operatorControlService.postpone(slug);
+        const releasedServerId = current.server_id;
+        if (releasedServerId) {
+          try {
+            const { rconService } = await import('../services/rconService');
+            await rconService.sendCommand(releasedServerId, 'css_restart');
+          } catch (error) {
+            const resetError = new Error(
+              'The match is loaded and its server could not be reset. It was not postponed, so MAT does not lose track of the active server.'
+            ) as Error & { statusCode?: number; details?: string };
+            resetError.statusCode = 502;
+            resetError.details = error instanceof Error ? error.message : String(error);
+            throw resetError;
+          }
+        }
+
+        const postponed = await operatorControlService.postpone(slug);
+        matchAllocationService.stopPollingForServer(slug);
+        if (releasedServerId) {
+          serverAllocationTracker.markIdle(releasedServerId);
+        }
+        return postponed;
+      });
     } else if (action === 'prepare') {
       if (match.operator_state === 'postponed' || match.operator_state === 'held') {
         return res.status(409).json({
@@ -1185,15 +1201,23 @@ router.post('/:slug/operator-action', requireAuth, async (req: Request, res: Res
       });
     }
 
-    const updatedMatch = await getMatchDetailsBySlug(slug);
-    emitMatchUpdate(updatedMatch ?? { slug });
-    emitBracketUpdate({ action: `operator_${action}`, matchSlug: slug });
-    return res.json({ success: true, action, match: updatedMatch });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Operator action failed';
-    const status = message.includes('not found') ? 404 : message.includes('live') ? 409 : 400;
-    return res.status(status).json({ success: false, error: message });
-  }
+      const updatedMatch = await getMatchDetailsBySlug(slug);
+      emitMatchUpdate(updatedMatch ?? { slug });
+      emitBracketUpdate({ action: `operator_${action}`, matchSlug: slug });
+      return res.json({ success: true, action, match: updatedMatch });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Operator action failed';
+      const typedError = error as Error & { statusCode?: number; details?: string };
+      const status =
+        typedError.statusCode ??
+        (message.includes('not found') ? 404 : message.includes('live') ? 409 : 400);
+      return res.status(status).json({
+        success: false,
+        error: message,
+        ...(typedError.details ? { details: typedError.details } : {}),
+      });
+    }
+  });
 });
 
 /**
@@ -1307,10 +1331,11 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
  * Automatically configures webhook unless ?skipWebhook=true
  */
 router.post('/:slug/load', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const { slug } = req.params;
-    const skipWebhook = req.query.skipWebhook === 'true';
-    const match = await matchService.getMatchBySlug(slug, getBaseUrl(req));
+  const { slug } = req.params;
+  return matchExecutionLockService.runExclusive(slug, async () => {
+    try {
+      const skipWebhook = req.query.skipWebhook === 'true';
+      const match = await matchService.getMatchBySlug(slug, getBaseUrl(req));
 
     if (!match) {
       return res.status(404).json({
@@ -1389,13 +1414,14 @@ router.post('/:slug/load', requireAuth, async (req: Request, res: Response) => {
         rconResponses: result.rconResponses,
       });
     }
-  } catch (error) {
-    console.error('Error loading match:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to load match on server',
-    });
-  }
+    } catch (error) {
+      console.error('Error loading match:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to load match on server',
+      });
+    }
+  });
 });
 
 /**
@@ -1447,9 +1473,10 @@ router.post('/:slug/restart', requireAuth, async (req: Request, res: Response) =
  * Allowed only when match status is 'ready' or 'loaded' (never during live play).
  */
 router.post('/:slug/reallocate', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const { slug } = req.params;
-    const baseUrl = await getWebhookBaseUrl(req);
+  const { slug } = req.params;
+  return matchExecutionLockService.runExclusive(slug, async () => {
+    try {
+      const baseUrl = await getWebhookBaseUrl(req);
 
     const match = await db.queryOneAsync<DbMatchRow>('SELECT * FROM matches WHERE slug = ?', [
       slug,
@@ -1555,13 +1582,14 @@ router.post('/:slug/reallocate', requireAuth, async (req: Request, res: Response
       match: updatedMatch,
       rconResponses: load.rconResponses,
     });
-  } catch (error) {
-    log.error(`Error reallocating match`, error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to reallocate match',
-    });
-  }
+    } catch (error) {
+      log.error(`Error reallocating match`, error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to reallocate match',
+      });
+    }
+  });
 });
 
 /**

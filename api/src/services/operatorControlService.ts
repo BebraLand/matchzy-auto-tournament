@@ -36,6 +36,10 @@ class OperatorControlService {
   }
 
   async isVetoOpen(match: DbMatchRow): Promise<boolean> {
+    // Parking a match freezes its execution surface without destroying veto
+    // progress. Direct veto URLs and player-facing polling must remain closed
+    // until the operator explicitly resumes the match.
+    if (match.operator_state === 'postponed' || match.operator_state === 'held') return false;
     if (match.round === 0 || match.tournament_id == null) return true;
     if ((await this.getControlMode()) === 'automatic') return true;
     return typeof match.veto_opened_at === 'number' && match.veto_opened_at > 0;
@@ -223,6 +227,24 @@ class OperatorControlService {
       [slug]
     );
     return this.getMatchOrThrow(slug);
+  }
+
+  /**
+   * Automatic mode has no Operator Control Room, so it must not retain hidden
+   * held/postponed matches. Resume every unstarted parked match before upstream
+   * allocation and veto automation are allowed to take over again.
+   */
+  async resumeAllParked(): Promise<void> {
+    await db.execAsync(
+      `UPDATE matches
+       SET operator_state = 'queued',
+           queue_position = NULL,
+           postponed_at = NULL
+       WHERE tournament_id = 1
+         AND status IN ('pending', 'ready')
+         AND operator_state IN ('postponed', 'held')`
+    );
+    await this.ensureQueuePositions();
   }
 
   async hold(slug: string): Promise<DbMatchRow> {
