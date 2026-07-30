@@ -84,6 +84,7 @@ setsid env \
   PORT="$API_PORT" \
   ENABLE_TEST_ENDPOINTS=true \
   NODE_ENV=test \
+  MAP_IMAGES_DIR="$LOG_DIR/map-images" \
   SESSION_SECRET=operator-test-session \
   SERVER_TOKEN=operator-test-server \
   PUBLIC_URL="http://127.0.0.1:$API_PORT" \

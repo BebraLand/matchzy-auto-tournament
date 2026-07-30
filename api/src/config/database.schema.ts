@@ -411,6 +411,17 @@ export async function getDefaultMapsSQL(): Promise<string> {
       'Failed to fetch maps from GitHub repository. Using fallback maps that match the repository.'
     );
     const fallbackMaps = getFallbackMaps();
+    const { getCuratedMaps } = await import('./mapCatalog');
+    const knownMapIds = new Set(fallbackMaps.map((map) => map.id));
+    for (const map of getCuratedMaps()) {
+      if (!knownMapIds.has(map.id)) {
+        fallbackMaps.push({
+          id: map.id,
+          display_name: map.displayName,
+          image_url: map.imageUrl,
+        });
+      }
+    }
     return generateMapsSQL(fallbackMaps);
   }
 
@@ -603,19 +614,6 @@ export async function getDefaultMapPoolsSQL(client: {
   ];
   const activeDutyMaps = activeDutyMapIds.filter((id) => allMapIds.includes(id));
 
-  // Upgrade only the stock pre-BebraLand Active Duty row. This lets existing
-  // installations receive Cache once, without resetting future organizer edits
-  // every time MAT starts.
-  const legacyActiveDutyMapIds = JSON.stringify([
-    'de_ancient',
-    'de_anubis',
-    'de_dust2',
-    'de_inferno',
-    'de_mirage',
-    'de_nuke',
-    'de_vertigo',
-  ]).replace(/'/g, "''");
-
   const pools: Array<{ name: string; mapIds: string[]; isDefault: number; enabled: number }> = [];
 
   // Add Active Duty pool if we have any of those maps
@@ -671,12 +669,6 @@ export async function getDefaultMapPoolsSQL(client: {
     INSERT INTO map_pools (name, map_ids, is_default, enabled, created_at, updated_at)
     VALUES
       ${values}
-    -- Seed pools once. The sole exception is the known stock Active Duty row:
-    -- upgrade it from Vertigo to Cache once, then preserve all manual edits.
-    ON CONFLICT (name) DO UPDATE SET
-      map_ids = EXCLUDED.map_ids,
-      updated_at = EXCLUDED.updated_at
-    WHERE map_pools.name = 'Active Duty'
-      AND map_pools.map_ids = '${legacyActiveDutyMapIds}';
+    ON CONFLICT (name) DO NOTHING;
   `;
 }

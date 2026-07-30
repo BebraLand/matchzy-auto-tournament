@@ -11,6 +11,7 @@ import { settingsService } from '../services/settingsService';
 import { normalizeConfigPlayers } from '../utils/playerTransform';
 import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
 import { operatorControlService } from '../services/operatorControlService';
+import { mapService } from '../services/mapService';
 
 const router = Router();
 
@@ -185,6 +186,19 @@ type VetoContext = {
   customVetoOrder?: { bo1?: unknown[]; bo3?: unknown[]; bo5?: unknown[] };
 };
 
+async function getVetoMapMetadata(mapIds: string[]) {
+  const requestedMapIds = new Set(mapIds);
+  const maps = await mapService.getAllMaps();
+
+  return maps
+    .filter((map) => requestedMapIds.has(map.id))
+    .map((map) => ({
+      id: map.id,
+      displayName: map.displayName,
+      imageUrl: map.imageUrl,
+    }));
+}
+
 /**
  * Resolve format and map pool for veto. Tournament matches use tournament row;
  * manual matches (round === 0, no tournament) use match config.
@@ -333,6 +347,10 @@ router.get('/:matchSlug', async (req: Request, res: Response) => {
       }
     }
 
+    const vetoMaps = await getVetoMapMetadata(
+      Array.isArray(vetoState.allMaps) ? vetoState.allMaps : tournamentMaps
+    );
+
     // Determine whether the current viewer is actually on one of the two teams.
     // Team members get the full veto state; spectators get a redacted, read‑only
     // view with only high‑level information (team names, status, picked maps).
@@ -357,12 +375,14 @@ router.get('/:matchSlug', async (req: Request, res: Response) => {
       return res.json({
         success: true,
         veto: publicVeto,
+        maps: vetoMaps,
       });
     }
 
     return res.json({
       success: true,
       veto: vetoState,
+      maps: vetoMaps,
     });
   } catch (error) {
     log.error('Error getting veto state', error);

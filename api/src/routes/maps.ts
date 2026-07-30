@@ -3,21 +3,19 @@ import { mapService } from '../services/mapService';
 import { CreateMapInput, UpdateMapInput } from '../types/map.types';
 import { requireAuth } from '../middleware/auth';
 import { log } from '../utils/logger';
-import { fetchCS2MapsFromWiki } from '../utils/fetchCS2Maps';
+import { fetchCS2MapCatalog } from '../utils/fetchCS2Maps';
+import { ensureMapImagesDirectory, getMapImagesDirectory } from '../config/storage';
+import { CURATED_ACTIVE_DUTY_MAP_IDS } from '../config/mapCatalog';
+import { mapPoolService } from '../services/mapPoolService';
 import path from 'path';
 import fs from 'fs';
 
 const router = Router();
 
-// Keep uploaded map images in the persistent data volume instead of the built
-// frontend directory. `process.cwd()` is /app in the production container and
-// the repository root in local development.
-const MAP_IMAGES_DIR = process.env.MAP_IMAGES_DIR || path.join(process.cwd(), 'data', 'map-images');
-
-// Ensure map images directory exists
-if (!fs.existsSync(MAP_IMAGES_DIR)) {
-  fs.mkdirSync(MAP_IMAGES_DIR, { recursive: true });
-  log.server(`Created map images directory: ${MAP_IMAGES_DIR}`);
+function storedPreviewExists(imageUrl: string | null): boolean {
+  if (!imageUrl?.startsWith('/map-images/')) return false;
+  const filename = path.basename(imageUrl);
+  return fs.existsSync(path.join(getMapImagesDirectory(), filename));
 }
 
 // Protect all map routes
@@ -89,6 +87,13 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: id, displayName',
+      });
+    }
+
+    if (!/^[a-z0-9_]+$/.test(input.id)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Map ID may only contain lowercase letters, numbers, and underscores',
       });
     }
 
@@ -176,6 +181,13 @@ router.post('/:id/upload-image', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { imageData, imageType } = req.body;
 
+    if (!/^[a-z0-9_]+$/.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid map ID',
+      });
+    }
+
     // Check if map exists
     const map = await mapService.getMapById(id);
     if (!map) {
@@ -239,10 +251,20 @@ router.post('/:id/upload-image', async (req: Request, res: Response) => {
       });
     }
 
-    // Save image file
+    // Save atomically so readers never observe a partially written image.
+    ensureMapImagesDirectory();
     const filename = `${id}.${imageExtension}`;
-    const filepath = path.join(MAP_IMAGES_DIR, filename);
-    fs.writeFileSync(filepath, imageBuffer);
+    const filepath = path.join(getMapImagesDirectory(), filename);
+    const temporaryFilepath = `${filepath}.${process.pid}.tmp`;
+    fs.writeFileSync(temporaryFilepath, imageBuffer);
+    fs.renameSync(temporaryFilepath, filepath);
+
+    // Remove old variants when replacing an image with another format.
+    for (const extension of validExtensions) {
+      if (extension === imageExtension) continue;
+      const staleFilepath = path.join(getMapImagesDirectory(), `${id}.${extension}`);
+      if (fs.existsSync(staleFilepath)) fs.unlinkSync(staleFilepath);
+    }
 
     // Generate URL (relative to public directory)
     const imageUrl = `/map-images/${filename}`;
@@ -275,7 +297,7 @@ router.post('/sync', async (_req: Request, res: Response) => {
     log.info('Starting map sync from GitHub repository...');
 
     // Fetch maps from GitHub
-    const fetchedMaps = await fetchCS2MapsFromWiki();
+    const fetchedMaps = await fetchCS2MapCatalog();
 
     if (fetchedMaps.length === 0) {
       return res.status(400).json({
@@ -284,31 +306,47 @@ router.post('/sync', async (_req: Request, res: Response) => {
       });
     }
 
-    // Get all existing maps to check for duplicates
+    // Refresh catalog-managed records while preserving locally uploaded images.
     const existingMaps = await mapService.getAllMaps();
-    const existingMapIds = new Set(existingMaps.map((m) => m.id));
+    const existingMapsById = new Map(existingMaps.map((map) => [map.id, map]));
 
-    // Add only new maps (that don't already exist)
     let addedCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
     const errors: string[] = [];
 
     for (const mapData of fetchedMaps) {
-      if (existingMapIds.has(mapData.id)) {
-        // Map already exists, skip it
-        continue;
-      }
-
       try {
-        await mapService.createMap(
-          {
-            id: mapData.id,
+        const existingMap = existingMapsById.get(mapData.id);
+        if (!existingMap) {
+          await mapService.createMap(
+            {
+              id: mapData.id,
+              displayName: mapData.displayName,
+              imageUrl: mapData.imageUrl,
+            },
+            false
+          );
+          addedCount++;
+          log.info(`Added new map: ${mapData.displayName} (${mapData.id})`);
+          continue;
+        }
+
+        const keepsUploadedPreview = storedPreviewExists(existingMap.imageUrl);
+        const nextImageUrl = keepsUploadedPreview ? existingMap.imageUrl : mapData.imageUrl;
+        if (
+          existingMap.displayName !== mapData.displayName ||
+          existingMap.imageUrl !== nextImageUrl
+        ) {
+          await mapService.updateMap(mapData.id, {
             displayName: mapData.displayName,
-            imageUrl: mapData.imageUrl,
-          },
-          false // Don't upsert - we already checked it doesn't exist
-        );
-        addedCount++;
-        log.info(`Added new map: ${mapData.displayName} (${mapData.id})`);
+            imageUrl: nextImageUrl,
+          });
+          updatedCount++;
+          log.info(`Updated catalog map: ${mapData.displayName} (${mapData.id})`);
+        } else {
+          skippedCount++;
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         errors.push(`${mapData.id}: ${errorMessage}`);
@@ -316,18 +354,60 @@ router.post('/sync', async (_req: Request, res: Response) => {
       }
     }
 
-    const skippedCount = fetchedMaps.length - addedCount - errors.length;
+    // Synchronizing the catalog is an explicit organizer action, so it also
+    // refreshes this fork's curated Active Duty pool. Restarts never do this.
+    let activeDutyUpdated = false;
+    try {
+      const availableMapIds = new Set((await mapService.getAllMaps()).map((map) => map.id));
+      const activeDutyMapIds = CURATED_ACTIVE_DUTY_MAP_IDS.filter((id) => availableMapIds.has(id));
+      let activeDutyPool = await mapPoolService.getMapPoolByName('Active Duty');
 
-    log.success(`Map sync completed: ${addedCount} added, ${skippedCount} skipped, ${errors.length} errors`);
+      if (!activeDutyPool) {
+        activeDutyPool = await mapPoolService.createMapPool({
+          name: 'Active Duty',
+          mapIds: activeDutyMapIds,
+          enabled: true,
+        });
+        activeDutyUpdated = true;
+      } else {
+        const mapsChanged =
+          JSON.stringify(activeDutyPool.mapIds) !== JSON.stringify(activeDutyMapIds);
+        if (mapsChanged || !activeDutyPool.enabled) {
+          activeDutyPool = await mapPoolService.updateMapPool(activeDutyPool.id, {
+            mapIds: activeDutyMapIds,
+            enabled: true,
+          });
+          activeDutyUpdated = true;
+        }
+      }
+
+      if (!activeDutyPool.isDefault) {
+        await mapPoolService.setDefaultMapPool(activeDutyPool.id);
+        activeDutyUpdated = true;
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      errors.push(`Active Duty: ${errorMessage}`);
+      log.warn('Failed to synchronize the curated Active Duty pool', { error });
+    }
+
+    log.success(
+      `Map sync completed: ${addedCount} added, ${updatedCount} updated, ` +
+        `${skippedCount} unchanged, ${errors.length} errors`
+    );
 
     return res.json({
       success: true,
-      message: `Sync completed: ${addedCount} new map(s) added, ${skippedCount} already existed`,
+      message:
+        `Sync completed: ${addedCount} added, ${updatedCount} updated, ` +
+        `${skippedCount} unchanged`,
       stats: {
         total: fetchedMaps.length,
         added: addedCount,
+        updated: updatedCount,
         skipped: skippedCount,
         errors: errors.length,
+        activeDutyUpdated,
       },
       errors: errors.length > 0 ? errors : undefined,
     });
@@ -387,7 +467,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       // Check if it's a local image (starts with /map-images/)
       if (map.imageUrl.startsWith('/map-images/')) {
         const filename = map.imageUrl.replace('/map-images/', '');
-        const imagePath = path.join(MAP_IMAGES_DIR, filename);
+        const imagePath = path.join(getMapImagesDirectory(), filename);
         if (fs.existsSync(imagePath)) {
           try {
             fs.unlinkSync(imagePath);
@@ -403,7 +483,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     // Also try to delete by pattern (fallback in case imageUrl wasn't set correctly)
     const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
     for (const ext of imageExtensions) {
-      const imagePath = path.join(MAP_IMAGES_DIR, `${id}.${ext}`);
+      const imagePath = path.join(getMapImagesDirectory(), `${id}.${ext}`);
       if (fs.existsSync(imagePath)) {
         try {
           fs.unlinkSync(imagePath);

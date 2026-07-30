@@ -20,7 +20,7 @@ const MAPS = [
   'de_inferno',
   'de_mirage',
   'de_nuke',
-  'de_train',
+  'de_cache',
 ];
 const TEST_SERVER_TOKEN = process.env.TEST_SERVER_TOKEN || 'server123';
 
@@ -53,6 +53,27 @@ test.describe.serial('Operator-controlled execution queue', () => {
       data: { steamId: '76561198000000001' },
     });
     expect(loginResponse.ok(), await loginResponse.text()).toBeTruthy();
+
+    const uploadedMapId = `de_operator_preview_${Date.now()}`;
+    const createUploadedMap = await request.post('/api/maps', {
+      data: { id: uploadedMapId, displayName: 'Operator Preview Test' },
+    });
+    expect(createUploadedMap.ok(), await createUploadedMap.text()).toBeTruthy();
+
+    const uploadPreview = await request.post(`/api/maps/${uploadedMapId}/upload-image`, {
+      data: {
+        imageType: 'image/png',
+        imageData:
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=',
+      },
+    });
+    expect(uploadPreview.ok(), await uploadPreview.text()).toBeTruthy();
+    const uploadedPreviewBody = await uploadPreview.json();
+    expect(uploadedPreviewBody.imageUrl).toBe(`/map-images/${uploadedMapId}.png`);
+
+    const servedPreview = await request.get(uploadedPreviewBody.imageUrl);
+    expect(servedPreview.ok(), await servedPreview.text()).toBeTruthy();
+    expect(servedPreview.headers()['content-type']).toContain('image/png');
 
     const unauthenticatedEvent = await request.post('/api/events', { data: {} });
     expect(unauthenticatedEvent.status()).toBe(401);
@@ -240,6 +261,16 @@ test.describe.serial('Operator-controlled execution queue', () => {
 
     const openVeto = await request.get(`/api/veto/${match3.slug}`);
     expect(openVeto.ok(), await openVeto.text()).toBeTruthy();
+    const openVetoBody = await openVeto.json();
+    expect(openVetoBody.maps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'de_cache',
+          displayName: 'Cache',
+          imageUrl: expect.stringContaining('/de_cache.webp'),
+        }),
+      ])
+    );
 
     const browserLogin = await page.request.post('/api/test/login-admin', {
       data: { steamId: '76561198000000001' },

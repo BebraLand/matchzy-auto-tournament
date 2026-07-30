@@ -10,6 +10,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import swaggerUi from 'swagger-ui-express';
 import { db } from './config/database';
+import { ensureMapImagesDirectory, getMapImagesDirectory } from './config/storage';
 import { swaggerSpec } from './config/swagger';
 import { log, logger, LOG_HTTP_REQUESTS, LOG_DB_VERBOSE, LOG_DB_VALUES } from './utils/logger';
 import { cleanupOldLogs } from './utils/eventLogger';
@@ -388,10 +389,9 @@ app.use('/api/matchzy', matchzyRoutes); // MatchZy Enhanced version info
 const publicPath = path.join(__dirname, '..', 'public');
 app.use('/app', express.static(publicPath));
 
-// Serve uploaded map images from the same persistent location used by the
-// upload route. In production this resolves to /app/data/map-images.
-const mapImagesPath = process.env.MAP_IMAGES_DIR || path.join(process.cwd(), 'data', 'map-images');
-app.use('/map-images', express.static(mapImagesPath));
+// Serve map images statically
+ensureMapImagesDirectory();
+app.use('/map-images', express.static(getMapImagesDirectory()));
 app.get('/app/*', (_req: Request, res: Response) => {
   res.sendFile(path.join(publicPath, 'index.html'));
 });

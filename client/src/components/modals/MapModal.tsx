@@ -284,8 +284,7 @@ export default function MapModal({ open, map, onClose, onSave }: MapModalProps) 
       let finalImageUrl = imageUrl.trim() || null;
       let createdMap = false;
 
-      // A new map must exist before its image can be uploaded. The upload API
-      // also writes the resulting local URL back to the map record.
+      // The upload endpoint associates the preview with an existing map.
       if (!isEditing) {
         await api.post<MapResponse>('/api/maps', {
           id: id.trim(),
@@ -306,8 +305,7 @@ export default function MapModal({ open, map, onClose, onSave }: MapModalProps) 
             fileInputRef.current.value = '';
           }
         } catch (err) {
-          // Do not leave an unusable map behind if creating its first preview
-          // fails. Existing maps keep their current image on a failed replace.
+          // Keep create-with-preview atomic from the user's perspective.
           if (createdMap) {
             await api.delete(`/api/maps/${id.trim()}`).catch(() => undefined);
           }

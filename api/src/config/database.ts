@@ -288,31 +288,21 @@ class DatabaseManager {
         // Don't throw for other errors - continue
       }
 
-      // Cache is part of BebraLand's competitive pool, but it is not currently
-      // present in the upstream thumbnail repository. Seed the map record
-      // independently so fresh installs and existing databases can use it.
+      // Seed map pools only for a new database. Existing pools are
+      // organizer-owned data and must not be regenerated on every restart.
       try {
-        await client.query(`
-          INSERT INTO maps (id, display_name, image_url, created_at, updated_at)
-          VALUES (
-            'de_cache',
-            'Cache',
-            NULL,
-            EXTRACT(EPOCH FROM NOW())::INTEGER,
-            EXTRACT(EPOCH FROM NOW())::INTEGER
-          )
-          ON CONFLICT (id) DO NOTHING
-        `);
-      } catch (err) {
-        const error = err as Error;
-        log.warn(`[PostgreSQL] Failed to seed Cache map: ${error.message}`);
-      }
+        const mapPoolsCheck = await client.query('SELECT COUNT(*) AS count FROM map_pools');
+        const mapPoolsCount = parseInt(mapPoolsCheck.rows[0]?.count || '0', 10);
 
-      // Insert default map pools
-      try {
-        const defaultMapPoolsSQL = await getDefaultMapPoolsSQL(client);
-        await client.query(defaultMapPoolsSQL);
-        log.database('[PostgreSQL] Default map pools inserted');
+        if (mapPoolsCount === 0) {
+          const defaultMapPoolsSQL = await getDefaultMapPoolsSQL(client);
+          await client.query(defaultMapPoolsSQL);
+          log.database('[PostgreSQL] Default map pools inserted');
+        } else {
+          log.database(
+            `[PostgreSQL] Map pools table already has ${mapPoolsCount} pools, skipping default insertion`
+          );
+        }
       } catch (err) {
         const error = err as Error;
         log.warn(`[PostgreSQL] Failed to insert default map pools: ${error.message}`);
