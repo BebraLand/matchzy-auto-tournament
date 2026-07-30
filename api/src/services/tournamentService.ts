@@ -1,5 +1,6 @@
 import { db } from '../config/database';
 import { log } from '../utils/logger';
+import { serverAllocationTracker } from './serverAllocationTracker';
 import { getBracketGenerator } from './bracketGenerators';
 import { validateTeamCount, calculateTotalRounds } from '../utils/tournamentHelpers';
 import { enrichMatch } from '../utils/matchEnrichment';
@@ -244,6 +245,7 @@ class TournamentService {
 
     // Delete tournament (CASCADE will also delete matches and events)
     await db.execAsync('DELETE FROM tournament WHERE id = 1');
+    serverAllocationTracker.reset();
     log.debug('Tournament deleted from database');
   }
 

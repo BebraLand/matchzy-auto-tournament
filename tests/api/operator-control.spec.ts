@@ -5,6 +5,7 @@ import { matchExecutionLockService } from '../../api/src/services/matchExecution
 import { recordMapResult } from '../../api/src/services/matchMapResultService';
 import { matchAllocationService } from '../../api/src/services/matchAllocationService';
 import { serverAllocationTracker } from '../../api/src/services/serverAllocationTracker';
+import { tournamentService } from '../../api/src/services/tournamentService';
 import type { ServerResponse } from '../../api/src/types/server.types';
 
 type OperatorMatch = {
@@ -118,6 +119,15 @@ test.describe.serial('Operator-controlled execution queue', () => {
       await db.deleteAsync('matches', 'slug = ?', [matchSlug]);
       await db.deleteAsync('servers', 'id = ?', [serverId]);
     }
+  });
+
+  test('clears stale server allocations when a tournament is deleted', async () => {
+    const serverId = `deleted-tournament-server-${Date.now()}`;
+    serverAllocationTracker.markAllocated(serverId, 'deleted-active-match');
+
+    await tournamentService.deleteTournament();
+
+    expect(serverAllocationTracker.getState(serverId)).toBeNull();
   });
 
   test('keeps bracket order while execution order changes to 1,3,4,2', async ({

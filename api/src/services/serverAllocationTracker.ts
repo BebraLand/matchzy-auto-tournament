@@ -61,6 +61,11 @@ class ServerAllocationTracker {
     if (!state) return false;
     return state.state === 'allocated' || state.state === 'preparing';
   }
+
+  reset(): void {
+    this.states.clear();
+    log.debug('[ALLOC-TRACKER] Cleared all server allocation state');
+  }
 }
 
 export const serverAllocationTracker = new ServerAllocationTracker();
