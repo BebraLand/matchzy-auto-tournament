@@ -3,6 +3,9 @@ import { io as createSocket } from 'socket.io-client';
 import { db } from '../../api/src/config/database';
 import { matchExecutionLockService } from '../../api/src/services/matchExecutionLockService';
 import { recordMapResult } from '../../api/src/services/matchMapResultService';
+import { matchAllocationService } from '../../api/src/services/matchAllocationService';
+import { serverAllocationTracker } from '../../api/src/services/serverAllocationTracker';
+import type { ServerResponse } from '../../api/src/types/server.types';
 
 type OperatorMatch = {
   id: number;
@@ -51,6 +54,70 @@ test.describe.serial('Operator-controlled execution queue', () => {
 
     expect(maximumConcurrentOperations).toBe(1);
     expect(order).toEqual(['prepare:start', 'prepare:end', 'postpone:start', 'postpone:end']);
+  });
+
+  test('releases the allocation tracker after a failed match load', async () => {
+    const stamp = Date.now();
+    const matchSlug = `allocation-cleanup-${stamp}`;
+    const serverId = `allocation-cleanup-server-${stamp}`;
+    const now = Math.floor(stamp / 1000);
+
+    await db.insertAsync('servers', {
+      id: serverId,
+      name: 'Allocation cleanup test server',
+      host: '127.0.0.1',
+      port: 1,
+      password: 'test-only-invalid-rcon',
+      enabled: 1,
+      created_at: now,
+      updated_at: now,
+    });
+    await db.insertAsync('matches', {
+      slug: matchSlug,
+      tournament_id: null,
+      round: 0,
+      match_number: 1,
+      config: JSON.stringify({ matchid: matchSlug, maplist: ['de_cache'] }),
+      status: 'ready',
+      operator_state: 'queued',
+      created_at: now,
+    });
+
+    const candidate: ServerResponse = {
+      id: serverId,
+      name: 'Allocation cleanup test server',
+      host: '127.0.0.1',
+      port: 1,
+      password: 'test-only-invalid-rcon',
+      enabled: true,
+      matchzyConfig: null,
+      created_at: now,
+      updated_at: now,
+    };
+    const service = matchAllocationService as unknown as {
+      getAvailableServers: () => Promise<ServerResponse[]>;
+      allocateSingleMatch: (
+        slug: string,
+        baseUrl: string
+      ) => Promise<{ success: boolean; error?: string }>;
+    };
+    const originalGetAvailableServers = service.getAvailableServers.bind(matchAllocationService);
+    service.getAvailableServers = async () => [candidate];
+
+    try {
+      const result = await service.allocateSingleMatch(matchSlug, 'http://127.0.0.1:1');
+      expect(result.success).toBe(false);
+      expect(serverAllocationTracker.getState(serverId)?.state).toBe('idle');
+      const storedMatch = await db.queryOneAsync<{ server_id: string | null }>(
+        'SELECT server_id FROM matches WHERE slug = ?',
+        [matchSlug]
+      );
+      expect(storedMatch?.server_id).toBeNull();
+    } finally {
+      service.getAvailableServers = originalGetAvailableServers;
+      await db.deleteAsync('matches', 'slug = ?', [matchSlug]);
+      await db.deleteAsync('servers', 'id = ?', [serverId]);
+    }
   });
 
   test('keeps bracket order while execution order changes to 1,3,4,2', async ({
