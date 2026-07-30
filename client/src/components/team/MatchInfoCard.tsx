@@ -1,7 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Card, CardContent, Typography, Alert } from '@mui/material';
 import PeopleIcon from '@mui/icons-material/People';
-import { getMapData } from '../../constants/maps';
+import {
+  getMapData,
+  getMapDisplayName,
+  getMapFullImageUrl,
+  getMapThumbnailUrl,
+} from '../../constants/maps';
 import { VetoInterface } from '../veto/VetoInterface';
 import type { Team, TeamMatchInfo, VetoState, MatchLiveStats, PlayersResponse } from '../../types';
 // Note: status color is handled by higher-level components; keep imports minimal here.
@@ -97,15 +102,11 @@ export function MatchInfoCard({
     if (!currentMapSlug) return null;
     const mapData = getMapData(currentMapSlug);
     if (mapData) return mapData;
-    // Fallback: construct map data from slug
-    const baseUrl =
-      'https://raw.githubusercontent.com/sivert-io/cs2-server-manager/master/map_thumbnails';
     return {
       name: currentMapSlug,
-      displayName: currentMapSlug.replace('de_', '').replace('cs_', ''),
-      // Use full-size webp for the large hero image, and thumbnail for smaller usages
-      image: `${baseUrl}/${currentMapSlug}.webp`,
-      thumbnail: `${baseUrl}/${currentMapSlug}_thumb.webp`,
+      displayName: getMapDisplayName(currentMapSlug),
+      image: getMapFullImageUrl(currentMapSlug),
+      thumbnail: getMapThumbnailUrl(currentMapSlug),
     };
   }, [currentMapSlug]);
   

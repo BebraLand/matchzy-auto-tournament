@@ -16,7 +16,12 @@ import {
 import { Link as RouterLink } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { VetoMapCard } from './VetoMapCard';
-import { getMapData } from '../../constants/maps';
+import {
+  getMapData,
+  getMapDisplayName,
+  getMapFullImageUrl,
+  getMapThumbnailUrl,
+} from '../../constants/maps';
 import { getVetoOrder } from '../../constants/vetoOrders';
 import type { VetoState, MapSide } from '../../types';
 import { FadeInImage } from '../common/FadeInImage';
@@ -67,13 +72,6 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
-
-  const MAP_IMAGE_BASE =
-    'https://raw.githubusercontent.com/sivert-io/cs2-server-manager/master/map_thumbnails';
-
-  const getThumbnailUrl = (mapId: string): string => `${MAP_IMAGE_BASE}/${mapId}_thumb.webp`;
-
-  const getFullImageUrl = (mapId: string): string => `${MAP_IMAGE_BASE}/${mapId}.webp`;
 
   const isRepoImageUrl = (url: string | null | undefined): boolean =>
     !!url && url.includes('cs2-server-manager') && url.includes('map_thumbnails');
@@ -162,7 +160,7 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
       if (mapData?.imageUrl && !isRepoImageUrl(mapData.imageUrl)) {
         thumbnail = mapData.imageUrl;
       } else {
-        thumbnail = fallbackData?.thumbnail || getThumbnailUrl(mapId);
+        thumbnail = fallbackData?.thumbnail || getMapThumbnailUrl(mapId);
       }
 
       return {
@@ -170,7 +168,7 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
         displayName:
           mapData?.displayName ||
           fallbackData?.displayName ||
-          mapId.replace('de_', '').replace('cs_', ''),
+          getMapDisplayName(mapId),
         // Use thumbnail for map grid cards
         image: thumbnail,
       };
@@ -295,8 +293,8 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
             const mapData = allMaps.get(pick.mapName);
             const fallbackData = getMapData(pick.mapName);
             const imageUrl = isRepoImageUrl(mapData?.imageUrl)
-              ? fallbackData?.image || getFullImageUrl(pick.mapName)
-              : mapData?.imageUrl || fallbackData?.image || getFullImageUrl(pick.mapName);
+              ? fallbackData?.image || getMapFullImageUrl(pick.mapName)
+              : mapData?.imageUrl || fallbackData?.image || getMapFullImageUrl(pick.mapName);
             // Show the side for the team viewing (team1 sees sideTeam1, team2 sees sideTeam2)
             const displaySide = isViewingTeam1
               ? pick.sideTeam1
@@ -307,7 +305,9 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={pick.mapNumber}>
                 <VetoMapCard
                   mapName={pick.mapName}
-                  displayName={mapData?.displayName || fallbackData?.displayName || pick.mapName}
+                  displayName={
+                    mapData?.displayName || fallbackData?.displayName || getMapDisplayName(pick.mapName)
+                  }
                   imageUrl={imageUrl}
                   state="picked"
                   mapNumber={pick.mapNumber}
@@ -564,12 +564,16 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
                   <FadeInImage
                     src={
                       isRepoImageUrl(mapData?.imageUrl)
-                        ? fallbackData?.image || getFullImageUrl(sidePickMapName)
+                        ? fallbackData?.image || getMapFullImageUrl(sidePickMapName)
                         : mapData?.imageUrl ||
                           fallbackData?.image ||
-                          getFullImageUrl(sidePickMapName)
+                          getMapFullImageUrl(sidePickMapName)
                     }
-                    alt={mapData?.displayName || fallbackData?.displayName || sidePickMapName}
+                    alt={
+                      mapData?.displayName ||
+                      fallbackData?.displayName ||
+                      getMapDisplayName(sidePickMapName)
+                    }
                     height={250}
                     sx={{
                       borderRadius: 2,

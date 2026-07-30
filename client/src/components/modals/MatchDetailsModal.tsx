@@ -42,7 +42,7 @@ import { getPlayerPageUrl } from '../../utils/playerLinks';
 import AdminMatchControls from '../admin/AdminMatchControls';
 import { PlayerRoster } from '../match/PlayerRoster';
 import { AddBackupPlayer } from '../admin/AddBackupPlayer';
-import { getMapData, getMapDisplayName } from '../../constants/maps';
+import { getMapDisplayName, getMapFullImageUrl } from '../../constants/maps';
 import { getPhaseDisplay } from '../../types/matchPhase.types';
 import type { Match, PlayersResponse } from '../../types';
 import { useTournamentStatus } from '../../hooks/useTournamentStatus';
@@ -1020,8 +1020,7 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
                     {activeMapKey && (
                       <FadeInImage
                         src={
-                          getMapData(activeMapKey)?.image ||
-                          `https://raw.githubusercontent.com/sivert-io/cs2-server-manager/master/map_thumbnails/${activeMapKey}.webp`
+                          getMapFullImageUrl(activeMapKey)
                         }
                         alt={currentMapLabel || activeMapKey}
                         sx={{

@@ -3,6 +3,7 @@
  */
 
 import type { CS2MapData } from '../types/veto.types';
+import { CURATED_MAPS } from '../../../api/src/shared/mapCatalog';
 
 // Map images - using sivert-io/cs2-server-manager
 // Full-size webp images are used for large hero/background displays.
@@ -10,55 +11,63 @@ import type { CS2MapData } from '../types/veto.types';
 const MAP_IMAGE_BASE =
   'https://raw.githubusercontent.com/sivert-io/cs2-server-manager/master/map_thumbnails';
 
-const getFullImageUrl = (mapName: string): string =>
+
+const getUpstreamFullImageUrl = (mapName: string): string =>
   `${MAP_IMAGE_BASE}/${mapName}.webp`;
 
-const getThumbnailUrl = (mapName: string): string =>
+const getUpstreamThumbnailUrl = (mapName: string): string =>
   `${MAP_IMAGE_BASE}/${mapName}_thumb.webp`;
 
 export const CS2_MAPS: CS2MapData[] = [
   {
     name: 'de_ancient',
     displayName: 'Ancient',
-    image: getFullImageUrl('de_ancient'),
-    thumbnail: getThumbnailUrl('de_ancient'),
+    image: getUpstreamFullImageUrl('de_ancient'),
+    thumbnail: getUpstreamThumbnailUrl('de_ancient'),
   },
   {
     name: 'de_anubis',
     displayName: 'Anubis',
-    image: getFullImageUrl('de_anubis'),
-    thumbnail: getThumbnailUrl('de_anubis'),
+    image: getUpstreamFullImageUrl('de_anubis'),
+    thumbnail: getUpstreamThumbnailUrl('de_anubis'),
   },
   {
     name: 'de_dust2',
     displayName: 'Dust II',
-    image: getFullImageUrl('de_dust2'),
-    thumbnail: getThumbnailUrl('de_dust2'),
+    image: getUpstreamFullImageUrl('de_dust2'),
+    thumbnail: getUpstreamThumbnailUrl('de_dust2'),
   },
   {
     name: 'de_inferno',
     displayName: 'Inferno',
-    image: getFullImageUrl('de_inferno'),
-    thumbnail: getThumbnailUrl('de_inferno'),
+    image: getUpstreamFullImageUrl('de_inferno'),
+    thumbnail: getUpstreamThumbnailUrl('de_inferno'),
   },
   {
     name: 'de_mirage',
     displayName: 'Mirage',
-    image: getFullImageUrl('de_mirage'),
-    thumbnail: getThumbnailUrl('de_mirage'),
+    image: getUpstreamFullImageUrl('de_mirage'),
+    thumbnail: getUpstreamThumbnailUrl('de_mirage'),
   },
   {
     name: 'de_nuke',
     displayName: 'Nuke',
-    image: getFullImageUrl('de_nuke'),
-    thumbnail: getThumbnailUrl('de_nuke'),
+    image: getUpstreamFullImageUrl('de_nuke'),
+    thumbnail: getUpstreamThumbnailUrl('de_nuke'),
   },
   {
     name: 'de_vertigo',
     displayName: 'Vertigo',
-    image: getFullImageUrl('de_vertigo'),
-    thumbnail: getThumbnailUrl('de_vertigo'),
+    image: getUpstreamFullImageUrl('de_vertigo'),
+    thumbnail: getUpstreamThumbnailUrl('de_vertigo'),
   },
+  ...CURATED_MAPS.map((map) => ({
+    name: map.id,
+    displayName: map.displayName,
+    image: map.imageUrl,
+    // Curated maps ship one full-size image; reuse it for compact cards.
+    thumbnail: map.imageUrl,
+  })),
 ];
 
 export const getMapData = (mapName: string): CS2MapData | undefined => {
@@ -67,6 +76,21 @@ export const getMapData = (mapName: string): CS2MapData | undefined => {
 
 export const getMapDisplayName = (mapName: string): string => {
   const mapData = getMapData(mapName);
-  return mapData?.displayName || mapName.replace('de_', '');
+  if (mapData) return mapData.displayName;
+
+  return mapName
+    .replace(/^(?:de|cs|ar|aim|fy|dz)_/, '')
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
+export const getMapFullImageUrl = (mapName: string): string =>
+  getMapData(mapName)?.image || getUpstreamFullImageUrl(mapName);
+
+export const getMapThumbnailUrl = (mapName: string): string => {
+  const mapData = getMapData(mapName);
+  return mapData?.thumbnail || mapData?.image || getUpstreamThumbnailUrl(mapName);
 };
 
