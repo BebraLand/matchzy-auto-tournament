@@ -130,6 +130,19 @@ test.describe.serial('Operator-controlled execution queue', () => {
     expect(serverAllocationTracker.getState(serverId)).toBeNull();
   });
 
+  test('does not release an allocation owned by another match', () => {
+    const serverId = `allocation-owner-server-${Date.now()}`;
+    serverAllocationTracker.markAllocated(serverId, 'new-successful-match');
+
+    expect(serverAllocationTracker.markIdleIfOwned(serverId, 'old-failed-match')).toBe(false);
+    expect(serverAllocationTracker.getState(serverId)).toMatchObject({
+      state: 'allocated',
+      matchSlug: 'new-successful-match',
+    });
+    expect(serverAllocationTracker.markIdleIfOwned(serverId, 'new-successful-match')).toBe(true);
+    expect(serverAllocationTracker.getState(serverId)?.state).toBe('idle');
+  });
+
   test('keeps bracket order while execution order changes to 1,3,4,2', async ({
     page,
     request,

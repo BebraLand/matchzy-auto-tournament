@@ -698,7 +698,7 @@ export class MatchAllocationService {
       // Roll back server_id if loading failed so this match can be retried later.
       try {
         await db.updateAsync('matches', { server_id: null }, 'slug = ?', [match.slug]);
-        serverAllocationTracker.markIdle(server.id);
+        serverAllocationTracker.markIdleIfOwned(server.id, match.slug);
       } catch (rollbackError) {
         log.error(
           `[ALLOCATION]${ctxLabel} Failed to roll back server_id for match ${match.slug} after load failure`,
@@ -727,7 +727,7 @@ export class MatchAllocationService {
       // but no loadedAt.
       try {
         await db.updateAsync('matches', { server_id: null }, 'slug = ?', [match.slug]);
-        serverAllocationTracker.markIdle(server.id);
+        serverAllocationTracker.markIdleIfOwned(server.id, match.slug);
       } catch (rollbackError) {
         log.error(
           `[ALLOCATION]${ctxLabel} Failed to roll back server_id for match ${match.slug} after allocation error`,
@@ -1167,7 +1167,7 @@ export class MatchAllocationService {
       } else {
         // Rollback server_id if loading failed
         await db.updateAsync('matches', { server_id: null }, 'slug = ?', [matchSlug]);
-        serverAllocationTracker.markIdle(server.id);
+        serverAllocationTracker.markIdleIfOwned(server.id, matchSlug);
         return {
           success: false,
           serverId: server.id,
@@ -1181,7 +1181,7 @@ export class MatchAllocationService {
       try {
         await db.updateAsync('matches', { server_id: null }, 'slug = ?', [matchSlug]);
         if (allocatedServerId) {
-          serverAllocationTracker.markIdle(allocatedServerId);
+          serverAllocationTracker.markIdleIfOwned(allocatedServerId, matchSlug);
         }
       } catch (rollbackError) {
         log.error(

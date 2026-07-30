@@ -52,6 +52,13 @@ class ServerAllocationTracker {
     log.debug(`[ALLOC-TRACKER] Server ${serverId} marked as idle`);
   }
 
+  markIdleIfOwned(serverId: string, matchSlug: string): boolean {
+    const current = this.states.get(serverId);
+    if (!current || current.matchSlug !== matchSlug) return false;
+    this.markIdle(serverId);
+    return true;
+  }
+
   getState(serverId: string): ServerAllocationEntry | null {
     return this.states.get(serverId) ?? null;
   }
