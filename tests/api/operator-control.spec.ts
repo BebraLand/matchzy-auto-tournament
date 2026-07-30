@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { io as createSocket } from 'socket.io-client';
+import { db } from '../../api/src/config/database';
 import { matchExecutionLockService } from '../../api/src/services/matchExecutionLockService';
+import { recordMapResult } from '../../api/src/services/matchMapResultService';
 
 type OperatorMatch = {
   id: number;
@@ -11,6 +14,8 @@ type OperatorMatch = {
   operatorState?: 'queued' | 'postponed' | 'held';
   queuePosition?: number | null;
   vetoOpenedAt?: number | null;
+  team1?: { id: string; name: string } | null;
+  team2?: { id: string; name: string } | null;
 };
 
 const MAPS = [
@@ -48,7 +53,10 @@ test.describe.serial('Operator-controlled execution queue', () => {
     expect(order).toEqual(['prepare:start', 'prepare:end', 'postpone:start', 'postpone:end']);
   });
 
-  test('keeps bracket order while execution order changes to 1,3,4,2', async ({ page, request }) => {
+  test('keeps bracket order while execution order changes to 1,3,4,2', async ({
+    page,
+    request,
+  }) => {
     const loginResponse = await request.post('/api/test/login-admin', {
       data: { steamId: '76561198000000001' },
     });
@@ -104,6 +112,40 @@ test.describe.serial('Operator-controlled execution queue', () => {
       teamIds.push(id);
     }
 
+    const broadcastPlayerId = `7656119${String(0).padStart(10, '0')}`;
+    const updateBroadcastPlayer = await request.put(`/api/players/${broadcastPlayerId}`, {
+      data: {
+        name: 'aurum',
+        firstName: 'Aurimas',
+        lastName: 'Operator',
+        countryCode: 'LT',
+      },
+    });
+    expect(updateBroadcastPlayer.ok(), await updateBroadcastPlayer.text()).toBeTruthy();
+
+    const tinyPng =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=';
+    const uploadPlayerPhoto = await request.post(`/api/players/${broadcastPlayerId}/photo`, {
+      data: { imageData: tinyPng },
+    });
+    expect(uploadPlayerPhoto.ok(), await uploadPlayerPhoto.text()).toBeTruthy();
+
+    const firstTeam = await request.get(`/api/teams/${teamIds[0]}`);
+    const firstTeamBody = await firstTeam.json();
+    const updateBroadcastTeam = await request.put(`/api/teams/${teamIds[0]}`, {
+      data: {
+        name: firstTeamBody.team.name,
+        tag: 'AUR',
+        countryCode: 'LT',
+        players: firstTeamBody.team.players,
+      },
+    });
+    expect(updateBroadcastTeam.ok(), await updateBroadcastTeam.text()).toBeTruthy();
+    const uploadTeamLogo = await request.post(`/api/teams/${teamIds[0]}/logo`, {
+      data: { imageData: tinyPng },
+    });
+    expect(uploadTeamLogo.ok(), await uploadTeamLogo.text()).toBeTruthy();
+
     const createResponse = await request.post('/api/tournament', {
       data: {
         name: `Operator Queue ${stamp}`,
@@ -131,8 +173,7 @@ test.describe.serial('Operator-controlled execution queue', () => {
 
     await expect
       .poll(
-        async () =>
-          (await readMatches()).filter((match) => match.queuePosition != null).length,
+        async () => (await readMatches()).filter((match) => match.queuePosition != null).length,
         { timeout: 10_000, intervals: [100, 250, 500] }
       )
       .toBe(4);
@@ -145,6 +186,10 @@ test.describe.serial('Operator-controlled execution queue', () => {
     expect(initial.every((match) => !match.serverId)).toBe(true);
 
     const [match1, match2, match3, match4] = initial;
+    const profileMatch = initial.find(
+      (match) => match.team1?.id === teamIds[0] || match.team2?.id === teamIds[0]
+    );
+    expect(profileMatch).toBeTruthy();
 
     const match1PlayerId = `7656119${String(0).padStart(10, '0')}`;
     const match2PlayerId = `7656119${String(20).padStart(10, '0')}`;
@@ -272,12 +317,140 @@ test.describe.serial('Operator-controlled execution queue', () => {
       ])
     );
 
+    const unauthenticatedProjection = await request.get('/api/integrations/jts-hud/v1/current');
+    expect(unauthenticatedProjection.status()).toBe(401);
+
+    const tokenResponse = await request.post('/api/integrations/jts-hud/token', { data: {} });
+    expect(tokenResponse.ok(), await tokenResponse.text()).toBeTruthy();
+    const hudToken = (await tokenResponse.json()).token as string;
+    expect(hudToken).toMatch(/^mat_hud_/);
+
+    const selectBroadcast = await request.put('/api/integrations/jts-hud/broadcast-match', {
+      data: { slug: match3.slug },
+    });
+    expect(selectBroadcast.ok(), await selectBroadcast.text()).toBeTruthy();
+
+    const projectionResponse = await request.get('/api/integrations/jts-hud/v1/current', {
+      headers: { Authorization: `Bearer ${hudToken}` },
+    });
+    expect(projectionResponse.ok(), await projectionResponse.text()).toBeTruthy();
+    const projection = await projectionResponse.json();
+    expect(projection.contract).toBe('bebraland-mat-hud');
+    expect(projection.version).toBe(1);
+    expect(projection.match.slug).toBe(match3.slug);
+    expect(projection.match.status).toBe('veto');
+    expect(projection.match.seriesScore).toEqual({ team1: 0, team2: 0 });
+    expect(projection.match.veto.status).toBe('in_progress');
+
+    await recordMapResult({
+      matchSlug: profileMatch!.slug,
+      mapNumber: 0,
+      mapName: 'de_ancient',
+      team1Score: 13,
+      team2Score: 8,
+      winnerTeam: 'team1',
+    });
+    await db.updateAsync('matches', { current_map: 'de_ancient', map_number: 0 }, 'slug = ?', [
+      profileMatch!.slug,
+    ]);
+    const profileProjectionResponse = await request.get(
+      `/api/integrations/jts-hud/v1/matches/${profileMatch!.slug}`,
+      { headers: { Authorization: `Bearer ${hudToken}` } }
+    );
+    expect(profileProjectionResponse.ok(), await profileProjectionResponse.text()).toBeTruthy();
+    const profileProjection = await profileProjectionResponse.json();
+    expect(profileProjection.match.currentMap).toBe('de_ancient');
+    expect(profileProjection.match.currentMapNumber).toBe(1);
+    expect(profileProjection.match.maps[0]).toEqual(
+      expect.objectContaining({
+        number: 1,
+        name: 'de_ancient',
+        score: { team1: 13, team2: 8 },
+        winnerTeamId: profileMatch!.team1!.id,
+      })
+    );
+    expect(profileProjection.match.seriesScore).toEqual({ team1: 1, team2: 0 });
+    expect([profileProjection.match.team1, profileProjection.match.team2]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: teamIds[0],
+          tag: 'AUR',
+          countryCode: 'LT',
+          logoUrl: expect.stringContaining(`/broadcast-assets/teams/${teamIds[0]}.png`),
+          players: expect.arrayContaining([
+            expect.objectContaining({
+              steamId: broadcastPlayerId,
+              nickname: 'aurum',
+              firstName: 'Aurimas',
+              lastName: 'Operator',
+              countryCode: 'LT',
+              photoUrl: expect.stringContaining(
+                `/broadcast-assets/players/${broadcastPlayerId}.png`
+              ),
+            }),
+          ]),
+        }),
+      ])
+    );
+
+    const holdSelectedBroadcast = await request.post(
+      `/api/matches/${match3.slug}/operator-action`,
+      { data: { action: 'hold' } }
+    );
+    expect(holdSelectedBroadcast.ok(), await holdSelectedBroadcast.text()).toBeTruthy();
+    const parkedBroadcastProjection = await request.get('/api/integrations/jts-hud/v1/current', {
+      headers: { Authorization: `Bearer ${hudToken}` },
+    });
+    expect(parkedBroadcastProjection.ok(), await parkedBroadcastProjection.text()).toBeTruthy();
+    expect((await parkedBroadcastProjection.json()).match).toBeNull();
+    const resumeSelectedBroadcast = await request.post(
+      `/api/matches/${match3.slug}/operator-action`,
+      { data: { action: 'resume' } }
+    );
+    expect(resumeSelectedBroadcast.ok(), await resumeSelectedBroadcast.text()).toBeTruthy();
+
+    const hudSocket = createSocket(
+      `${process.env.API_BASE_URL || 'http://127.0.0.1:13070'}/jts-hud`,
+      {
+        auth: { token: hudToken },
+        transports: ['websocket'],
+      }
+    );
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('HUD socket connection timed out')), 5000);
+      hudSocket.once('connect', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      hudSocket.once('connect_error', reject);
+    });
+    const disconnectedAfterRotation = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error('Old HUD socket was not disconnected')),
+        5000
+      );
+      hudSocket.once('disconnect', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+    const rotateTokenResponse = await request.post('/api/integrations/jts-hud/token', { data: {} });
+    expect(rotateTokenResponse.ok(), await rotateTokenResponse.text()).toBeTruthy();
+    await disconnectedAfterRotation;
+    hudSocket.close();
+
+    const oldTokenProjection = await request.get('/api/integrations/jts-hud/v1/current', {
+      headers: { Authorization: `Bearer ${hudToken}` },
+    });
+    expect(oldTokenProjection.status()).toBe(401);
+
     const browserLogin = await page.request.post('/api/test/login-admin', {
       data: { steamId: '76561198000000001' },
     });
     expect(browserLogin.ok(), await browserLogin.text()).toBeTruthy();
     await page.goto(`${process.env.FRONTEND_BASE_URL || 'http://127.0.0.1:13071'}/matches`);
     await expect(page.getByTestId('operator-control-room')).toBeVisible();
+    await expect(page.getByTestId('hud-integration-panel')).toBeVisible();
     await expect(page.getByTestId('control-mode-select')).toContainText('Assisted');
     await expect(page.getByTestId(`operator-match-${match3.slug}`)).toContainText('Operator Team');
 

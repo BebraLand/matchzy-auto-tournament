@@ -9,11 +9,26 @@ import path from 'path';
  * deployments.
  */
 export function getMapImagesDirectory(): string {
-  return path.resolve(
-    process.env.MAP_IMAGES_DIR || path.join(process.cwd(), 'data', 'map-images')
-  );
+  return path.resolve(process.env.MAP_IMAGES_DIR || path.join(process.cwd(), 'data', 'map-images'));
 }
 
 export function ensureMapImagesDirectory(): void {
   fs.mkdirSync(getMapImagesDirectory(), { recursive: true });
+}
+
+export type BroadcastAssetKind = 'players' | 'teams';
+
+export function getBroadcastAssetsDirectory(): string {
+  return path.resolve(
+    process.env.BROADCAST_ASSETS_DIR || path.join(process.cwd(), 'data', 'broadcast-assets')
+  );
+}
+
+export function getBroadcastAssetDirectory(kind: BroadcastAssetKind): string {
+  return path.join(getBroadcastAssetsDirectory(), kind);
+}
+
+export function ensureBroadcastAssetsDirectory(): void {
+  fs.mkdirSync(getBroadcastAssetDirectory('players'), { recursive: true });
+  fs.mkdirSync(getBroadcastAssetDirectory('teams'), { recursive: true });
 }

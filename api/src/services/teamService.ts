@@ -5,6 +5,15 @@ import { steamService } from './steamService';
 import { playerService } from './playerService';
 
 class TeamService {
+  private normalizeCountryCode(value: string | undefined): string | undefined {
+    const normalized = value?.trim().toUpperCase();
+    if (!normalized) return undefined;
+    if (!/^[A-Z]{2}$/.test(normalized)) {
+      throw new Error('Country code must be a two-letter ISO 3166-1 code');
+    }
+    return normalized;
+  }
+
   /**
    * Convert database team to response format
    */
@@ -13,6 +22,8 @@ class TeamService {
       id: team.id,
       name: team.name,
       tag: team.tag,
+      countryCode: team.country_code,
+      logoUrl: team.logo_url,
       discordRoleId: team.discord_role_id,
       players: JSON.parse(team.players) as Player[],
       createdAt: team.created_at,
@@ -143,7 +154,12 @@ class TeamService {
     // Auto-create players in players table (for shuffle tournaments)
     for (const player of enrichedPlayers) {
       try {
-        await playerService.getOrCreatePlayer(player.steamId, player.name, player.avatar, player.elo);
+        await playerService.getOrCreatePlayer(
+          player.steamId,
+          player.name,
+          player.avatar,
+          player.elo
+        );
       } catch (error) {
         // Log but don't fail team creation if player creation fails
         log.warn(`Failed to create player ${player.steamId} in players table`, { error });
@@ -157,6 +173,8 @@ class TeamService {
         return await this.updateTeam(input.id, {
           name: input.name,
           tag: input.tag,
+          countryCode: input.countryCode,
+          logoUrl: input.logoUrl,
           discordRoleId: input.discordRoleId,
           players: enrichedPlayers,
         });
@@ -169,6 +187,8 @@ class TeamService {
       id: input.id,
       name: input.name,
       tag: input.tag || null,
+      country_code: this.normalizeCountryCode(input.countryCode) || null,
+      logo_url: input.logoUrl?.trim() || null,
       discord_role_id: input.discordRoleId || null,
       players: JSON.stringify(enrichedPlayers),
     });
@@ -202,6 +222,10 @@ class TeamService {
 
     if (input.name !== undefined) updateData.name = input.name;
     if (input.tag !== undefined) updateData.tag = input.tag || null;
+    if (input.countryCode !== undefined) {
+      updateData.country_code = this.normalizeCountryCode(input.countryCode) || null;
+    }
+    if (input.logoUrl !== undefined) updateData.logo_url = input.logoUrl.trim() || null;
     if (input.discordRoleId !== undefined) updateData.discord_role_id = input.discordRoleId || null;
     if (input.players !== undefined) {
       // Enrich players with avatars from Steam API. For test/dev teams created
@@ -210,7 +234,7 @@ class TeamService {
       const enrichedPlayers = await this.enrichPlayersWithAvatars(input.players, {
         skipSteamAvatar: id.startsWith('test-team-'),
       });
-      
+
       // Auto-create players in players table (for shuffle tournaments)
       for (const player of enrichedPlayers) {
         try {
@@ -220,7 +244,7 @@ class TeamService {
           log.warn(`Failed to create player ${player.steamId} in players table`, { error });
         }
       }
-      
+
       updateData.players = JSON.stringify(enrichedPlayers);
     }
 

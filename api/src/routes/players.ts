@@ -26,6 +26,7 @@ import type { TournamentResponse } from '../types/tournament.types';
 import type { MatchConfig } from '../types/match.types';
 import { generateAvatarSvg } from '../generation/avatar';
 import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
+import { saveBroadcastAsset } from '../services/broadcastAssetService';
 
 const router = Router();
 
@@ -628,10 +629,9 @@ router.get('/:playerId/current-match', async (req: Request, res: Response) => {
     // stale snapshot from bracket generation.
     let config: MatchConfig | Record<string, unknown>;
     if (typeof match.round === 'number' && match.round >= 1 && match.tournament_id) {
-      const t = await db.queryOneAsync<DbTournamentRow>(
-        'SELECT * FROM tournament WHERE id = ?',
-        [match.tournament_id]
-      );
+      const t = await db.queryOneAsync<DbTournamentRow>('SELECT * FROM tournament WHERE id = ?', [
+        match.tournament_id,
+      ]);
 
       if (t) {
         const tournament: TournamentResponse = {
@@ -652,9 +652,7 @@ router.get('/:playerId/current-match', async (req: Request, res: Response) => {
           teamSize:
             t.team_size === null || typeof t.team_size === 'undefined' ? undefined : t.team_size,
           maxRounds:
-            t.max_rounds === null || typeof t.max_rounds === 'undefined'
-              ? undefined
-              : t.max_rounds,
+            t.max_rounds === null || typeof t.max_rounds === 'undefined' ? undefined : t.max_rounds,
           overtimeMode: (t.overtime_mode as 'enabled' | 'disabled' | null) || undefined,
           overtimeSegments:
             t.overtime_segments === null || typeof t.overtime_segments === 'undefined'
@@ -684,12 +682,8 @@ router.get('/:playerId/current-match', async (req: Request, res: Response) => {
 
     const cfg = config as Partial<MatchConfig>;
 
-    const normalizedTeam1Players = cfg.team1
-      ? normalizeConfigPlayers(cfg.team1.players)
-      : [];
-    const normalizedTeam2Players = cfg.team2
-      ? normalizeConfigPlayers(cfg.team2.players)
-      : [];
+    const normalizedTeam1Players = cfg.team1 ? normalizeConfigPlayers(cfg.team1.players) : [];
+    const normalizedTeam2Players = cfg.team2 ? normalizeConfigPlayers(cfg.team2.players) : [];
 
     const isPlayerInTeam1 = normalizedTeam1Players.some((p) => p.steamid === playerId);
     const isPlayerInTeam2 = normalizedTeam2Players.some((p) => p.steamid === playerId);
@@ -818,21 +812,15 @@ router.get('/:playerId/current-match', async (req: Request, res: Response) => {
 
           vetoSummary = {
             status,
-            team1Name:
-              vetoState.team1Name ||
-              match.team1_name ||
-              cfg.team1?.name ||
-              'Team 1',
-            team2Name:
-              vetoState.team2Name ||
-              match.team2_name ||
-              cfg.team2?.name ||
-              'Team 2',
+            team1Name: vetoState.team1Name || match.team1_name || cfg.team1?.name || 'Team 1',
+            team2Name: vetoState.team2Name || match.team2_name || cfg.team2?.name || 'Team 2',
             pickedMaps: sanitizedPickedMaps,
             actions: Array.isArray(vetoState.actions)
               ? vetoState.actions
                   .filter(
-                    (a): a is {
+                    (
+                      a
+                    ): a is {
                       step: number;
                       team: 'team1' | 'team2';
                       action: string;
@@ -915,10 +903,7 @@ router.get('/:playerId/current-match', async (req: Request, res: Response) => {
     }));
 
     // Normalize and enrich config players with avatars from team data or players table
-    const enrichPlayers = async (
-      normalizedPlayers: NormalizedServerPlayer[],
-      teamId?: string
-    ) => {
+    const enrichPlayers = async (normalizedPlayers: NormalizedServerPlayer[], teamId?: string) => {
       if (teamId) {
         try {
           const teamData = await teamService.getTeamById(teamId);
@@ -995,15 +980,15 @@ router.get('/:playerId/current-match', async (req: Request, res: Response) => {
             ? { id: playerTeam.id, name: playerTeam.name, tag: playerTeam.tag }
             : null
           : opponent.id
-          ? { id: opponent.id, name: opponent.name, tag: opponent.tag }
-          : null,
+            ? { id: opponent.id, name: opponent.name, tag: opponent.tag }
+            : null,
         team2: !isTeam1
           ? playerTeam.id
             ? { id: playerTeam.id, name: playerTeam.name, tag: playerTeam.tag }
             : null
           : opponent.id
-          ? { id: opponent.id, name: opponent.name, tag: opponent.tag }
-          : null,
+            ? { id: opponent.id, name: opponent.name, tag: opponent.tag }
+            : null,
         opponent: opponent.id
           ? {
               id: opponent.id,
@@ -1415,6 +1400,70 @@ router.get('/:playerId/matches', async (req: Request, res: Response) => {
 
 // All player management routes require authentication (admin only)
 router.use(requireAuth);
+
+/**
+ * POST /api/players/:playerId/photo
+ * Persist a broadcast portrait and attach it to the player profile.
+ */
+router.post('/:playerId/photo', async (req: Request, res: Response) => {
+  try {
+    const { playerId } = req.params;
+    const { imageData } = req.body as { imageData?: string };
+    if (!imageData) {
+      return res.status(400).json({ success: false, error: 'imageData is required' });
+    }
+    if (!(await playerService.getPlayerById(playerId))) {
+      return res.status(404).json({ success: false, error: `Player '${playerId}' not found` });
+    }
+
+    const photoUrl = saveBroadcastAsset({ kind: 'players', entityId: playerId, imageData });
+    const player = await playerService.updatePlayer(playerId, { photoUrl });
+    return res.json({ success: true, photoUrl, player });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(400).json({ success: false, error: message });
+  }
+});
+
+/**
+ * PUT /api/players/:playerId/team
+ * Assign a player to exactly one team roster, or remove them from all teams.
+ */
+router.put('/:playerId/team', async (req: Request, res: Response) => {
+  try {
+    const { playerId } = req.params;
+    const requestedTeamId = (req.body as { teamId?: string | null }).teamId?.trim() || null;
+    const player = await playerService.getPlayerById(playerId);
+    if (!player) {
+      return res.status(404).json({ success: false, error: `Player '${playerId}' not found` });
+    }
+
+    const teams = await teamService.getAllTeams();
+    if (requestedTeamId && !teams.some((team) => team.id === requestedTeamId)) {
+      return res.status(404).json({ success: false, error: `Team '${requestedTeamId}' not found` });
+    }
+
+    for (const team of teams) {
+      const withoutPlayer = team.players.filter((entry) => entry.steamId !== playerId);
+      if (team.id === requestedTeamId) {
+        withoutPlayer.push({
+          steamId: player.id,
+          name: player.name,
+          avatar: player.avatar,
+          elo: player.currentElo,
+        });
+      }
+      if (withoutPlayer.length !== team.players.length || team.id === requestedTeamId) {
+        await teamService.updateTeam(team.id, { players: withoutPlayer });
+      }
+    }
+
+    return res.json({ success: true, playerId, teamId: requestedTeamId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(400).json({ success: false, error: message });
+  }
+});
 
 /**
  * GET /api/players

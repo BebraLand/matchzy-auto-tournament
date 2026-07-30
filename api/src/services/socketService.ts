@@ -9,8 +9,10 @@ import type {
   ServerEvent,
   VetoUpdateEvent,
 } from '../types/socket.types';
+import { hudTokenService } from './hudTokenService';
 
 let io: SocketIOServer | null = null;
+let hudNamespace: ReturnType<SocketIOServer['of']> | null = null;
 
 export function initializeSocket(httpServer: HTTPServer): SocketIOServer {
   io = new SocketIOServer(httpServer, {
@@ -26,6 +28,22 @@ export function initializeSocket(httpServer: HTTPServer): SocketIOServer {
     socket.on('disconnect', () => {
       log.debug(`Socket client disconnected: ${socket.id}`);
     });
+  });
+
+  hudNamespace = io.of('/jts-hud');
+  hudNamespace.use(async (socket, next) => {
+    const authToken =
+      typeof socket.handshake.auth?.token === 'string' ? socket.handshake.auth.token : null;
+    const authorization = socket.handshake.headers.authorization;
+    const bearerToken = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+    if (await hudTokenService.verifyToken(authToken || bearerToken)) {
+      next();
+      return;
+    }
+    next(new Error('Invalid MAT HUD token'));
+  });
+  hudNamespace.on('connection', (socket) => {
+    log.debug(`Authenticated JTs-Hud client connected: ${socket.id}`);
   });
 
   log.success('Socket.io initialized');
@@ -72,6 +90,7 @@ export function emitMatchUpdate(match: MatchUpdateEvent): void {
     }
 
     log.debug('Emitted match update', { matchId: match.id, slug });
+    emitHudProjectionInvalidated('match-updated');
   }
 }
 
@@ -115,5 +134,19 @@ export function emitVetoUpdate(matchSlug: string, vetoState: VetoUpdateEvent['ve
     io.emit('veto:update', { matchSlug, veto: vetoState });
     io.emit(`veto:update:${matchSlug}`, vetoState);
     log.debug('Emitted veto update', { matchSlug });
+    emitHudProjectionInvalidated('veto-updated');
   }
+}
+
+export function emitHudProjectionInvalidated(reason: string): void {
+  if (hudNamespace) {
+    hudNamespace.emit('hud:projection-invalidated', {
+      reason,
+      at: new Date().toISOString(),
+    });
+  }
+}
+
+export function disconnectHudIntegrationClients(): void {
+  hudNamespace?.disconnectSockets(true);
 }

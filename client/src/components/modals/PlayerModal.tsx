@@ -11,6 +11,10 @@ import {
   IconButton,
   Typography,
   FormControlLabel,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
   Switch,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -20,6 +24,7 @@ import { useSnackbar } from '../../contexts/SnackbarContext';
 import ConfirmDialog from './ConfirmDialog';
 import { PlayerAvatar } from '../player/PlayerAvatar';
 import type { PlayerDetail } from '../../types/api.types';
+import type { Team, TeamsResponse } from '../../types';
 import { useTranslation } from 'react-i18next';
 
 interface PlayerModalProps {
@@ -36,6 +41,13 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
   const [steamId, setSteamId] = useState('');
   const [name, setName] = useState('');
   const [avatar, setAvatar] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [countryCode, setCountryCode] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [pendingPhotoData, setPendingPhotoData] = useState<string | null>(null);
+  const [teamId, setTeamId] = useState('');
+  const [teams, setTeams] = useState<Team[]>([]);
   const [elo, setElo] = useState<number | ''>('');
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -54,6 +66,11 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
       setSteamId(player.id);
       setName(player.name);
       setAvatar(player.avatar || '');
+      setFirstName(player.firstName || '');
+      setLastName(player.lastName || '');
+      setCountryCode(player.countryCode || '');
+      setPhotoUrl(player.photoUrl || '');
+      setPendingPhotoData(null);
       setElo(player.currentElo);
       setPendingElo('');
       setIsAdmin(Boolean(player.isAdmin));
@@ -62,13 +79,48 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
     }
   }, [player, open]);
 
+  useEffect(() => {
+    if (!open) return;
+    void api
+      .get<TeamsResponse>('/api/teams')
+      .then((response) => {
+        const availableTeams = response.teams || [];
+        setTeams(availableTeams);
+        setTeamId(
+          player
+            ? availableTeams.find((team) =>
+                team.players?.some((entry) => entry.steamId === player.id)
+              )?.id || ''
+            : ''
+        );
+      })
+      .catch(() => setTeams([]));
+  }, [open, player]);
+
   const resetForm = () => {
     setSteamId('');
     setName('');
     setAvatar('');
+    setFirstName('');
+    setLastName('');
+    setCountryCode('');
+    setPhotoUrl('');
+    setPendingPhotoData(null);
+    setTeamId('');
     setElo('');
     setIsAdmin(false);
     setError('');
+  };
+
+  const handlePhotoFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      showWarning('Player photo must be PNG, JPEG, or WebP');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setPendingPhotoData(String(reader.result));
+    reader.readAsDataURL(file);
   };
 
   const handleResolveSteam = async () => {
@@ -150,6 +202,10 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
         id: steamId.trim(),
         name: name.trim(),
         avatar: avatar.trim() || undefined,
+        firstName: firstName.trim() || undefined,
+        lastName: lastName.trim() || undefined,
+        countryCode: countryCode.trim().toUpperCase() || undefined,
+        photoUrl: photoUrl.trim() || undefined,
         elo: elo !== '' ? Number(elo) : undefined,
         isAdmin,
       };
@@ -161,6 +217,11 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
         await api.post('/api/players', payload);
         showSuccess(t('playerModal.success.playerCreated'));
       }
+
+      if (pendingPhotoData) {
+        await api.post(`/api/players/${steamId.trim()}/photo`, { imageData: pendingPhotoData });
+      }
+      await api.put(`/api/players/${steamId.trim()}/team`, { teamId: teamId || null });
 
       onSave();
       onClose();
@@ -238,9 +299,7 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
               }}
               helperText={
                 error ||
-                (isEditing
-                  ? t('playerModal.steamHelperEditing')
-                  : t('playerModal.steamHelperNew'))
+                (isEditing ? t('playerModal.steamHelperEditing') : t('playerModal.steamHelperNew'))
               }
             />
 
@@ -278,6 +337,70 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
               }}
             />
 
+            <Box display="grid" gridTemplateColumns={{ xs: '1fr', sm: '1fr 1fr' }} gap={2}>
+              <TextField
+                label="First name"
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
+              />
+              <TextField
+                label="Last name"
+                value={lastName}
+                onChange={(event) => setLastName(event.target.value)}
+              />
+            </Box>
+
+            <Box display="grid" gridTemplateColumns={{ xs: '1fr', sm: '140px 1fr' }} gap={2}>
+              <TextField
+                label="Country"
+                value={countryCode}
+                onChange={(event) => setCountryCode(event.target.value.toUpperCase().slice(0, 2))}
+                helperText="ISO code, e.g. LT"
+              />
+              <FormControl fullWidth>
+                <InputLabel id="player-team-label">Team</InputLabel>
+                <Select
+                  labelId="player-team-label"
+                  value={teamId}
+                  label="Team"
+                  onChange={(event) => setTeamId(event.target.value)}
+                >
+                  <MenuItem value="">No team</MenuItem>
+                  {teams.map((team) => (
+                    <MenuItem key={team.id} value={team.id}>
+                      {team.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+
+            <TextField
+              label="Player photo URL"
+              value={photoUrl}
+              onChange={(event) => setPhotoUrl(event.target.value)}
+              helperText="Optional broadcast portrait. An uploaded image takes priority."
+            />
+            <Box display="flex" alignItems="center" gap={2}>
+              {(pendingPhotoData || photoUrl) && (
+                <Box
+                  component="img"
+                  src={pendingPhotoData || photoUrl}
+                  alt="Player portrait preview"
+                  sx={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 1 }}
+                />
+              )}
+              <Button variant="outlined" component="label">
+                Upload player photo
+                <input
+                  hidden
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(event) => handlePhotoFile(event.target.files?.[0])}
+                />
+              </Button>
+            </Box>
+
             <TextField
               label={isEditing ? t('playerModal.eloLabelEdit') : t('playerModal.eloLabelNew')}
               type="number"
@@ -288,9 +411,7 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
                 htmlInput: { 'data-testid': 'player-elo-input' },
               }}
               helperText={
-                isEditing
-                  ? t('playerModal.eloHelperEdit')
-                  : t('playerModal.eloHelperNew')
+                isEditing ? t('playerModal.eloHelperEdit') : t('playerModal.eloHelperNew')
               }
             />
 
@@ -356,8 +477,8 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
             {saving
               ? t('playerModal.buttons.saving')
               : isEditing
-              ? t('playerModal.buttons.save')
-              : t('playerModal.buttons.create')}
+                ? t('playerModal.buttons.save')
+                : t('playerModal.buttons.create')}
           </Button>
         </DialogActions>
       </Dialog>

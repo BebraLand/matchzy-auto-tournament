@@ -15,6 +15,8 @@ export interface Team {
   id: string;
   name: string;
   tag?: string;
+  countryCode?: string;
+  logoUrl?: string;
   discordRoleId?: string;
   players?: Player[];
   createdAt?: number;
@@ -181,4 +183,3 @@ export interface TeamMatchHistory {
   opponentScore: number;
   completedAt: number;
 }
-

@@ -1,5 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Typography, Grid, LinearProgress, Snackbar, Alert, Stack, Button, Chip } from '@mui/material';
+import {
+  Box,
+  Typography,
+  Grid,
+  LinearProgress,
+  Snackbar,
+  Alert,
+  Stack,
+  Button,
+  Chip,
+} from '@mui/material';
 import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
 import AddIcon from '@mui/icons-material/Add';
 import { io } from 'socket.io-client';
@@ -22,6 +32,7 @@ import {
   type OperatorAction,
   type TournamentControlMode,
 } from '../components/matches/OperatorControlRoom';
+import { HudIntegrationPanel } from '../components/matches/HudIntegrationPanel';
 
 export default function Matches() {
   const navigate = useNavigate();
@@ -42,14 +53,15 @@ export default function Matches() {
     nextAllocationInSeconds: null,
     gracePeriodSeconds: 120,
   });
-  const [serverAllocationStatus, setServerAllocationStatus] = useState<ServerAvailabilityResponse | null>(null);
+  const [serverAllocationStatus, setServerAllocationStatus] =
+    useState<ServerAvailabilityResponse | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMatchSlugs, setSelectedMatchSlugs] = useState<Set<string>>(() => new Set());
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [controlMode, setControlMode] = useState<TournamentControlMode>('automatic');
   const [operatorBusyKey, setOperatorBusyKey] = useState<string | null>(null);
   const { t } = useTranslation();
-  
+
   // Local countdown state for match allocation ETAs (match.id -> seconds remaining)
   const [matchETAs, setMatchETAs] = useState<Map<number, number>>(new Map());
 
@@ -70,10 +82,7 @@ export default function Matches() {
             const cfgTeam1Name = (m.config?.team1 as { name?: string } | undefined)?.name;
             const cfgTeam2Name = (m.config?.team2 as { name?: string } | undefined)?.name;
             return Boolean(
-              cfgTeam1Name &&
-                cfgTeam1Name !== 'TBD' &&
-                cfgTeam2Name &&
-                cfgTeam2Name !== 'TBD'
+              cfgTeam1Name && cfgTeam1Name !== 'TBD' && cfgTeam2Name && cfgTeam2Name !== 'TBD'
             );
           }
 
@@ -150,7 +159,12 @@ export default function Matches() {
         }
 
         const match = data as Match & {
-          liveStats?: { team1Score?: number; team2Score?: number; team1SeriesScore?: number; team2SeriesScore?: number };
+          liveStats?: {
+            team1Score?: number;
+            team2Score?: number;
+            team1SeriesScore?: number;
+            team2SeriesScore?: number;
+          };
         };
 
         const matchIdOrSlugEquals = (m: Match) =>
@@ -194,7 +208,7 @@ export default function Matches() {
           Boolean(
             // Bracket / enriched matches with DB-backed team rows
             ((m as Match).team1 || (m as Match).config?.team1) &&
-              ((m as Match).team2 || (m as Match).config?.team2)
+            ((m as Match).team2 || (m as Match).config?.team2)
           );
 
         const upsertMatch = (list: Match[], updatedMatch: typeof match) => {
@@ -213,8 +227,7 @@ export default function Matches() {
           return [...list, applyLiveScoreOverlay(updatedMatch as Match, updatedMatch)];
         };
 
-        const removeMatch = (list: Match[]) =>
-          list.filter((m) => !matchIdOrSlugEquals(m));
+        const removeMatch = (list: Match[]) => list.filter((m) => !matchIdOrSlugEquals(m));
 
         if (match.status === 'pending' || match.status === 'ready') {
           setUpcomingMatches((prev) => upsertMatch(prev, match));
@@ -261,7 +274,9 @@ export default function Matches() {
   useEffect(() => {
     const loadAllocationStatus = async () => {
       try {
-        const availability = await api.get<ServerAvailabilityResponse>('/api/tournament/server-availability');
+        const availability = await api.get<ServerAvailabilityResponse>(
+          '/api/tournament/server-availability'
+        );
 
         if (availability.success) {
           setServerAllocationStatus(availability);
@@ -337,7 +352,7 @@ export default function Matches() {
 
     const { servers } = serverAllocationStatus;
     const availableServers = servers.filter((s) => s.allocatable).length;
-    
+
     // If we have enough available servers, no wait time
     if (matchIndex < availableServers) {
       return 0;
@@ -356,7 +371,7 @@ export default function Matches() {
 
     // Check if there are busy servers (with active matches, not cooling)
     const busyServers = servers.filter((s) => s.online && !s.allocatable && !s.inGraceWindow);
-    
+
     // If servers are busy with live matches, return -1 to indicate "waiting"
     // Only show countdown when servers are actually cooling down
     if (busyServers.length > 0 && coolingServers.length === 0) {
@@ -392,14 +407,14 @@ export default function Matches() {
       setMatchETAs((prev) => {
         const next = new Map(prev);
         let hasChanges = false;
-        
+
         next.forEach((value, key) => {
           if (value > 0) {
             next.set(key, value - 1);
             hasChanges = true;
           }
         });
-        
+
         return hasChanges ? next : prev;
       });
     }, 1000);
@@ -561,6 +576,9 @@ export default function Matches() {
   return (
     <Box data-testid="matches-page" sx={{ width: '100%', height: '100%' }}>
       {renderAllocationBanner()}
+      {hasMatches && tournamentStatus !== 'setup' && (
+        <HudIntegrationPanel matches={[...upcomingMatches, ...liveMatches, ...matchHistory]} />
+      )}
       {hasMatches && tournamentStatus !== 'setup' && (
         <OperatorControlRoom
           matches={[...upcomingMatches, ...liveMatches]}
@@ -775,7 +793,7 @@ export default function Matches() {
                   {t('matchesPage.sections.upcoming', { count: upcomingMatches.length })}
                 </Typography>
                 {serverAllocationStatus && serverAllocationStatus.requiredServerCount > 0 && (
-                  <Chip 
+                  <Chip
                     label={`${serverAllocationStatus.requiredServerCount} in queue`}
                     color="primary"
                     size="small"
@@ -792,18 +810,18 @@ export default function Matches() {
                   const tournamentStartedForCard = isManualMatch
                     ? undefined
                     : tournamentStatus === 'in_progress';
-                  
+
                   // Use queue position from backend (calculated globally across all matches)
                   const queuePosition = match.queuePosition;
-                  
+
                   // Get allocation ETA from local countdown state
                   const allocationETA = !match.serverId ? (matchETAs.get(match.id) ?? null) : null;
-                  
+
                   // Check if there are servers available right now
                   const hasAvailableServers = serverAllocationStatus
                     ? serverAllocationStatus.availableServerCount > 0
                     : false;
-                  
+
                   return (
                     <Grid size={{ xs: 12, sm: 6, md: 6, lg: 6 }} key={match.id}>
                       <MatchCard

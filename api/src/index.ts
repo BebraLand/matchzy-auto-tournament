@@ -10,7 +10,12 @@ import cors from 'cors';
 import { createServer } from 'http';
 import swaggerUi from 'swagger-ui-express';
 import { db } from './config/database';
-import { ensureMapImagesDirectory, getMapImagesDirectory } from './config/storage';
+import {
+  ensureBroadcastAssetsDirectory,
+  ensureMapImagesDirectory,
+  getBroadcastAssetsDirectory,
+  getMapImagesDirectory,
+} from './config/storage';
 import { swaggerSpec } from './config/swagger';
 import { log, logger, LOG_HTTP_REQUESTS, LOG_DB_VERBOSE, LOG_DB_VALUES } from './utils/logger';
 import { cleanupOldLogs } from './utils/eventLogger';
@@ -45,6 +50,7 @@ import eloTemplatesRoutes from './routes/eloTemplates';
 import testRoutes from './routes/test';
 import authRoutes from './routes/auth';
 import matchzyRoutes from './routes/matchzy';
+import hudIntegrationRoutes from './routes/hudIntegration';
 import { initMatchZyVersionService } from './services/matchzyVersionService';
 import { recoverActiveMatches } from './services/matchRecoveryService';
 import { matchAllocationService } from './services/matchAllocationService';
@@ -99,7 +105,9 @@ const useSecureCookies =
 let sessionCookieDomain: string | undefined;
 try {
   if (frontendBaseUrl) {
-    const u = new URL(frontendBaseUrl.startsWith('http') ? frontendBaseUrl : `https://${frontendBaseUrl}`);
+    const u = new URL(
+      frontendBaseUrl.startsWith('http') ? frontendBaseUrl : `https://${frontendBaseUrl}`
+    );
     const host = u.hostname.toLowerCase();
     // Only set an explicit cookie domain for real DNS names.
     // Setting Domain= on an IP can cause cookies to be dropped or behave unexpectedly.
@@ -111,7 +119,12 @@ try {
   // Invalid URL, skip domain
 }
 
-const sessionCookie: { sameSite: 'lax' | 'strict' | 'none'; secure: boolean; httpOnly: boolean; domain?: string } = {
+const sessionCookie: {
+  sameSite: 'lax' | 'strict' | 'none';
+  secure: boolean;
+  httpOnly: boolean;
+  domain?: string;
+} = {
   sameSite: 'lax',
   secure: useSecureCookies,
   httpOnly: true, // Prevent JavaScript access to cookie (security best practice)
@@ -186,8 +199,7 @@ app.use(
   swaggerUi.setup(swaggerSpec, {
     customCss: '.swagger-ui .topbar { display: none }',
     customSiteTitle: 'MatchZy API Docs',
-  }) as // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  any
+  }) as any // eslint-disable-next-line @typescript-eslint/no-explicit-any
 );
 
 // Swagger JSON
@@ -330,7 +342,9 @@ app.get('/api/health/fleet', async (_req: Request, res: Response) => {
 
   const enabled = servers.filter((s) => s.enabled === 1 && s.host !== '0.0.0.0');
   const outdated = enabled.filter((s) => typeof s.cs2_required_version === 'number');
-  const stale = enabled.filter((s) => !s.cs2_update_checked_at || now - s.cs2_update_checked_at >= 30 * 60);
+  const stale = enabled.filter(
+    (s) => !s.cs2_update_checked_at || now - s.cs2_update_checked_at >= 30 * 60
+  );
   const neverChecked = enabled.filter((s) => !s.cs2_update_checked_at);
 
   res.json({
@@ -384,6 +398,7 @@ app.use('/api/generation', generationRoutes); // Shared name/code generators (e.
 app.use('/api/test', testRoutes); // Test utilities (log markers, etc.)
 app.use('/api/auth', authRoutes); // Authentication (Steam, Keycloak, Discord)
 app.use('/api/matchzy', matchzyRoutes); // MatchZy Enhanced version info
+app.use('/api/integrations/jts-hud', hudIntegrationRoutes); // Read-only broadcast projection
 
 // Serve frontend at /app (built client lives under api/public)
 const publicPath = path.join(__dirname, '..', 'public');
@@ -392,6 +407,8 @@ app.use('/app', express.static(publicPath));
 // Serve map images statically
 ensureMapImagesDirectory();
 app.use('/map-images', express.static(getMapImagesDirectory()));
+ensureBroadcastAssetsDirectory();
+app.use('/broadcast-assets', express.static(getBroadcastAssetsDirectory()));
 app.get('/app/*', (_req: Request, res: Response) => {
   res.sendFile(path.join(publicPath, 'index.html'));
 });
@@ -475,10 +492,10 @@ cleanupOldLogs(30);
         }),
       ]).then(() => {
         log.success('[Startup] All startup tasks completed');
-        
+
         // Fetch latest MatchZy Enhanced version (fire-and-forget, cached for 1 hour)
         initMatchZyVersionService();
-        
+
         // Start health monitoring for server tracking
         // Checks every minute to mark inactive servers as offline
         healthMonitoringService.start();
@@ -571,7 +588,11 @@ async function bootstrapServerWebhooks(): Promise<void> {
 
   if (!baseUrl) {
     const fallback = fromApi || fromFrontend || localhostDefault;
-    const source = fromApi ? 'API_BASE_URL' : fromFrontend ? 'FRONTEND_BASE_URL' : 'auto-detect (PORT)';
+    const source = fromApi
+      ? 'API_BASE_URL'
+      : fromFrontend
+        ? 'FRONTEND_BASE_URL'
+        : 'auto-detect (PORT)';
     try {
       await settingsService.setSetting('webhook_url', fallback);
       baseUrl = await settingsService.getWebhookUrl();
@@ -627,11 +648,13 @@ async function bootstrapServerWebhooks(): Promise<void> {
           const timeSinceLastSeen = serverInfo.lastSeen
             ? Math.floor(Date.now() / 1000) - serverInfo.lastSeen
             : null;
-          
+
           if (timeSinceLastSeen !== null && timeSinceLastSeen < 300) {
             log.info(`[STARTUP] ${serverInfo.id}: Online (last event ${timeSinceLastSeen}s ago)`);
           } else {
-            log.info(`[STARTUP] ${serverInfo.id}: Configured but inactive (${timeSinceLastSeen ? `${timeSinceLastSeen}s` : 'never'} since last event)`);
+            log.info(
+              `[STARTUP] ${serverInfo.id}: Configured but inactive (${timeSinceLastSeen ? `${timeSinceLastSeen}s` : 'never'} since last event)`
+            );
           }
         }
       } catch (error) {

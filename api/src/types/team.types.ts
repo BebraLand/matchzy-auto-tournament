@@ -13,6 +13,8 @@ export interface Team {
   id: string;
   name: string;
   tag?: string;
+  country_code?: string;
+  logo_url?: string;
   discord_role_id?: string;
   players: string; // JSON string of Player[]
   created_at: number;
@@ -23,6 +25,8 @@ export interface TeamResponse {
   id: string;
   name: string;
   tag?: string;
+  countryCode?: string;
+  logoUrl?: string;
   discordRoleId?: string;
   players: Player[];
   createdAt: number;
@@ -33,6 +37,8 @@ export interface CreateTeamInput {
   id: string;
   name: string;
   tag?: string;
+  countryCode?: string;
+  logoUrl?: string;
   discordRoleId?: string;
   players: Player[];
 }
@@ -40,6 +46,8 @@ export interface CreateTeamInput {
 export interface UpdateTeamInput {
   name?: string;
   tag?: string;
+  countryCode?: string;
+  logoUrl?: string;
   discordRoleId?: string;
   players?: Player[];
 }

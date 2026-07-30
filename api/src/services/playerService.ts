@@ -11,6 +11,10 @@ export interface PlayerRecord {
   id: string; // Steam ID
   name: string;
   avatar_url?: string;
+  first_name?: string;
+  last_name?: string;
+  country_code?: string;
+  photo_url?: string;
   current_elo: number;
   starting_elo: number;
   openskill_mu: number;
@@ -24,6 +28,10 @@ export interface CreatePlayerInput {
   id: string; // Steam ID
   name: string;
   avatar?: string;
+  firstName?: string;
+  lastName?: string;
+  countryCode?: string;
+  photoUrl?: string;
   elo?: number; // Optional - defaults to 1500 Skill Rating (OpenSkill baseline)
   isAdmin?: boolean;
 }
@@ -31,6 +39,10 @@ export interface CreatePlayerInput {
 export interface UpdatePlayerInput {
   name?: string;
   avatar?: string;
+  firstName?: string;
+  lastName?: string;
+  countryCode?: string;
+  photoUrl?: string;
   elo?: number;
   isAdmin?: boolean;
 }
@@ -39,6 +51,10 @@ export interface PlayerResponse {
   id: string;
   name: string;
   avatar?: string;
+  firstName?: string;
+  lastName?: string;
+  countryCode?: string;
+  photoUrl?: string;
   currentElo: number;
   startingElo: number;
   matchCount: number;
@@ -48,6 +64,20 @@ export interface PlayerResponse {
 }
 
 class PlayerService {
+  private normalizeOptionalText(value: string | undefined): string | undefined {
+    const trimmed = value?.trim();
+    return trimmed || undefined;
+  }
+
+  private normalizeCountryCode(value: string | undefined): string | undefined {
+    const normalized = value?.trim().toUpperCase();
+    if (!normalized) return undefined;
+    if (!/^[A-Z]{2}$/.test(normalized)) {
+      throw new Error('Country code must be a two-letter ISO 3166-1 code');
+    }
+    return normalized;
+  }
+
   /**
    * Convert database row to response format
    */
@@ -61,6 +91,10 @@ class PlayerService {
       // Prefer a stored/custom avatar (e.g. from Steam or admin override),
       // otherwise fall back to a deterministic DiceBear SVG endpoint.
       avatar: customAvatar ?? dynamicAvatar,
+      firstName: player.first_name || undefined,
+      lastName: player.last_name || undefined,
+      countryCode: player.country_code || undefined,
+      photoUrl: player.photo_url || undefined,
       currentElo: player.current_elo,
       startingElo: player.starting_elo,
       matchCount: player.match_count,
@@ -125,7 +159,9 @@ class PlayerService {
    * Get player by Steam ID
    */
   async getPlayerById(playerId: string): Promise<PlayerResponse | null> {
-    const player = await db.queryOneAsync<PlayerRecord>('SELECT * FROM players WHERE id = ?', [playerId]);
+    const player = await db.queryOneAsync<PlayerRecord>('SELECT * FROM players WHERE id = ?', [
+      playerId,
+    ]);
     if (!player) {
       return null;
     }
@@ -146,6 +182,10 @@ class PlayerService {
     const playerData: Omit<PlayerRecord, 'id'> & { is_admin?: number } = {
       name: input.name,
       avatar_url: input.avatar || undefined,
+      first_name: this.normalizeOptionalText(input.firstName),
+      last_name: this.normalizeOptionalText(input.lastName),
+      country_code: this.normalizeCountryCode(input.countryCode),
+      photo_url: this.normalizeOptionalText(input.photoUrl),
       current_elo: elo,
       starting_elo: elo,
       openskill_mu: openskillRating.mu,
@@ -194,6 +234,22 @@ class PlayerService {
       updates.avatar_url = input.avatar || undefined;
     }
 
+    if (input.firstName !== undefined) {
+      updates.first_name = this.normalizeOptionalText(input.firstName);
+    }
+
+    if (input.lastName !== undefined) {
+      updates.last_name = this.normalizeOptionalText(input.lastName);
+    }
+
+    if (input.countryCode !== undefined) {
+      updates.country_code = this.normalizeCountryCode(input.countryCode);
+    }
+
+    if (input.photoUrl !== undefined) {
+      updates.photo_url = this.normalizeOptionalText(input.photoUrl);
+    }
+
     if (input.elo !== undefined) {
       // Update ELO and OpenSkill rating
       const openskillRating = eloToOpenSkill(input.elo, existing.match_count);
@@ -240,6 +296,10 @@ class PlayerService {
           await this.updatePlayer(playerInput.id, {
             name: playerInput.name,
             avatar: playerInput.avatar,
+            firstName: playerInput.firstName,
+            lastName: playerInput.lastName,
+            countryCode: playerInput.countryCode,
+            photoUrl: playerInput.photoUrl,
             elo: playerInput.elo,
           });
           updated++;
@@ -356,10 +416,10 @@ class PlayerService {
     }
 
     if (totalPlayers > 1) {
-      log.info(
-        '[ensureFirstAdmin] Skipping auto‑admin promotion: multiple players exist',
-        { steamId, totalPlayers }
-      );
+      log.info('[ensureFirstAdmin] Skipping auto‑admin promotion: multiple players exist', {
+        steamId,
+        totalPlayers,
+      });
       return;
     }
 

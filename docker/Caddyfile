@@ -37,6 +37,9 @@
 	handle /map-images/* {
 		reverse_proxy localhost:3000
 	}
+	handle /broadcast-assets/* {
+		reverse_proxy localhost:3000
+	}
 
 	handle {
 		root * /app/public

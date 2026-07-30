@@ -85,6 +85,7 @@ setsid env \
   ENABLE_TEST_ENDPOINTS=true \
   NODE_ENV=test \
   MAP_IMAGES_DIR="$LOG_DIR/map-images" \
+  BROADCAST_ASSETS_DIR="$LOG_DIR/broadcast-assets" \
   SESSION_SECRET=operator-test-session \
   SERVER_TOKEN=operator-test-server \
   PUBLIC_URL="http://127.0.0.1:$API_PORT" \
@@ -131,6 +132,11 @@ echo "[4/4] Verifying Assisted queue, 1→3→4→2, veto gate, and Control Room
 PLAYWRIGHT_BASE_URL="http://127.0.0.1:$API_PORT" \
 FRONTEND_BASE_URL="http://127.0.0.1:$FRONTEND_PORT" \
 TEST_SERVER_TOKEN=operator-test-server \
+DB_HOST=127.0.0.1 \
+DB_PORT="$PG_PORT" \
+DB_USER=matop \
+DB_PASSWORD=matop_test_only \
+DB_NAME=matop \
 SKIP_WEBSERVER=1 \
   node_modules/.bin/playwright test \
   -c tests/playwright.config.ts \

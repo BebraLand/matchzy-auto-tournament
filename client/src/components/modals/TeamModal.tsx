@@ -89,6 +89,9 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
   const [id, setId] = useState('');
   const [name, setName] = useState('');
   const [tag, setTag] = useState('');
+  const [countryCode, setCountryCode] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [pendingLogoData, setPendingLogoData] = useState<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [newPlayerSteamId, setNewPlayerSteamId] = useState('');
   const [newPlayerName, setNewPlayerName] = useState('');
@@ -109,6 +112,9 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
       setId(team.id);
       setName(team.name);
       setTag(team.tag || '');
+      setCountryCode(team.countryCode || '');
+      setLogoUrl(team.logoUrl || '');
+      setPendingLogoData(null);
       setPlayers(team.players || []);
     } else {
       resetForm();
@@ -119,12 +125,26 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
     setId('');
     setName('');
     setTag('');
+    setCountryCode('');
+    setLogoUrl('');
+    setPendingLogoData(null);
     setPlayers([]);
     setNewPlayerSteamId('');
     setNewPlayerName('');
     setNewPlayerAvatar(undefined);
     setNewPlayerElo('');
     setError('');
+  };
+
+  const handleLogoFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      showWarning('Team logo must be PNG, JPEG, or WebP');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setPendingLogoData(String(reader.result));
+    reader.readAsDataURL(file);
   };
 
   const handleNameChange = (newName: string) => {
@@ -339,6 +359,8 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
         id: isEditing ? id.trim() : slugifyTeamName(name),
         name: name.trim(),
         tag: tag.trim() || undefined,
+        countryCode: countryCode.trim().toUpperCase() || undefined,
+        logoUrl: logoUrl.trim() || undefined,
         discordRoleId: undefined, // Discord notifications not yet implemented
         players,
       };
@@ -348,6 +370,8 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
         await api.put(`/api/teams/${team.id}`, {
           name: payload.name,
           tag: payload.tag,
+          countryCode: payload.countryCode,
+          logoUrl: payload.logoUrl,
           discordRoleId: undefined, // Discord notifications not yet implemented
           players: payload.players,
         });
@@ -361,6 +385,11 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
           newTeamId = response.team.id;
         }
         showSuccess(t('teamModal.success.teamCreated'));
+      }
+
+      const savedTeamId = isEditing ? team.id : newTeamId;
+      if (pendingLogoData && savedTeamId) {
+        await api.post(`/api/teams/${savedTeamId}/logo`, { imageData: pendingLogoData });
       }
 
       onSave(newTeamId);
@@ -461,6 +490,38 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
                 htmlInput: { maxLength: 4, 'data-testid': 'team-tag-input' },
               }}
             />
+
+            <TextField
+              label="Country"
+              value={countryCode}
+              onChange={(event) => setCountryCode(event.target.value.toUpperCase().slice(0, 2))}
+              helperText="Optional ISO country code, e.g. LT"
+            />
+            <TextField
+              label="Team logo URL"
+              value={logoUrl}
+              onChange={(event) => setLogoUrl(event.target.value)}
+              helperText="Optional. An uploaded logo takes priority."
+            />
+            <Box display="flex" alignItems="center" gap={2}>
+              {(pendingLogoData || logoUrl) && (
+                <Box
+                  component="img"
+                  src={pendingLogoData || logoUrl}
+                  alt="Team logo preview"
+                  sx={{ width: 72, height: 72, objectFit: 'contain', borderRadius: 1 }}
+                />
+              )}
+              <Button variant="outlined" component="label">
+                Upload team logo
+                <input
+                  hidden
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(event) => handleLogoFile(event.target.files?.[0])}
+                />
+              </Button>
+            </Box>
 
             <Divider sx={{ my: 1 }} />
 
@@ -660,8 +721,8 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
             {saving
               ? t('teamModal.buttons.saving')
               : isEditing
-              ? t('teamModal.buttons.saveChanges')
-              : t('teamModal.buttons.createTeam')}
+                ? t('teamModal.buttons.saveChanges')
+                : t('teamModal.buttons.createTeam')}
           </Button>
         </DialogActions>
       </Dialog>

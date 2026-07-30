@@ -193,6 +193,11 @@ export interface PlayerDetail {
   id: string; // Steam ID
   name: string;
   avatar?: string;
+  firstName?: string;
+  lastName?: string;
+  countryCode?: string;
+  photoUrl?: string;
+  teamId?: string;
   currentElo: number;
   startingElo: number;
   matchCount: number;

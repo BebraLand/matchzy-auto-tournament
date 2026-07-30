@@ -2,11 +2,36 @@ import { Router, Request, Response } from 'express';
 import { teamService } from '../services/teamService';
 import { CreateTeamInput, UpdateTeamInput } from '../types/team.types';
 import { requireAuth } from '../middleware/auth';
+import { saveBroadcastAsset } from '../services/broadcastAssetService';
 
 const router = Router();
 
 // All team routes require authentication
 router.use(requireAuth);
+
+/**
+ * POST /api/teams/:id/logo
+ * Persist a broadcast logo and attach it to the team profile.
+ */
+router.post('/:id/logo', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { imageData } = req.body as { imageData?: string };
+    if (!imageData) {
+      return res.status(400).json({ success: false, error: 'imageData is required' });
+    }
+    if (!(await teamService.getTeamById(id))) {
+      return res.status(404).json({ success: false, error: `Team '${id}' not found` });
+    }
+
+    const logoUrl = saveBroadcastAsset({ kind: 'teams', entityId: id, imageData });
+    const team = await teamService.updateTeam(id, { logoUrl });
+    return res.json({ success: true, logoUrl, team });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(400).json({ success: false, error: message });
+  }
+});
 
 /**
  * GET /api/teams

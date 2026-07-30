@@ -159,6 +159,12 @@ class DatabaseManager {
         { table: 'player_match_stats', column: 'score', type: 'INTEGER' },
         { table: 'player_match_stats', column: 'rounds_played', type: 'INTEGER' },
         { table: 'players', column: 'is_admin', type: 'INTEGER NOT NULL DEFAULT 0' },
+        { table: 'players', column: 'first_name', type: 'TEXT' },
+        { table: 'players', column: 'last_name', type: 'TEXT' },
+        { table: 'players', column: 'country_code', type: 'TEXT' },
+        { table: 'players', column: 'photo_url', type: 'TEXT' },
+        { table: 'teams', column: 'country_code', type: 'TEXT' },
+        { table: 'teams', column: 'logo_url', type: 'TEXT' },
         { table: 'servers', column: 'cs2_required_version', type: 'INTEGER' },
         { table: 'servers', column: 'cs2_update_phase', type: 'TEXT' },
         { table: 'servers', column: 'cs2_update_required_at', type: 'INTEGER' },
@@ -401,7 +407,9 @@ class DatabaseManager {
       params = converted.params;
     }
     if (LOG_DB_VERBOSE) {
-      log.database(`[DB] GETALL ${table} where=${where ?? 'none'} params=${this.safeJson(params ?? [])}`);
+      log.database(
+        `[DB] GETALL ${table} where=${where ?? 'none'} params=${this.safeJson(params ?? [])}`
+      );
     }
     const result = await this.postgresPool.query(query, params);
     const rows = result.rows as T[];
@@ -580,9 +588,7 @@ class DatabaseManager {
     if (!this.postgresPool) throw new Error('Database not initialized');
     try {
       if (LOG_DB_VERBOSE) {
-        log.database(
-          `[DB] QUERY ONE sql=${JSON.stringify(sql)} params=${this.safeJson(params)}`
-        );
+        log.database(`[DB] QUERY ONE sql=${JSON.stringify(sql)} params=${this.safeJson(params)}`);
       }
       const converted = params ? convertPlaceholders(sql, params) : { sql, params: [] };
       const result = await this.postgresPool.query(converted.sql, converted.params);

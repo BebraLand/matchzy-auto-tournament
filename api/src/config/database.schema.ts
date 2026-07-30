@@ -53,6 +53,8 @@ export function getSchemaSQL(): string {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       tag TEXT,
+      country_code TEXT,
+      logo_url TEXT,
       discord_role_id TEXT,
       players TEXT NOT NULL,
       created_at INTEGER NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::INTEGER,
@@ -243,6 +245,10 @@ export function getSchemaSQL(): string {
       id TEXT PRIMARY KEY, -- Steam ID
       name TEXT NOT NULL,
       avatar_url TEXT,
+      first_name TEXT,
+      last_name TEXT,
+      country_code TEXT,
+      photo_url TEXT,
       -- Admin-facing Skill Rating (for compatibility and display)
       current_elo INTEGER NOT NULL DEFAULT 1500, -- Skill Rating (ordinal * 200 + 1500)
       starting_elo INTEGER NOT NULL DEFAULT 1500, -- Initial Skill Rating seed
