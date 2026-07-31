@@ -8,6 +8,7 @@ type VetoApiResponse = {
   success: boolean;
   veto?: VetoState;
   maps?: Array<{ id: string; displayName: string; imageUrl: string | null }>;
+  teamLogos?: { team1?: string | null; team2?: string | null };
   error?: string;
 };
 
@@ -50,6 +51,8 @@ export default function BroadcastVeto() {
   const [maps, setMaps] = useState<Map<string, MapMetadata>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [waiting, setWaiting] = useState(false);
+  const [teamLogos, setTeamLogos] = useState({ team1: null as string | null, team2: null as string | null });
   const generationRef = useRef(0);
   const hasLoadedRef = useRef(false);
 
@@ -67,13 +70,20 @@ export default function BroadcastVeto() {
         const data = (await response.json()) as VetoApiResponse;
         if (generation !== generationRef.current) return;
 
+        if (response.status === 404 || response.status === 423) {
+          setWaiting(true);
+          setVeto(null);
+          return;
+        }
         if (!data.success || !data.veto) {
           setError(data.error || 'Veto is not available yet');
           return;
         }
 
         hasLoadedRef.current = true;
+        setWaiting(false);
         setVeto(normalizeVetoState(data.veto));
+        setTeamLogos({ team1: data.teamLogos?.team1 || null, team2: data.teamLogos?.team2 || null });
         const nextMaps = new Map<string, MapMetadata>();
         for (const map of data.maps || []) {
           nextMaps.set(map.id, { displayName: map.displayName, imageUrl: map.imageUrl });
@@ -176,8 +186,12 @@ export default function BroadcastVeto() {
     return <BroadcastShell><div className="veto-error">{error.toUpperCase()}</div></BroadcastShell>;
   }
 
+  if (waiting && !veto) {
+    return <BroadcastShell><StandbyScreen /></BroadcastShell>;
+  }
+
   if (!veto) {
-    return <BroadcastShell><div className="veto-error">VETO NOT AVAILABLE</div></BroadcastShell>;
+    return <BroadcastShell><div className="veto-error">VETO FEED UNAVAILABLE</div></BroadcastShell>;
   }
 
   const activeTeam = veto.currentTurn;
@@ -196,9 +210,9 @@ export default function BroadcastVeto() {
         </header>
 
         <section className="matchup">
-          <TeamBanner team="team1" name={veto.team1Name || 'TEAM 1'} active={!isComplete && hasLiveTurn && activeTeam === 'team1'} />
+          <TeamBanner team="team1" name={veto.team1Name || 'TEAM 1'} logoUrl={teamLogos.team1} active={!isComplete && hasLiveTurn && activeTeam === 'team1'} />
           <div className="versus"><span>VS</span><small>MAP VETO</small></div>
-          <TeamBanner team="team2" name={veto.team2Name || 'TEAM 2'} active={!isComplete && hasLiveTurn && activeTeam === 'team2'} />
+          <TeamBanner team="team2" name={veto.team2Name || 'TEAM 2'} logoUrl={teamLogos.team2} active={!isComplete && hasLiveTurn && activeTeam === 'team2'} />
         </section>
 
         <section className="veto-turn" aria-live="polite">
@@ -250,14 +264,19 @@ export default function BroadcastVeto() {
   );
 }
 
-function TeamBanner({ team, name, active }: { team: 'team1' | 'team2'; name: string; active: boolean }) {
+function TeamBanner({ team, name, logoUrl, active }: { team: 'team1' | 'team2'; name: string; logoUrl: string | null; active: boolean }) {
   return (
     <div className={`team-banner ${team} ${active ? 'active' : ''}`}>
       <div className="team-indicator" />
+      <div className="team-crest">{logoUrl ? <img src={logoUrl} alt="" /> : <b>{name.slice(0, 2).toUpperCase()}</b>}</div>
       <span>{name}</span>
       {active && <small>ON THE CLOCK</small>}
     </div>
   );
+}
+
+function StandbyScreen() {
+  return <main className="veto-standby" data-testid="broadcast-veto-standby"><div className="standby-kicker">BEBRALAND BROADCAST</div><div className="standby-mark"><i /><i /><i /></div><h1>VETO DESK</h1><h2>WAITING FOR THE NEXT MATCH</h2><p>LIVE FEED STANDING BY</p><div className="standby-line"><span>MAT CONNECTED</span><b>•</b><span>OPEN VETO TO BEGIN</span></div></main>;
 }
 
 function BroadcastShell({ children }: { children: ReactNode }) {
@@ -278,6 +297,8 @@ const broadcastStyles = `
   .veto-turn { display: flex; align-items: baseline; justify-content: center; gap: 1.2em; margin: 1vh 0 3vh; text-transform: uppercase; }.veto-turn strong { font-size: clamp(17px, 1.5vw, 30px); letter-spacing: .08em; }.veto-turn span { color: #83a0bc; font-size: clamp(10px, .8vw, 16px); letter-spacing: .12em; }
   .map-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.15vw; max-width: 1800px; margin: 0 auto; }.map-card { min-height: clamp(145px, 20vh, 295px); position: relative; overflow: hidden; isolation: isolate; border: 1px solid rgba(180, 211, 240, .25); background: #0d1724; transform: translateZ(0); }.map-card img, .map-shade { position: absolute; inset: 0; height: 100%; width: 100%; object-fit: cover; }.map-card img { opacity: .82; transition: transform .6s ease, filter .6s ease; }.map-shade { background: linear-gradient(0deg, rgba(5,8,14,.93), rgba(5,8,14,.05) 78%); }.map-info, .map-stage { position: absolute; z-index: 1; left: 1.15vw; right: 1.15vw; }.map-info { bottom: 1.45vh; }.map-info h2 { margin: 0; font-size: clamp(20px, 1.65vw, 34px); font-weight: 950; letter-spacing: -.035em; }.map-info p { margin: .35em 0 0; color: #afc0d2; font-size: clamp(9px, .72vw, 14px); font-weight: 800; letter-spacing: .08em; }.map-stage { top: 1.1vh; color: #dcebf8; font-size: 11px; letter-spacing: .15em; font-weight: 950; }.map-card.banned { border-color: rgba(255, 88, 96, .65); }.map-card.banned img { filter: grayscale(1) contrast(1.25); transform: scale(1.08); }.map-card.banned .map-shade { background: linear-gradient(0deg, rgba(57, 5, 11, .95), rgba(84, 10, 17, .46)); }.map-card.banned .map-stage { color: #ff8188; }.map-card.picked { border-color: rgba(71, 181, 255, .9); box-shadow: 0 0 26px rgba(71,181,255,.22); }.map-card.picked .map-shade { background: linear-gradient(0deg, rgba(4, 24, 43, .94), rgba(14, 84, 132, .17)); }.map-card.picked .map-stage { color: #8cdaff; }.map-card.decider { border-color: rgba(255, 207, 92, .9); box-shadow: 0 0 27px rgba(255,207,92,.19); }.map-card.decider .map-shade { background: linear-gradient(0deg, rgba(51, 35, 4, .94), rgba(133, 93, 9, .12)); }.map-card.decider .map-stage { color: #ffe08e; }.map-card.latest { animation: mapActionReveal .85s cubic-bezier(.16,1,.3,1) both; }
   .veto-timeline { display: flex; justify-content: center; flex-wrap: wrap; gap: .55vw; max-width: 1800px; margin: 2.7vh auto 0; }.timeline-action { display: flex; align-items: center; gap: .55em; padding: .45em .75em; border: 1px solid rgba(255,255,255,.12); background: rgba(5,10,17,.58); font-size: clamp(9px, .7vw, 14px); letter-spacing: .045em; }.timeline-action > span { color: #85a3bf; }.timeline-action strong { color: #a9dbff; }.timeline-action.team2 strong { color: #ffcf8b; }.timeline-action em { font-style: normal; color: #fff; font-weight: 900; }.timeline-action b { color: #b8c7d7; }
+  .team-crest { width: clamp(58px,5vw,96px); height: clamp(58px,5vw,96px); flex: 0 0 auto; display:grid; place-items:center; background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(255,255,255,.025)); border:1px solid rgba(255,255,255,.22); clip-path:polygon(10% 0,100% 0,90% 100%,0 100%); filter:drop-shadow(0 12px 22px rgba(0,0,0,.42)); }.team-crest img { width:78%;height:78%;object-fit:contain; }.team-crest b { font-size:clamp(20px,2vw,38px);font-style:italic;color:#d9efff; }.team2 .team-crest b { color:#ffe0a6; }
+  .veto-standby { min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;position:relative;background:linear-gradient(115deg,transparent 0 43%,rgba(73,174,255,.06) 43% 50%,transparent 50% 57%,rgba(255,180,74,.045) 57% 64%,transparent 64%),repeating-linear-gradient(90deg,rgba(255,255,255,.025) 0 1px,transparent 1px 86px); }.veto-standby:before,.veto-standby:after{content:'';position:absolute;width:28vw;height:2px;top:50%;background:linear-gradient(90deg,transparent,#56bfff);}.veto-standby:before{right:63%;}.veto-standby:after{left:63%;transform:scaleX(-1);}.standby-kicker{font-size:clamp(11px,.8vw,16px);letter-spacing:.34em;color:#77c9ff;font-weight:800;margin-bottom:2.8vh}.standby-mark{display:flex;gap:8px;margin-bottom:1.8vh}.standby-mark i{display:block;width:9px;height:42px;background:#63c2ff;transform:skew(-18deg);box-shadow:0 0 20px rgba(99,194,255,.55)}.standby-mark i:nth-child(2){height:58px;background:#f4f7fb}.standby-mark i:nth-child(3){background:#ffb44a;box-shadow:0 0 20px rgba(255,180,74,.45)}.veto-standby h1{margin:0;font-size:clamp(54px,6vw,118px);font-style:italic;letter-spacing:-.055em;line-height:.85}.veto-standby h2{margin:3vh 0 .8vh;font-size:clamp(15px,1.25vw,25px);letter-spacing:.18em}.veto-standby p{margin:0;color:#859db5;font-size:clamp(10px,.72vw,14px);letter-spacing:.3em}.standby-line{position:absolute;bottom:6vh;display:flex;gap:1.1em;align-items:center;color:#88a5bf;font-size:11px;letter-spacing:.18em}.standby-line b{color:#66e2a1;text-shadow:0 0 12px #66e2a1}
   .veto-loading, .veto-error { display: grid; place-items: center; min-height: 100vh; color: #b8dbf7; letter-spacing: .18em; font-weight: 900; }.veto-error { color: #ff9ca2; }
   @keyframes vetoLivePulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.65); } } @keyframes teamOnClock { 0%,100% { box-shadow: inset 0 0 35px rgba(255,255,255,.08), 0 0 10px rgba(255,255,255,.06); } 50% { box-shadow: inset 0 0 35px rgba(255,255,255,.16), 0 0 36px rgba(255,255,255,.18); } } @keyframes mapActionReveal { 0% { transform: scale(1.13); opacity: .15; filter: brightness(2); } 100% { transform: scale(1); opacity: 1; filter: brightness(1); } }
   @media (max-width: 800px) { .veto-show { padding: 22px 16px; }.veto-header { grid-template-columns: 1fr auto; gap: 12px; }.veto-format { grid-row: 2; }.veto-status { grid-row: 2; }.matchup { grid-template-columns: 1fr; gap: 12px; }.team-banner.team2 { flex-direction: row; text-align: left; }.team2 small { left: auto; right: 1.25vw; }.versus { order: 1; }.team-banner.team2 { order: 2; }.map-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }.map-card { min-height: 135px; }.map-info, .map-stage { left: 12px; right: 12px; } }

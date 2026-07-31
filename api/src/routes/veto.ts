@@ -288,6 +288,8 @@ router.get('/:matchSlug', async (req: Request, res: Response) => {
     let team2Id: string | null = match.team2_id;
     let team1Name = 'Team 1';
     let team2Name = 'Team 2';
+    let team1LogoUrl: string | null = null;
+    let team2LogoUrl: string | null = null;
 
     if (isManualMatch && !match.team1_id && !match.team2_id) {
       team1Id = 'team1';
@@ -295,19 +297,21 @@ router.get('/:matchSlug', async (req: Request, res: Response) => {
       team1Name = (config.team1?.name as string) || 'Team 1';
       team2Name = (config.team2?.name as string) || 'Team 2';
     } else {
-      const team1 = await db.queryOneAsync<{ name: string; id: string }>(
-        'SELECT name, id FROM teams WHERE id = ?',
+      const team1 = await db.queryOneAsync<{ name: string; id: string; logo_url: string | null }>(
+        'SELECT name, id, logo_url FROM teams WHERE id = ?',
         [match.team1_id]
       );
-      const team2 = await db.queryOneAsync<{ name: string; id: string }>(
-        'SELECT name, id FROM teams WHERE id = ?',
+      const team2 = await db.queryOneAsync<{ name: string; id: string; logo_url: string | null }>(
+        'SELECT name, id, logo_url FROM teams WHERE id = ?',
         [match.team2_id]
       );
       if (team1) {
         team1Name = team1.name;
+        team1LogoUrl = team1.logo_url;
       }
       if (team2) {
         team2Name = team2.name;
+        team2LogoUrl = team2.logo_url;
       }
     }
 
@@ -398,6 +402,7 @@ router.get('/:matchSlug', async (req: Request, res: Response) => {
       success: true,
       veto: vetoState,
       maps: vetoMaps,
+      teamLogos: { team1: team1LogoUrl, team2: team2LogoUrl },
     });
   } catch (error) {
     log.error('Error getting veto state', error);
