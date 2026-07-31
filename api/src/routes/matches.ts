@@ -604,6 +604,10 @@ router.delete('/:slug', requireAuth, async (req: Request, res: Response) => {
     }
 
     await matchService.deleteMatch(slug);
+    if ((await hudProjectionService.getBroadcastMatchSlug()) === slug) {
+      await hudProjectionService.setBroadcastMatch(null);
+      emitHudProjectionInvalidated('broadcast-match-deleted');
+    }
     emitMatchUpdate({ slug, deleted: true });
     log.success(`Match deleted via API: ${slug}`);
 
@@ -655,6 +659,10 @@ router.post('/bulk-delete', requireAuth, async (req: Request, res: Response) => 
         }
 
         await matchService.deleteMatch(slug);
+        if ((await hudProjectionService.getBroadcastMatchSlug()) === slug) {
+          await hudProjectionService.setBroadcastMatch(null);
+          emitHudProjectionInvalidated('broadcast-match-deleted');
+        }
         emitMatchUpdate({ slug, deleted: true });
         deleted += 1;
       } catch (error) {
@@ -1727,31 +1735,6 @@ router.post('/:slug/force-cancel', requireAuth, async (req: Request, res: Respon
     const message = error instanceof Error ? error.message : 'Failed to cancel match';
     log.error('Error force-cancelling match:', error);
     return res.status(500).json({
-      success: false,
-      error: message,
-    });
-  }
-});
-
-/**
- * DELETE /api/matches/:slug
- * Delete a match (authenticated)
- */
-router.delete('/:slug', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const { slug } = req.params;
-    await matchService.deleteMatch(slug);
-
-    return res.json({
-      success: true,
-      message: 'Match deleted successfully',
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to delete match';
-    const statusCode = message.includes('not found') ? 404 : 500;
-
-    console.error('Error deleting match:', error);
-    return res.status(statusCode).json({
       success: false,
       error: message,
     });

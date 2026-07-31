@@ -650,14 +650,18 @@ async function handleMapCompletion(
   // conflicting winners (e.g. map_result vs series_end), which can corrupt the
   // bracket (losers advancing into winners bracket, etc.).
   if (shouldForceDrawSeries || shouldForceBo1SeriesEnd) {
-    const winnerTeamFromMap =
-      (eventData.winner as { team?: 'team1' | 'team2' | 'none' } | undefined)?.team || 'none';
+    const rawMapWinner = eventData.winner;
+    const winnerTeamFromMap = (
+      typeof rawMapWinner === 'string'
+        ? rawMapWinner
+        : (rawMapWinner as { team?: 'team1' | 'team2' | 'none' } | undefined)?.team
+    ) as 'team1' | 'team2' | 'none' | undefined;
     const syntheticSeriesEvent: MatchZyEvent = {
       ...originalEvent,
       event: 'series_end',
       team1_series_score: team1SeriesScore,
       team2_series_score: team2SeriesScore,
-      winner: winnerTeamFromMap,
+      winner: winnerTeamFromMap || 'none',
       time_until_restore: 0,
     };
     await handleSeriesEnd(syntheticSeriesEvent);
@@ -765,16 +769,51 @@ async function handleSeriesEnd(event: MatchZyEvent): Promise<void> {
     }
   );
 
-  const team1Score = Number(eventData.team1_series_score) || 0;
-  const team2Score = Number(eventData.team2_series_score) || 0;
-  // Prefer the explicit winner field from the plugin, even when scores are
-  // tied (e.g. performance-based tiebreaks). Fall back to score comparison
-  // only if winner is missing or "none".
-  const winnerTeamFromEvent = (eventData.winner as { team?: string } | undefined)?.team as
-    | 'team1'
-    | 'team2'
-    | 'none'
-    | undefined;
+  let team1Score = Number(eventData.team1_series_score) || 0;
+  let team2Score = Number(eventData.team2_series_score) || 0;
+  const config = parseMatchConfig(match.config);
+  const totalMaps = config?.num_maps ?? 1;
+  const requiredWins = Math.max(1, Math.ceil(totalMaps / 2));
+  let recoveredWinner: 'team1' | 'team2' | undefined;
+
+  // Some MatchZy Enhanced builds emit a series_end-shaped payload after each
+  // map with the final ROUND score in team*_series_score (for example 3-1 in
+  // a BO3). Validate impossible map scores against MAT's persisted map results:
+  // before Map 2 they are ignored; after a team has actually won enough maps,
+  // the persisted maps-won total becomes the authoritative final series score.
+  if (totalMaps > 1 && (team1Score > requiredWins || team2Score > requiredWins)) {
+    const mapResults = await getMapResults(match.slug);
+    const recordedTeam1Wins = mapResults.filter((result) => result.winnerTeam === 'team1').length;
+    const recordedTeam2Wins = mapResults.filter((result) => result.winnerTeam === 'team2').length;
+
+    if (recordedTeam1Wins < requiredWins && recordedTeam2Wins < requiredWins) {
+      log.warn('Ignoring impossible series_end score; treating it as a map-end alias', {
+        matchId: event.matchid,
+        slug: match.slug,
+        totalMaps,
+        requiredWins,
+        team1Score,
+        team2Score,
+        recordedTeam1Wins,
+        recordedTeam2Wins,
+      });
+      return;
+    }
+
+    team1Score = recordedTeam1Wins;
+    team2Score = recordedTeam2Wins;
+    recoveredWinner = recordedTeam1Wins >= requiredWins ? 'team1' : 'team2';
+  }
+
+  // Prefer the explicit winner field from the plugin. MatchZy variants use
+  // either winner: 'team1' or winner: { team: 'team1' }. When the payload had
+  // impossible scores, persisted map results above are authoritative instead.
+  const rawWinner = eventData.winner;
+  const winnerTeamFromEvent = recoveredWinner ?? (
+    typeof rawWinner === 'string'
+      ? rawWinner
+      : (rawWinner as { team?: string } | undefined)?.team
+  ) as 'team1' | 'team2' | 'none' | undefined;
 
   const isDrawFromScores =
     (winnerTeamFromEvent === 'none' || !winnerTeamFromEvent) && team1Score === team2Score;

@@ -183,6 +183,72 @@ test.describe.serial('Operator-controlled execution queue', () => {
     });
     expect(authenticatedEvent.status()).toBe(400);
 
+    // MatchZy Enhanced compatibility: some builds emit a series_end-shaped
+    // payload with the final map ROUND score (3-1) before loading Map 2. MAT
+    // must not complete a BO3 until a plausible maps-won score arrives.
+    const bo3GuardSlug = `bo3-series-guard-${Date.now()}`;
+    const createBo3Guard = await request.post('/api/matches', {
+      data: {
+        slug: bo3GuardSlug,
+        config: {
+          matchid: bo3GuardSlug,
+          num_maps: 3,
+          maplist: ['de_nuke', 'de_dust2', 'de_anubis'],
+          team1: { name: 'Guard Team 1', players: {} },
+          team2: { name: 'Guard Team 2', players: {} },
+        },
+      },
+    });
+    expect(createBo3Guard.ok(), await createBo3Guard.text()).toBeTruthy();
+    const impossibleSeriesEnd = await request.post('/api/events', {
+      headers: { 'x-matchzy-token': TEST_SERVER_TOKEN },
+      data: {
+        event: 'series_end',
+        matchid: bo3GuardSlug,
+        team1_series_score: 3,
+        team2_series_score: 1,
+        winner: 'team1',
+        time_until_restore: 0,
+      },
+    });
+    expect(impossibleSeriesEnd.ok(), await impossibleSeriesEnd.text()).toBeTruthy();
+    const afterImpossibleSeriesEnd = await request.get(`/api/matches/${bo3GuardSlug}`);
+    expect(afterImpossibleSeriesEnd.ok(), await afterImpossibleSeriesEnd.text()).toBeTruthy();
+    expect((await afterImpossibleSeriesEnd.json()).match.status).not.toBe('completed');
+
+    await recordMapResult({
+      matchSlug: bo3GuardSlug,
+      mapNumber: 0,
+      mapName: 'de_nuke',
+      team1Score: 3,
+      team2Score: 1,
+      winnerTeam: 'team1',
+    });
+    await recordMapResult({
+      matchSlug: bo3GuardSlug,
+      mapNumber: 1,
+      mapName: 'de_dust2',
+      team1Score: 3,
+      team2Score: 2,
+      winnerTeam: 'team1',
+    });
+    const finalImpossibleSeriesEnd = await request.post('/api/events', {
+      headers: { 'x-matchzy-token': TEST_SERVER_TOKEN },
+      data: {
+        event: 'series_end',
+        matchid: bo3GuardSlug,
+        team1_series_score: 3,
+        team2_series_score: 2,
+        winner: 'team1',
+        time_until_restore: 0,
+      },
+    });
+    expect(finalImpossibleSeriesEnd.ok(), await finalImpossibleSeriesEnd.text()).toBeTruthy();
+    const afterRecoveredSeriesEnd = await request.get(`/api/matches/${bo3GuardSlug}`);
+    expect(afterRecoveredSeriesEnd.ok(), await afterRecoveredSeriesEnd.text()).toBeTruthy();
+    expect((await afterRecoveredSeriesEnd.json()).match.status).toBe('completed');
+
+    await request.delete(`/api/matches/${bo3GuardSlug}`);
     await request.delete('/api/tournament');
 
     const stamp = Date.now().toString();
@@ -523,9 +589,6 @@ test.describe.serial('Operator-controlled execution queue', () => {
       }
     }
 
-    await broadcastPage.close();
-    await broadcastContext.close();
-
     await expect(operatorMatch3).toContainText('Prepare');
 
     const unauthenticatedProjection = await request.get('/api/integrations/jts-hud/v1/current');
@@ -701,5 +764,19 @@ test.describe.serial('Operator-controlled execution queue', () => {
     await page.reload();
     await expect(page.getByTestId('control-mode-select')).toContainText('Automatic');
     await expect(page.getByTestId('operator-queue')).toHaveCount(0);
+
+    const deleteTournamentWithBroadcastOpen = await request.delete('/api/tournament');
+    expect(
+      deleteTournamentWithBroadcastOpen.ok(),
+      await deleteTournamentWithBroadcastOpen.text()
+    ).toBeTruthy();
+    await expect(broadcastPage.getByTestId('broadcast-veto-standby')).toBeVisible();
+    expect(
+      await broadcastPage.evaluate(() =>
+        (window as typeof window & { __broadcastVetoRealtimeMarker?: string })
+          .__broadcastVetoRealtimeMarker
+      )
+    ).toBe('obs-page-was-not-reloaded');
+    await broadcastContext.close();
   });
 });

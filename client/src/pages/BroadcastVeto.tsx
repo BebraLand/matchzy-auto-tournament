@@ -106,6 +106,7 @@ export default function BroadcastVeto() {
     const refresh = () => void loadVeto(false);
 
     socket.on('connect', refresh);
+    socket.on('tournament:update', refresh);
     socket.on(matchSlug ? `match:update:${matchSlug}` : 'match:update', refresh);
     socket.on(matchSlug ? `veto:update:${matchSlug}` : 'veto:update', (nextVeto: VetoState | null) => {
       // The stable /broadcast/veto URL follows whichever match MAT has selected.
@@ -265,10 +266,11 @@ export default function BroadcastVeto() {
 }
 
 function TeamBanner({ team, name, logoUrl, active }: { team: 'team1' | 'team2'; name: string; logoUrl: string | null; active: boolean }) {
+  const monogram = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
   return (
     <div className={`team-banner ${team} ${active ? 'active' : ''}`}>
       <div className="team-indicator" />
-      <div className="team-crest">{logoUrl ? <img src={logoUrl} alt="" /> : <b>{name.slice(0, 2).toUpperCase()}</b>}</div>
+      <div className="team-crest"><b>{monogram || 'TM'}</b>{logoUrl && <img src={logoUrl} alt="" onError={(event) => { event.currentTarget.style.display = 'none'; }} />}</div>
       <span>{name}</span>
       {active && <small>ON THE CLOCK</small>}
     </div>
@@ -299,6 +301,21 @@ const broadcastStyles = `
   .veto-timeline { display: flex; justify-content: center; flex-wrap: wrap; gap: .55vw; max-width: 1800px; margin: 2.7vh auto 0; }.timeline-action { display: flex; align-items: center; gap: .55em; padding: .45em .75em; border: 1px solid rgba(255,255,255,.12); background: rgba(5,10,17,.58); font-size: clamp(9px, .7vw, 14px); letter-spacing: .045em; }.timeline-action > span { color: #85a3bf; }.timeline-action strong { color: #a9dbff; }.timeline-action.team2 strong { color: #ffcf8b; }.timeline-action em { font-style: normal; color: #fff; font-weight: 900; }.timeline-action b { color: #b8c7d7; }
   .team-crest { width: clamp(58px,5vw,96px); height: clamp(58px,5vw,96px); flex: 0 0 auto; display:grid; place-items:center; background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(255,255,255,.025)); border:1px solid rgba(255,255,255,.22); clip-path:polygon(10% 0,100% 0,90% 100%,0 100%); filter:drop-shadow(0 12px 22px rgba(0,0,0,.42)); }.team-crest img { width:78%;height:78%;object-fit:contain; }.team-crest b { font-size:clamp(20px,2vw,38px);font-style:italic;color:#d9efff; }.team2 .team-crest b { color:#ffe0a6; }
   .veto-standby { min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;position:relative;background:linear-gradient(115deg,transparent 0 43%,rgba(73,174,255,.06) 43% 50%,transparent 50% 57%,rgba(255,180,74,.045) 57% 64%,transparent 64%),repeating-linear-gradient(90deg,rgba(255,255,255,.025) 0 1px,transparent 1px 86px); }.veto-standby:before,.veto-standby:after{content:'';position:absolute;width:28vw;height:2px;top:50%;background:linear-gradient(90deg,transparent,#56bfff);}.veto-standby:before{right:63%;}.veto-standby:after{left:63%;transform:scaleX(-1);}.standby-kicker{font-size:clamp(11px,.8vw,16px);letter-spacing:.34em;color:#77c9ff;font-weight:800;margin-bottom:2.8vh}.standby-mark{display:flex;gap:8px;margin-bottom:1.8vh}.standby-mark i{display:block;width:9px;height:42px;background:#63c2ff;transform:skew(-18deg);box-shadow:0 0 20px rgba(99,194,255,.55)}.standby-mark i:nth-child(2){height:58px;background:#f4f7fb}.standby-mark i:nth-child(3){background:#ffb44a;box-shadow:0 0 20px rgba(255,180,74,.45)}.veto-standby h1{margin:0;font-size:clamp(54px,6vw,118px);font-style:italic;letter-spacing:-.055em;line-height:.85}.veto-standby h2{margin:3vh 0 .8vh;font-size:clamp(15px,1.25vw,25px);letter-spacing:.18em}.veto-standby p{margin:0;color:#859db5;font-size:clamp(10px,.72vw,14px);letter-spacing:.3em}.standby-line{position:absolute;bottom:6vh;display:flex;gap:1.1em;align-items:center;color:#88a5bf;font-size:11px;letter-spacing:.18em}.standby-line b{color:#66e2a1;text-shadow:0 0 12px #66e2a1}
+  /* Broadcast refinement: restrained scoreboard geometry, no decorative skew. */
+  .broadcast-veto-root { background:#080d15; }
+  .veto-show { background:radial-gradient(circle at 50% 0,rgba(40,65,96,.42),transparent 42%),linear-gradient(180deg,#0d1522 0,#080d15 100%); }
+  .veto-header { max-width:1760px;margin:0 auto;border-bottom-color:rgba(150,176,205,.2); }
+  .veto-brand { letter-spacing:.08em; }.veto-format { background:rgba(34,58,86,.55);border-color:#527699;letter-spacing:.06em; }.veto-status i { box-shadow:none; }
+  .matchup { grid-template-columns:minmax(0,1fr) 112px minmax(0,1fr);gap:22px;max-width:1540px;margin-top:34px; }
+  .team-banner { min-height:126px;box-sizing:border-box;padding:18px 28px;gap:24px;background:rgba(13,22,34,.92);border:0;border-bottom:4px solid #47b5ff;box-shadow:0 15px 35px rgba(0,0,0,.24); }
+  .team-banner.team2 { border-bottom-color:#ffb44a; }.team-banner.active { border-color:#47b5ff;box-shadow:0 15px 35px rgba(0,0,0,.24),inset 0 -10px 30px rgba(71,181,255,.08);animation:none; }.team-banner.team2.active { border-color:#ffb44a;box-shadow:0 15px 35px rgba(0,0,0,.24),inset 0 -10px 30px rgba(255,180,74,.08); }
+  .team-indicator { display:none; }.team-banner span { font-size:clamp(24px,2.15vw,43px);font-weight:850;letter-spacing:-.025em; }.team-banner small { right:18px;bottom:0;transform:translateY(50%);font-size:9px;box-shadow:0 5px 14px rgba(0,0,0,.35); }.team2 small { left:18px;right:auto; }
+  .team-crest { position:relative;width:96px;height:96px;clip-path:none;filter:none;border:0;background:transparent;overflow:hidden; }.team-crest b { position:absolute;inset:0;display:grid;place-items:center;border:1px solid rgba(120,181,224,.45);background:#101e2c;font-size:30px;font-style:normal;letter-spacing:.04em; }.team2 .team-crest b { border-color:rgba(255,180,74,.45);background:#251d13; }.team-crest img { position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#101722; }
+  .versus span { font-size:34px;font-style:normal;letter-spacing:-.04em; }.versus small { font-size:9px; }
+  .veto-turn { margin:18px 0 28px; }.veto-turn strong { font-size:clamp(18px,1.35vw,27px);letter-spacing:.045em; }
+  .map-grid { grid-template-columns:repeat(7,minmax(0,1fr));gap:10px; }.map-card { border-color:rgba(136,163,191,.28);box-shadow:0 12px 28px rgba(0,0,0,.22);background:radial-gradient(circle at 70% 20%,#16283a,#0b1420 65%); }.map-card img { opacity:.76; }.map-info h2 { font-weight:850; }.map-stage { letter-spacing:.09em; }
+  .timeline-action { border:0;border-left:2px solid #47789e;background:rgba(15,25,38,.86); }.timeline-action.team2 { border-left-color:#b67a2e; }
+  .veto-standby { background:radial-gradient(circle at 50% 42%,rgba(40,69,101,.32),transparent 34%),#080d15; }.veto-standby:before,.veto-standby:after { width:22vw;background:linear-gradient(90deg,transparent,rgba(89,151,197,.48)); }.standby-mark { display:none; }.veto-standby h1 { font-size:clamp(50px,5vw,96px);font-style:normal;font-weight:850;letter-spacing:-.035em;line-height:1; }.veto-standby h2 { margin-top:24px;font-size:clamp(14px,1vw,20px);letter-spacing:.12em;font-weight:700; }.standby-kicker { margin-bottom:18px;letter-spacing:.2em;color:#77b8e5; }
   .veto-loading, .veto-error { display: grid; place-items: center; min-height: 100vh; color: #b8dbf7; letter-spacing: .18em; font-weight: 900; }.veto-error { color: #ff9ca2; }
   @keyframes vetoLivePulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.65); } } @keyframes teamOnClock { 0%,100% { box-shadow: inset 0 0 35px rgba(255,255,255,.08), 0 0 10px rgba(255,255,255,.06); } 50% { box-shadow: inset 0 0 35px rgba(255,255,255,.16), 0 0 36px rgba(255,255,255,.18); } } @keyframes mapActionReveal { 0% { transform: scale(1.13); opacity: .15; filter: brightness(2); } 100% { transform: scale(1); opacity: 1; filter: brightness(1); } }
   @media (max-width: 800px) { .veto-show { padding: 22px 16px; }.veto-header { grid-template-columns: 1fr auto; gap: 12px; }.veto-format { grid-row: 2; }.veto-status { grid-row: 2; }.matchup { grid-template-columns: 1fr; gap: 12px; }.team-banner.team2 { flex-direction: row; text-align: left; }.team2 small { left: auto; right: 1.25vw; }.versus { order: 1; }.team-banner.team2 { order: 2; }.map-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }.map-card { min-height: 135px; }.map-info, .map-stage { left: 12px; right: 12px; } }

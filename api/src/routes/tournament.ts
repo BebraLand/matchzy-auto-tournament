@@ -11,7 +11,8 @@ import { getWebhookBaseUrl } from '../utils/urlHelper';
 import type { CreateTournamentInput, UpdateTournamentInput } from '../types/tournament.types';
 import type { DbMatchRow } from '../types/database.types';
 import type { MatchConfig } from '../types/match.types';
-import { emitTournamentUpdate, emitBracketUpdate } from '../services/socketService';
+import { emitTournamentUpdate, emitBracketUpdate, emitHudProjectionInvalidated } from '../services/socketService';
+import { hudProjectionService } from '../services/hudProjectionService';
 import {
   createShuffleTournament,
   registerPlayers,
@@ -585,6 +586,8 @@ router.delete('/', async (_req: Request, res: Response) => {
 
     // Now delete the tournament (will also delete matches via CASCADE)
     await tournamentService.deleteTournament();
+    await hudProjectionService.setBroadcastMatch(null);
+    emitHudProjectionInvalidated('tournament-deleted');
 
     log.success(`Tournament deleted successfully. ${matchesEnded} match(es) ended on servers.`);
 
