@@ -283,6 +283,11 @@ test.describe.serial('Operator-controlled execution queue', () => {
 
     const match1PlayerId = `7656119${String(0).padStart(10, '0')}`;
     const match2PlayerId = `7656119${String(20).padStart(10, '0')}`;
+    const playerIdForTeam = (teamId: string): string => {
+      const teamIndex = teamIds.indexOf(teamId);
+      if (teamIndex < 0) throw new Error(`Unknown operator test team: ${teamId}`);
+      return `7656119${String(teamIndex * 10).padStart(10, '0')}`;
+    };
 
     const closedVeto = await request.get(`/api/veto/${match3.slug}`);
     expect(closedVeto.status()).toBe(423);
@@ -389,11 +394,48 @@ test.describe.serial('Operator-controlled execution queue', () => {
     ]);
     expect(reordered.map((match) => match.queuePosition)).toEqual([1, 2, 3, 4]);
 
+    // Reproduce the production Open Veto report with the player page already
+    // open. The 423 waiting state must become an interactive veto without F5.
+    const match3PlayerId = playerIdForTeam(match3.team1!.id);
+    const match3PlayerLogin = await page.request.post('/api/test/login-player', {
+      data: { steamId: match3PlayerId },
+    });
+    expect(match3PlayerLogin.ok(), await match3PlayerLogin.text()).toBeTruthy();
+    await page.goto(
+      `${process.env.FRONTEND_BASE_URL || 'http://127.0.0.1:13071'}/player/${match3PlayerId}`
+    );
+    await expect(
+      page.getByText('Veto is waiting for the tournament operator to open it.', { exact: false })
+    ).toBeVisible();
+    await page.evaluate(() => {
+      (window as typeof window & { __operatorRealtimeMarker?: string }).__operatorRealtimeMarker =
+        'page-was-not-reloaded';
+    });
+
+    const closedMatchStatus = await page.request.get('/api/players/me/match-status');
+    expect(closedMatchStatus.ok(), await closedMatchStatus.text()).toBeTruthy();
+    expect((await closedMatchStatus.json()).status).toBe('none');
+
     const openVetoResponse = await request.post(`/api/matches/${match3.slug}/operator-action`, {
       data: { action: 'open_veto' },
     });
     expect(openVetoResponse.ok(), await openVetoResponse.text()).toBeTruthy();
 
+    await expect(
+      page.getByText('Veto is waiting for the tournament operator to open it.', { exact: false })
+    ).toHaveCount(0);
+    await expect(page.getByText('Cache', { exact: true })).toBeVisible();
+    expect(
+      await page.evaluate(
+        () =>
+          (window as typeof window & { __operatorRealtimeMarker?: string }).__operatorRealtimeMarker
+      )
+    ).toBe('page-was-not-reloaded');
+
+    const match3ApiPlayerLogin = await request.post('/api/test/login-player', {
+      data: { steamId: match3PlayerId },
+    });
+    expect(match3ApiPlayerLogin.ok(), await match3ApiPlayerLogin.text()).toBeTruthy();
     const openVeto = await request.get(`/api/veto/${match3.slug}`);
     expect(openVeto.ok(), await openVeto.text()).toBeTruthy();
     const openVetoBody = await openVeto.json();
@@ -406,6 +448,43 @@ test.describe.serial('Operator-controlled execution queue', () => {
         }),
       ])
     );
+
+    // Keep Operator Control Room open while the players finish veto. The match
+    // must transition to READY and expose Prepare without an operator reload.
+    const pageAdminLogin = await page.request.post('/api/test/login-admin', {
+      data: { steamId: '76561198000000001' },
+    });
+    expect(pageAdminLogin.ok(), await pageAdminLogin.text()).toBeTruthy();
+    await page.goto(`${process.env.FRONTEND_BASE_URL || 'http://127.0.0.1:13071'}/matches`);
+    const operatorMatch3 = page.getByTestId(`operator-match-${match3.slug}`);
+    await expect(operatorMatch3).toBeVisible();
+    await expect(operatorMatch3.getByRole('button', { name: 'Prepare' })).toHaveCount(0);
+
+    let vetoState = openVetoBody.veto as {
+      status: string;
+      currentTurn: 'team1' | 'team2';
+      currentAction: 'ban' | 'pick' | 'side_pick';
+      availableMaps: string[];
+    };
+    while (vetoState.status !== 'completed') {
+      const actingTeamId =
+        vetoState.currentTurn === 'team1' ? match3.team1!.id : match3.team2!.id;
+      const actingPlayerLogin = await request.post('/api/test/login-player', {
+        data: { steamId: playerIdForTeam(actingTeamId) },
+      });
+      expect(actingPlayerLogin.ok(), await actingPlayerLogin.text()).toBeTruthy();
+
+      const actionResponse = await request.post(`/api/veto/${match3.slug}/action`, {
+        data:
+          vetoState.currentAction === 'side_pick'
+            ? { side: 'CT', teamSlug: actingTeamId }
+            : { mapName: vetoState.availableMaps[0], teamSlug: actingTeamId },
+      });
+      expect(actionResponse.ok(), await actionResponse.text()).toBeTruthy();
+      vetoState = (await actionResponse.json()).veto;
+    }
+
+    await expect(operatorMatch3).toContainText('Prepare');
 
     const unauthenticatedProjection = await request.get('/api/integrations/jts-hud/v1/current');
     expect(unauthenticatedProjection.status()).toBe(401);
@@ -430,7 +509,7 @@ test.describe.serial('Operator-controlled execution queue', () => {
     expect(projection.match.slug).toBe(match3.slug);
     expect(projection.match.status).toBe('veto');
     expect(projection.match.seriesScore).toEqual({ team1: 0, team2: 0 });
-    expect(projection.match.veto.status).toBe('in_progress');
+    expect(projection.match.veto.status).toBe('completed');
 
     await recordMapResult({
       matchSlug: profileMatch!.slug,

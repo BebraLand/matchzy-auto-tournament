@@ -69,6 +69,8 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
   // Keep a stable reference to the latest onComplete callback so veto effects
   // don't restart (socket reconnect + loading flashes) when parents re-render.
   const onCompleteRef = useRef<VetoInterfaceProps['onComplete']>(onComplete);
+  const loadGenerationRef = useRef(0);
+  const hasLoadedVetoRef = useRef(false);
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
@@ -76,15 +78,20 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
   const isRepoImageUrl = (url: string | null | undefined): boolean =>
     !!url && url.includes('cs2-server-manager') && url.includes('map_thumbnails');
 
-  const loadVetoState = useCallback(async () => {
-    setLoading(true);
+  const loadVetoState = useCallback(async (showLoading = true) => {
+    const generation = ++loadGenerationRef.current;
+    if (showLoading) {
+      setLoading(true);
+    }
     setError('');
 
     try {
       const response = await fetch(`/api/veto/${matchSlug}`);
       const data = await response.json();
+      if (generation !== loadGenerationRef.current) return;
 
       if (data.success) {
+        hasLoadedVetoRef.current = true;
         setVetoState(data.veto);
         const mapsMap = new Map<
           string,
@@ -105,22 +112,41 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
         setError(translateVetoError(data.error) || t('vetoInterface.errors.failedToLoadVetoState'));
       }
     } catch (err) {
+      if (generation !== loadGenerationRef.current) return;
       console.error('Error loading veto:', err);
       setError(t('vetoInterface.errors.failedToLoadVetoState'));
     } finally {
-      setLoading(false);
+      if (generation === loadGenerationRef.current) {
+        setLoading(false);
+      }
     }
   }, [matchSlug, t, translateVetoError]);
 
 
   useEffect(() => {
-    loadVetoState();
+    void loadVetoState();
 
     // Setup Socket.IO for real-time veto updates
     const newSocket = io();
+    const refreshFromServer = () => {
+      void loadVetoState(false);
+    };
 
-    newSocket.on(`veto:update:${matchSlug}`, (updatedVeto: VetoState) => {
+    newSocket.on('connect', refreshFromServer);
+    newSocket.on(`match:update:${matchSlug}`, refreshFromServer);
+
+    newSocket.on(`veto:update:${matchSlug}`, (updatedVeto: VetoState | null) => {
+      if (!updatedVeto) {
+        refreshFromServer();
+        return;
+      }
+      loadGenerationRef.current += 1;
       setVetoState(updatedVeto);
+      setError('');
+      setLoading(false);
+      if (!hasLoadedVetoRef.current) {
+        refreshFromServer();
+      }
       if (updatedVeto.status === 'completed') {
         onCompleteRef.current?.(updatedVeto);
       }

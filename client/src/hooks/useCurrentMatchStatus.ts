@@ -103,6 +103,7 @@ export function useCurrentMatchStatus(
     // Veto actions affect whose turn it is. Match updates also matter because
     // operator Hold/Postpone/Resume changes whether this match should appear at
     // all in the player navbar.
+    socket.on('connect', scheduleSilentRefetch);
     socket.on('veto:update', scheduleSilentRefetch);
     socket.on('match:update', scheduleSilentRefetch);
     socket.on('tournament:update', scheduleSilentRefetch);
@@ -112,6 +113,7 @@ export function useCurrentMatchStatus(
         window.clearTimeout(refreshTimerRef.current);
         refreshTimerRef.current = null;
       }
+      socket.off('connect', scheduleSilentRefetch);
       socket.off('veto:update', scheduleSilentRefetch);
       socket.off('match:update', scheduleSilentRefetch);
       socket.off('tournament:update', scheduleSilentRefetch);

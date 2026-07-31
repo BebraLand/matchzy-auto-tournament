@@ -384,8 +384,7 @@ export function useTeamMatchData(teamId: string | undefined): UseTeamMatchDataRe
 
     const handleBracketUpdate = (event?: BracketSocketEvent) => {
       const trackedSlug = currentMatchSlugRef.current;
-      if (!trackedSlug) return;
-      if (event?.matchSlug && event.matchSlug !== trackedSlug) {
+      if (trackedSlug && event?.matchSlug && event.matchSlug !== trackedSlug) {
         return;
       }
       loadTeamMatch(true);
@@ -408,8 +407,7 @@ export function useTeamMatchData(teamId: string | undefined): UseTeamMatchDataRe
       }
 
       const trackedSlug = currentMatchSlugRef.current;
-      if (!trackedSlug) return;
-      if (data.matchSlug && data.matchSlug !== trackedSlug) {
+      if (trackedSlug && data.matchSlug && data.matchSlug !== trackedSlug) {
         return;
       }
 
@@ -424,6 +422,14 @@ export function useTeamMatchData(teamId: string | undefined): UseTeamMatchDataRe
         'server_assigned',
         'match_allocated',
         'round_advanced',
+        'operator_open_veto',
+        'operator_hold',
+        'operator_postpone',
+        'operator_resume',
+        'operator_prepare',
+        'operator_set_next',
+        'operator_queue_reordered',
+        'veto_completed',
       ]);
 
       // Future-proof: if a status change is sent without an allowlisted action,
@@ -440,11 +446,19 @@ export function useTeamMatchData(teamId: string | undefined): UseTeamMatchDataRe
     };
 
     // Use silent updates for socket events to avoid loading spinner
+    const handleReconnect = () => {
+      loadTeamMatch(true);
+      loadMatchHistory(false);
+      loadTeamStats(false);
+    };
+
+    socket.on('connect', handleReconnect);
     socket.on('match:update', handleMatchUpdate);
     socket.on('bracket:update', handleBracketUpdate);
     socket.on('tournament:update', handleTournamentUpdate);
 
     return () => {
+      socket.off('connect', handleReconnect);
       socket.off('match:update', handleMatchUpdate);
       socket.off('bracket:update', handleBracketUpdate);
       socket.off('tournament:update', handleTournamentUpdate);

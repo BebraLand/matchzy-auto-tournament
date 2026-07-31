@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../config/database';
 import { log } from '../utils/logger';
-import { emitVetoUpdate } from '../services/socketService';
+import { emitBracketUpdate, emitMatchUpdate, emitVetoUpdate } from '../services/socketService';
 import { matchAllocationService } from '../services/matchAllocationService';
 import type { DbMatchRow, DbTournamentRow } from '../types/database.types';
 import type { TournamentResponse } from '../types/tournament.types';
@@ -808,6 +808,17 @@ router.post('/:matchSlug/action', async (req: Request, res: Response) => {
 
     // Emit update via Socket.io
     emitVetoUpdate(matchSlug, vetoState);
+    if (vetoState.status === 'completed') {
+      emitMatchUpdate({
+        slug: matchSlug,
+        status: 'ready',
+        vetoCompleted: true,
+      });
+      emitBracketUpdate({
+        action: 'veto_completed',
+        matchSlug,
+      });
+    }
 
     log.debug(`Veto action processed for ${matchSlug}`, {
       step: vetoState.currentStep - 1,

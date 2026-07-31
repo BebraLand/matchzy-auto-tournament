@@ -27,6 +27,7 @@ import type { MatchConfig } from '../types/match.types';
 import { generateAvatarSvg } from '../generation/avatar';
 import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
 import { saveBroadcastAsset } from '../services/broadcastAssetService';
+import { operatorControlService } from '../services/operatorControlService';
 
 const router = Router();
 
@@ -397,6 +398,7 @@ router.get('/me/match-status', async (req: Request, res: Response) => {
       DbMatchRow & { team1_players?: string | null; team2_players?: string | null }
     >(
       `SELECT m.id, m.slug, m.status, m.config, m.veto_state, m.team1_id, m.team2_id,
+              m.round, m.tournament_id, m.operator_state, m.veto_opened_at,
               t1.players as team1_players, t2.players as team2_players
        FROM matches m
        LEFT JOIN teams t1 ON m.team1_id = t1.id
@@ -417,6 +419,7 @@ router.get('/me/match-status', async (req: Request, res: Response) => {
         DbMatchRow & { team1_players?: string | null; team2_players?: string | null }
       >(
         `SELECT m.id, m.slug, m.status, m.config, m.veto_state, m.team1_id, m.team2_id,
+                m.round, m.tournament_id, m.operator_state, m.veto_opened_at,
                 t1.players as team1_players, t2.players as team2_players
          FROM matches m
          LEFT JOIN teams t1 ON m.team1_id = t1.id
@@ -484,6 +487,15 @@ router.get('/me/match-status', async (req: Request, res: Response) => {
     }
 
     if ((match.status === 'pending' || match.status === 'ready') && !vetoCompleted) {
+      if (!(await operatorControlService.isVetoOpen(match))) {
+        return res.json({
+          success: true,
+          status: 'none',
+          matchSlug: null,
+          label: null,
+        });
+      }
+
       const myTurn =
         currentTurn &&
         ((currentTurn === 'team1' && isTeam1) || (currentTurn === 'team2' && !isTeam1));

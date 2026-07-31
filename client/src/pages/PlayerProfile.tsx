@@ -587,6 +587,14 @@ export default function PlayerProfile() {
         // player's ELO, match history, and "current match" card stay in sync
         // without requiring a manual page reload.
         'round_advanced',
+        'operator_open_veto',
+        'operator_hold',
+        'operator_postpone',
+        'operator_resume',
+        'operator_prepare',
+        'operator_set_next',
+        'operator_queue_reordered',
+        'veto_completed',
       ]);
 
       if (refreshActions.has(event.action)) {
@@ -594,6 +602,11 @@ export default function PlayerProfile() {
       }
     };
 
+    const handleReconnect = () => {
+      scheduleSilentRefresh();
+    };
+
+    socket.on('connect', handleReconnect);
     socket.on('bracket:update', handleBracketOrTournamentUpdate);
     socket.on('tournament:update', handleBracketOrTournamentUpdate);
 
@@ -617,6 +630,7 @@ export default function PlayerProfile() {
         silentRefreshTimerRef.current = null;
       }
       if (!socket) return;
+      socket.off('connect', handleReconnect);
       socket.off('bracket:update', handleBracketOrTournamentUpdate);
       socket.off('tournament:update', handleBracketOrTournamentUpdate);
       socket.off('match:update', handleAnyMatchUpdate);

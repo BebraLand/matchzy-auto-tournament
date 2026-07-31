@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -60,6 +60,9 @@ export default function Matches() {
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [controlMode, setControlMode] = useState<TournamentControlMode>('automatic');
   const [operatorBusyKey, setOperatorBusyKey] = useState<string | null>(null);
+  const fetchGenerationRef = useRef(0);
+  const activeFetchesRef = useRef(0);
+  const hasLoadedMatchesRef = useRef(false);
   const { t } = useTranslation();
 
   // Local countdown state for match allocation ETAs (match.id -> seconds remaining)
@@ -67,10 +70,14 @@ export default function Matches() {
 
   // Fetch matches
   const fetchMatches = useCallback(async () => {
+    const generation = ++fetchGenerationRef.current;
+    activeFetchesRef.current += 1;
     try {
       const data = await api.get<MatchesResponse>('/api/matches');
 
-      if (data.success) {
+      if (data.success && generation === fetchGenerationRef.current) {
+        hasLoadedMatchesRef.current = true;
+        setError(null);
         const matches = data.matches || [];
         setTournamentStatus(data.tournamentStatus || 'setup');
         setControlMode(data.controlMode || 'automatic');
@@ -125,10 +132,15 @@ export default function Matches() {
         });
       }
     } catch (err) {
-      setError(t('matchesPage.errors.loadMatches'));
+      if (generation === fetchGenerationRef.current) {
+        setError(t('matchesPage.errors.loadMatches'));
+      }
       console.error(err);
     } finally {
-      setLoading(false);
+      activeFetchesRef.current -= 1;
+      if (generation === fetchGenerationRef.current) {
+        setLoading(false);
+      }
     }
   }, [t]);
 
@@ -141,14 +153,29 @@ export default function Matches() {
   useEffect(() => {
     // Connect to same origin - works in both dev (proxied) and production (Caddy)
     const newSocket = io();
+    let authoritativeRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleAuthoritativeRefresh = () => {
+      if (authoritativeRefreshTimer) {
+        clearTimeout(authoritativeRefreshTimer);
+      }
+      authoritativeRefreshTimer = setTimeout(() => {
+        authoritativeRefreshTimer = undefined;
+        void fetchMatches();
+      }, 50);
+    };
 
     newSocket.on('connect', () => {
       console.log('Socket.io connected');
+      void fetchMatches();
     });
 
     newSocket.on(
       'match:update',
-      (data: Match | { slug?: string; connectionStatus?: { totalConnected: number } }) => {
+      (
+        data:
+          | Match
+          | { slug?: string; deleted?: boolean; connectionStatus?: { totalConnected: number } }
+      ) => {
         // Handle connection status updates
         if ('slug' in data && data.slug && 'connectionStatus' in data && data.connectionStatus) {
           // We still accept connection status payloads here for backward
@@ -158,7 +185,27 @@ export default function Matches() {
           return;
         }
 
+        const durableUpdate = data as Match & { deleted?: boolean };
+        const invalidatesSnapshot =
+          durableUpdate.deleted === true || typeof durableUpdate.status === 'string';
+
+        if (invalidatesSnapshot) {
+          // Durable lifecycle updates are newer than snapshots requested before
+          // them. Partial live-stat updates deliberately do not cancel a full
+          // list refetch, because they cannot replace its authoritative data.
+          const hadInFlightFetch = activeFetchesRef.current > 0;
+          fetchGenerationRef.current += 1;
+          if (!hasLoadedMatchesRef.current) {
+            scheduleAuthoritativeRefresh();
+            return;
+          }
+          if (hadInFlightFetch) {
+            scheduleAuthoritativeRefresh();
+          }
+        }
+
         const match = data as Match & {
+          deleted?: boolean;
           liveStats?: {
             team1Score?: number;
             team2Score?: number;
@@ -229,6 +276,20 @@ export default function Matches() {
 
         const removeMatch = (list: Match[]) => list.filter((m) => !matchIdOrSlugEquals(m));
 
+        if (match.deleted) {
+          setUpcomingMatches((prev) => removeMatch(prev));
+          setLiveMatches((prev) => removeMatch(prev));
+          setMatchHistory((prev) => removeMatch(prev));
+          return;
+        }
+
+        if (match.status === 'cancelled') {
+          setUpcomingMatches((prev) => removeMatch(prev));
+          setLiveMatches((prev) => removeMatch(prev));
+          void fetchMatches();
+          return;
+        }
+
         if (match.status === 'pending' || match.status === 'ready') {
           setUpcomingMatches((prev) => upsertMatch(prev, match));
           setLiveMatches((prev) => removeMatch(prev));
@@ -261,10 +322,21 @@ export default function Matches() {
 
     newSocket.on('bracket:update', () => {
       // Refresh matches when bracket updates
-      fetchMatches();
+      void fetchMatches();
+    });
+
+    newSocket.on('veto:update', () => {
+      void fetchMatches();
+    });
+
+    newSocket.on('tournament:update', () => {
+      void fetchMatches();
     });
 
     return () => {
+      if (authoritativeRefreshTimer) {
+        clearTimeout(authoritativeRefreshTimer);
+      }
       newSocket.disconnect();
     };
   }, [fetchMatches]);
@@ -459,6 +531,19 @@ export default function Matches() {
 
   // Get all matches for numbering context
   const allMatches = [...upcomingMatches, ...liveMatches, ...matchHistory];
+
+  // Keep an open details modal attached to the canonical list state rather
+  // than the stale Match object captured when its card was clicked.
+  useEffect(() => {
+    setSelectedMatch((current) => {
+      if (!current) return current;
+      return (
+        [...upcomingMatches, ...liveMatches, ...matchHistory].find(
+          (match) => match.slug === current.slug
+        ) ?? null
+      );
+    });
+  }, [upcomingMatches, liveMatches, matchHistory]);
 
   const handleControlModeChange = async (mode: TournamentControlMode) => {
     setOperatorBusyKey('mode');
