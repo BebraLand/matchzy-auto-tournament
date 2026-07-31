@@ -785,9 +785,15 @@ async function handleSeriesEnd(event: MatchZyEvent): Promise<void> {
     const mapResults = await getMapResults(match.slug);
     const recordedTeam1Wins = mapResults.filter((result) => result.winnerTeam === 'team1').length;
     const recordedTeam2Wins = mapResults.filter((result) => result.winnerTeam === 'team2').length;
+    // A maps-won score can never exceed the BO win target. MatchZy Enhanced
+    // sometimes puts the final ROUND score here (e.g. Cache 0-3), which must
+    // never be interpreted as a BO3 result. Scores above requiredWins are
+    // accepted only after MAT's persisted per-map results prove the series.
+    const hasPlausibleTerminalSeriesScore =
+      (team1Score === requiredWins && team2Score < requiredWins) ||
+      (team2Score === requiredWins && team1Score < requiredWins);
     const hasTerminalSeriesScore =
-      team1Score >= requiredWins ||
-      team2Score >= requiredWins ||
+      hasPlausibleTerminalSeriesScore ||
       recordedTeam1Wins >= requiredWins ||
       recordedTeam2Wins >= requiredWins;
 
