@@ -20,6 +20,7 @@ import { getMapResults } from '../services/matchMapResultService';
 import { serverAllocationTracker } from '../services/serverAllocationTracker';
 import { operatorControlService } from '../services/operatorControlService';
 import { matchExecutionLockService } from '../services/matchExecutionLockService';
+import { applyAdminMatchAccess } from '../services/matchConfigAccessService';
 
 const router = Router();
 
@@ -491,6 +492,15 @@ router.get('/:slug.json', async (req: Request, res: Response) => {
                 players: {},
               },
       };
+
+      // Resolve current admin access at serving time as well as creation time,
+      // so newly assigned admins can observe existing manual matches. Team
+      // roster membership still wins over spectator access.
+      try {
+        await applyAdminMatchAccess(safeConfig);
+      } catch (error) {
+        log.warn('Failed to attach admin access to manual match config response', error as Error);
+      }
 
       return res.json(safeConfig);
     }

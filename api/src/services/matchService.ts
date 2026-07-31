@@ -7,6 +7,7 @@ import { matchzyConfigService } from './matchzyConfigService';
 import { matchAllocationService } from './matchAllocationService';
 import { serverAllocationTracker } from './serverAllocationTracker';
 import type { DbTournamentRow } from '../types/database.types';
+import { applyAdminMatchAccess } from './matchConfigAccessService';
 
 class MatchService {
   /**
@@ -103,15 +104,12 @@ class MatchService {
       );
     }
 
-    // Always attach current admin Steam64 IDs to manual match configs so they
-    // have in‑game admin rights just like tournament-generated matches.
+    // Persist current admin command rights, but resolve computed spectator
+    // access only when serving the MatchZy JSON so demoted admins do not linger.
     try {
-      const adminRows = await db.queryAsync<{ id: string }>(
-        'SELECT id FROM players WHERE is_admin = 1'
-      );
-      config.admins = Array.isArray(adminRows) ? adminRows.map((row) => row.id) : [];
+      await applyAdminMatchAccess(config, { addAdminSpectators: false });
     } catch (e) {
-      log.warn('Failed to attach admins to manual match config', e as Error);
+      log.warn('Failed to attach admin access to manual match config', e as Error);
     }
 
     // Insert match

@@ -5,6 +5,7 @@ import type { MatchConfig } from '../types/match.types';
 import { log } from '../utils/logger';
 import { settingsService } from './settingsService';
 import { matchzyConfigService } from './matchzyConfigService';
+import { applyAdminMatchAccess } from './matchConfigAccessService';
 
 /**
  * Determine whether matches should be simulated (bots instead of real players).
@@ -304,15 +305,12 @@ export const generateMatchConfig = async (
     simulation_timescale: simulation ? simulationTimescale ?? 1 : undefined,
   };
 
-  // Attach global admin Steam IDs to the config so they always have in‑game
-  // admin rights on every standard (non‑shuffle) match.
+  // Playing admins remain in their assigned team. Non-playing admins receive
+  // spectator access in addition to their global in-game admin rights.
   try {
-    const adminRows = await db.queryAsync<{ id: string }>(
-      'SELECT id FROM players WHERE is_admin = 1'
-    );
-    config.admins = Array.isArray(adminRows) ? adminRows.map((row) => row.id) : [];
+    await applyAdminMatchAccess(config);
   } catch (e) {
-    console.error('Failed to attach admins to standard match config', e);
+    console.error('Failed to attach admin access to standard match config', e);
   }
 
   log.info('Match config generated (standard)', {
@@ -497,15 +495,12 @@ async function generateShuffleMatchConfig(
     simulation_timescale: simulation ? simulationTimescale ?? 1 : undefined,
   };
 
-  // Attach global admin Steam IDs to the config so they always have in‑game
-  // admin rights on every shuffle match.
+  // Playing admins remain in their assigned team. Non-playing admins receive
+  // spectator access in addition to their global in-game admin rights.
   try {
-    const adminRows = await db.queryAsync<{ id: string }>(
-      'SELECT id FROM players WHERE is_admin = 1'
-    );
-    config.admins = Array.isArray(adminRows) ? adminRows.map((row) => row.id) : [];
+    await applyAdminMatchAccess(config);
   } catch (e) {
-    console.error('Failed to attach admins to shuffle match config', e);
+    console.error('Failed to attach admin access to shuffle match config', e);
   }
 
   log.info('Shuffle match config generated', {
