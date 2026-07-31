@@ -776,6 +776,47 @@ async function handleSeriesEnd(event: MatchZyEvent): Promise<void> {
   const requiredWins = Math.max(1, Math.ceil(totalMaps / 2));
   let recoveredWinner: 'team1' | 'team2' | undefined;
 
+  // MatchZy Enhanced variants can emit a `series_end`-shaped event after an
+  // individual map, carrying the current maps-won score (for example 1-0 in
+  // a BO3). That is not a terminal series result. Only accept series_end as
+  // final when its score reaches the required number of map wins, or when the
+  // persisted map results prove that the series has already reached it.
+  if (totalMaps > 1) {
+    const mapResults = await getMapResults(match.slug);
+    const recordedTeam1Wins = mapResults.filter((result) => result.winnerTeam === 'team1').length;
+    const recordedTeam2Wins = mapResults.filter((result) => result.winnerTeam === 'team2').length;
+    const hasTerminalSeriesScore =
+      team1Score >= requiredWins ||
+      team2Score >= requiredWins ||
+      recordedTeam1Wins >= requiredWins ||
+      recordedTeam2Wins >= requiredWins;
+
+    if (!hasTerminalSeriesScore) {
+      log.warn('Ignoring premature series_end before BO series is won', {
+        matchId: event.matchid,
+        slug: match.slug,
+        totalMaps,
+        requiredWins,
+        team1Score,
+        team2Score,
+        recordedTeam1Wins,
+        recordedTeam2Wins,
+      });
+
+      // If this alias also contains the current map's round score, process it
+      // as a map completion so the next-map state and map result are retained.
+      const hasMapScore =
+        eventData.team1_score !== undefined ||
+        eventData.team2_score !== undefined ||
+        extractNestedNumber(eventData, ['team1', 'score']) !== undefined ||
+        extractNestedNumber(eventData, ['team2', 'score']) !== undefined;
+      if (hasMapScore && mapResults.length === 0) {
+        await handleMapCompletion(match, event, eventData);
+      }
+      return;
+    }
+  }
+
   // Some MatchZy Enhanced builds emit a series_end-shaped payload after each
   // map with the final ROUND score in team*_series_score (for example 3-1 in
   // a BO3). Validate impossible map scores against MAT's persisted map results:

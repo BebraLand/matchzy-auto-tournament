@@ -220,6 +220,22 @@ test.describe.serial('Operator-controlled execution queue', () => {
     expect(afterProductionMapResult.ok(), await afterProductionMapResult.text()).toBeTruthy();
     expect((await afterProductionMapResult.json()).match.status).not.toBe('completed');
 
+    const prematureSeriesEnd = await request.post('/api/events', {
+      headers: { 'x-matchzy-token': TEST_SERVER_TOKEN },
+      data: {
+        event: 'series_end',
+        matchid: bo3GuardSlug,
+        team1_series_score: 1,
+        team2_series_score: 0,
+        winner: 'team1',
+        time_until_restore: 0,
+      },
+    });
+    expect(prematureSeriesEnd.ok(), await prematureSeriesEnd.text()).toBeTruthy();
+    const afterPrematureSeriesEnd = await request.get(`/api/matches/${bo3GuardSlug}`);
+    expect(afterPrematureSeriesEnd.ok(), await afterPrematureSeriesEnd.text()).toBeTruthy();
+    expect((await afterPrematureSeriesEnd.json()).match.status).not.toBe('completed');
+
     const impossibleSeriesEnd = await request.post('/api/events', {
       headers: { 'x-matchzy-token': TEST_SERVER_TOKEN },
       data: {
