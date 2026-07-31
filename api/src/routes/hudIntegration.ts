@@ -60,6 +60,18 @@ router.put('/broadcast-match', requireAuth, async (req: Request, res: Response) 
   }
 });
 
+// Stable, anonymous OBS entrypoint. The redirect is deliberately resolved by
+// MAT on every fetch, so a Browser Source can follow the current broadcast
+// match without embedding a mutable match slug in its URL.
+router.get('/broadcast-veto', async (_req: Request, res: Response) => {
+  const slug = await hudProjectionService.getBroadcastMatchSlug();
+  if (!slug) {
+    res.status(404).json({ success: false, error: 'No match is selected for broadcast' });
+    return;
+  }
+  res.redirect(307, `/api/veto/${encodeURIComponent(slug)}?broadcast=1`);
+});
+
 router.use('/v1', requireHudToken);
 
 router.get('/v1/current', async (req: Request, res: Response) => {

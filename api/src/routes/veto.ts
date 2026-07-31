@@ -12,6 +12,7 @@ import { normalizeConfigPlayers } from '../utils/playerTransform';
 import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
 import { operatorControlService } from '../services/operatorControlService';
 import { mapService } from '../services/mapService';
+import { hudProjectionService } from '../services/hudProjectionService';
 
 const router = Router();
 
@@ -241,6 +242,20 @@ async function getVetoContext(match: DbMatchRow): Promise<VetoContext | null> {
 router.get('/:matchSlug', async (req: Request, res: Response) => {
   try {
     const { matchSlug } = req.params;
+    const isSelectedBroadcastVeto = req.query.broadcast === '1';
+
+    // A broadcast operator explicitly selects one match in HUD Integration.
+    // Only that match may expose the full read-only veto audit to an anonymous
+    // browser source; every other spectator still receives the redacted view.
+    if (isSelectedBroadcastVeto) {
+      const selectedBroadcastMatch = await hudProjectionService.getBroadcastMatchSlug();
+      if (selectedBroadcastMatch !== matchSlug) {
+        return res.status(404).json({
+          success: false,
+          error: 'This match is not selected for broadcast',
+        });
+      }
+    }
 
     const match = await db.queryOneAsync<DbMatchRow>('SELECT * FROM matches WHERE slug = ?', [
       matchSlug,
@@ -357,7 +372,7 @@ router.get('/:matchSlug', async (req: Request, res: Response) => {
     const viewerSteamId = getViewerSteamId(req);
     const viewerTeam = await resolveViewerTeamForMatch(match, viewerSteamId);
 
-    if (!viewerTeam) {
+    if (!viewerTeam && !isSelectedBroadcastVeto) {
       const publicVeto = {
         matchSlug: vetoState.matchSlug,
         format: vetoState.format,

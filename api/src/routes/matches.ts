@@ -9,7 +9,7 @@ import { log } from '../utils/logger';
 import { db } from '../config/database';
 import type { DbMatchRow, DbTournamentRow } from '../types/database.types';
 import { getBaseUrl, getWebhookBaseUrl } from '../utils/urlHelper';
-import { emitMatchUpdate, emitBracketUpdate } from '../services/socketService';
+import { emitMatchUpdate, emitBracketUpdate, emitHudProjectionInvalidated } from '../services/socketService';
 import { generateMatchConfig } from '../services/matchConfigBuilder';
 import { enrichMatch } from '../utils/matchEnrichment';
 import { matchLiveStatsService } from '../services/matchLiveStatsService';
@@ -21,6 +21,7 @@ import { serverAllocationTracker } from '../services/serverAllocationTracker';
 import { operatorControlService } from '../services/operatorControlService';
 import { matchExecutionLockService } from '../services/matchExecutionLockService';
 import { applyAdminMatchAccess } from '../services/matchConfigAccessService';
+import { hudProjectionService } from '../services/hudProjectionService';
 
 const router = Router();
 
@@ -1210,6 +1211,21 @@ router.post('/:slug/operator-action', requireAuth, async (req: Request, res: Res
         error: 'Unknown operator action',
       });
     }
+
+      // A one-server broadcast follows the veto that the operator just opened.
+      // This intentionally replaces an older selection, so one fixed OBS URL
+      // always follows the current broadcast match like JTs-Hud does.
+      const selectedBroadcastMatch = await hudProjectionService.getBroadcastMatchSlug();
+      if (action === 'open_veto') {
+        await hudProjectionService.setBroadcastMatch(slug);
+        emitHudProjectionInvalidated('broadcast-match-auto-selected');
+      } else if (
+        (action === 'hold' || action === 'postpone') &&
+        selectedBroadcastMatch === slug
+      ) {
+        await hudProjectionService.setBroadcastMatch(null);
+        emitHudProjectionInvalidated('broadcast-match-cleared');
+      }
 
       const updatedMatch = await getMatchDetailsBySlug(slug);
       emitMatchUpdate(updatedMatch ?? { slug });

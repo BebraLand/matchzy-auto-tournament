@@ -24,6 +24,7 @@ import ConnectSteam from './pages/ConnectSteam';
 import Maps from './pages/Maps';
 import Templates from './pages/Templates';
 import ELOTemplates from './pages/ELOTemplates';
+import BroadcastVeto from './pages/BroadcastVeto';
 import Layout from './components/layout/Layout';
 import NotFound from './pages/NotFound';
 import { theme } from './theme';
@@ -180,7 +181,6 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/"
         element={
@@ -210,18 +210,30 @@ function AppRoutes() {
   );
 }
 
+function AuthenticatedApp() {
+  return (
+    <AuthProvider>
+      <SnackbarProvider>
+        <PageHeaderProvider>
+          <AppRoutes />
+        </PageHeaderProvider>
+      </SnackbarProvider>
+    </AuthProvider>
+  );
+}
+
 export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <AuthProvider>
-          <SnackbarProvider>
-            <PageHeaderProvider>
-              <AppRoutes />
-            </PageHeaderProvider>
-          </SnackbarProvider>
-        </AuthProvider>
+        <Routes>
+          {/* OBS needs a truly standalone source. Keep it outside AuthProvider so
+              a fresh browser source never waits on a Steam session bootstrap. */}
+          <Route path="/broadcast/veto" element={<BroadcastVeto />} />
+          <Route path="/broadcast/veto/:matchSlug" element={<BroadcastVeto />} />
+          <Route path="*" element={<AuthenticatedApp />} />
+        </Routes>
       </BrowserRouter>
     </ThemeProvider>
   );

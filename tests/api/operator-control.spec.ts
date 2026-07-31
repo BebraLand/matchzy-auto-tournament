@@ -144,6 +144,7 @@ test.describe.serial('Operator-controlled execution queue', () => {
   });
 
   test('keeps bracket order while execution order changes to 1,3,4,2', async ({
+    browser,
     page,
     request,
   }) => {
@@ -448,6 +449,31 @@ test.describe.serial('Operator-controlled execution queue', () => {
         }),
       ])
     );
+    const currentBroadcastVeto = await request.get('/api/integrations/jts-hud/broadcast-veto');
+    expect(currentBroadcastVeto.ok(), await currentBroadcastVeto.text()).toBeTruthy();
+    expect((await currentBroadcastVeto.json()).veto.matchSlug).toBe(match3.slug);
+
+    // The OBS browser source is public and read-only. It must render the same
+    // authoritative veto state as the player page, then receive player actions
+    // through Socket.IO without a page reload.
+    const broadcastContext = await browser.newContext();
+    const broadcastPage = await broadcastContext.newPage();
+    await broadcastPage.goto(
+      `${process.env.FRONTEND_BASE_URL || 'http://127.0.0.1:13071'}/broadcast/veto`
+    );
+    await expect(broadcastPage.getByTestId('broadcast-veto-show')).toBeVisible();
+    await expect(broadcastPage.getByTestId('broadcast-veto-map-de_cache')).toBeVisible();
+    await expect(broadcastPage.getByRole('button')).toHaveCount(0);
+    await broadcastPage.evaluate(() => {
+      (window as typeof window & { __broadcastVetoRealtimeMarker?: string }).__broadcastVetoRealtimeMarker =
+        'obs-page-was-not-reloaded';
+    });
+
+    // Drop the Socket.IO connection before the first action. The overlay must
+    // recover from its own reconnect with an authoritative GET, not by reloading
+    // the browser source or relying on the missed event being replayed.
+    await broadcastContext.setOffline(true);
+    await broadcastPage.waitForTimeout(250);
 
     // Keep Operator Control Room open while the players finish veto. The match
     // must transition to READY and expose Prepare without an operator reload.
@@ -466,6 +492,7 @@ test.describe.serial('Operator-controlled execution queue', () => {
       currentAction: 'ban' | 'pick' | 'side_pick';
       availableMaps: string[];
     };
+    let broadcastReceivedFirstAction = false;
     while (vetoState.status !== 'completed') {
       const actingTeamId =
         vetoState.currentTurn === 'team1' ? match3.team1!.id : match3.team2!.id;
@@ -482,7 +509,22 @@ test.describe.serial('Operator-controlled execution queue', () => {
       });
       expect(actionResponse.ok(), await actionResponse.text()).toBeTruthy();
       vetoState = (await actionResponse.json()).veto;
+      if (!broadcastReceivedFirstAction) {
+        await broadcastContext.setOffline(false);
+        await expect(broadcastPage.getByText('BAN', { exact: true })).toBeVisible();
+        expect(
+          await broadcastPage.evaluate(
+            () =>
+              (window as typeof window & { __broadcastVetoRealtimeMarker?: string })
+                .__broadcastVetoRealtimeMarker
+          )
+        ).toBe('obs-page-was-not-reloaded');
+        broadcastReceivedFirstAction = true;
+      }
     }
+
+    await broadcastPage.close();
+    await broadcastContext.close();
 
     await expect(operatorMatch3).toContainText('Prepare');
 
