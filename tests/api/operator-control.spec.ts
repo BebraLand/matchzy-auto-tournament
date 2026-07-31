@@ -183,9 +183,9 @@ test.describe.serial('Operator-controlled execution queue', () => {
     });
     expect(authenticatedEvent.status()).toBe(400);
 
-    // MatchZy Enhanced compatibility: some builds emit a series_end-shaped
-    // payload with the final map ROUND score (3-1) before loading Map 2. MAT
-    // must not complete a BO3 until a plausible maps-won score arrives.
+    // Regression: CS2 reports GamePhase=postgame after every completed map.
+    // MatchZy Enhanced exposes that in match reports, but it is only the
+    // inter-map state of a BO3, not a completed series.
     const bo3GuardSlug = `bo3-series-guard-${Date.now()}`;
     const createBo3Guard = await request.post('/api/matches', {
       data: {
@@ -220,61 +220,24 @@ test.describe.serial('Operator-controlled execution queue', () => {
     expect(afterProductionMapResult.ok(), await afterProductionMapResult.text()).toBeTruthy();
     expect((await afterProductionMapResult.json()).match.status).not.toBe('completed');
 
-    const prematureSeriesEnd = await request.post('/api/events', {
+    const interMapPostgameReport = await request.post('/api/events/report', {
       headers: { 'x-matchzy-token': TEST_SERVER_TOKEN },
       data: {
-        event: 'series_end',
-        matchid: bo3GuardSlug,
-        team1_series_score: 1,
-        team2_series_score: 0,
-        winner: 'team1',
-        time_until_restore: 0,
+        serverId: `test-server-${bo3GuardSlug}`,
+        matchSlug: bo3GuardSlug,
+        report: {
+          match: {
+            phase: 'postgame',
+            map: { index: 0, total: 3 },
+            score: { team1: 3, team2: 0, series: { team1: 1, team2: 0 } },
+          },
+        },
       },
     });
-    expect(prematureSeriesEnd.ok(), await prematureSeriesEnd.text()).toBeTruthy();
-    const afterPrematureSeriesEnd = await request.get(`/api/matches/${bo3GuardSlug}`);
-    expect(afterPrematureSeriesEnd.ok(), await afterPrematureSeriesEnd.text()).toBeTruthy();
-    expect((await afterPrematureSeriesEnd.json()).match.status).not.toBe('completed');
-
-    const impossibleSeriesEnd = await request.post('/api/events', {
-      headers: { 'x-matchzy-token': TEST_SERVER_TOKEN },
-      data: {
-        event: 'series_end',
-        matchid: bo3GuardSlug,
-        team1_series_score: 3,
-        team2_series_score: 1,
-        winner: 'team1',
-        time_until_restore: 0,
-      },
-    });
-    expect(impossibleSeriesEnd.ok(), await impossibleSeriesEnd.text()).toBeTruthy();
-    const afterImpossibleSeriesEnd = await request.get(`/api/matches/${bo3GuardSlug}`);
-    expect(afterImpossibleSeriesEnd.ok(), await afterImpossibleSeriesEnd.text()).toBeTruthy();
-    expect((await afterImpossibleSeriesEnd.json()).match.status).not.toBe('completed');
-
-    await recordMapResult({
-      matchSlug: bo3GuardSlug,
-      mapNumber: 1,
-      mapName: 'de_dust2',
-      team1Score: 3,
-      team2Score: 2,
-      winnerTeam: 'team1',
-    });
-    const finalImpossibleSeriesEnd = await request.post('/api/events', {
-      headers: { 'x-matchzy-token': TEST_SERVER_TOKEN },
-      data: {
-        event: 'series_end',
-        matchid: bo3GuardSlug,
-        team1_series_score: 3,
-        team2_series_score: 2,
-        winner: 'team1',
-        time_until_restore: 0,
-      },
-    });
-    expect(finalImpossibleSeriesEnd.ok(), await finalImpossibleSeriesEnd.text()).toBeTruthy();
-    const afterRecoveredSeriesEnd = await request.get(`/api/matches/${bo3GuardSlug}`);
-    expect(afterRecoveredSeriesEnd.ok(), await afterRecoveredSeriesEnd.text()).toBeTruthy();
-    expect((await afterRecoveredSeriesEnd.json()).match.status).toBe('completed');
+    expect(interMapPostgameReport.ok(), await interMapPostgameReport.text()).toBeTruthy();
+    const afterInterMapPostgame = await request.get(`/api/matches/${bo3GuardSlug}`);
+    expect(afterInterMapPostgame.ok(), await afterInterMapPostgame.text()).toBeTruthy();
+    expect((await afterInterMapPostgame.json()).match.status).not.toBe('completed');
 
     await request.delete(`/api/matches/${bo3GuardSlug}`);
     await request.delete('/api/tournament');

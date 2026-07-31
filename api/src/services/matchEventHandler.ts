@@ -771,92 +771,12 @@ async function handleSeriesEnd(event: MatchZyEvent): Promise<void> {
 
   let team1Score = Number(eventData.team1_series_score) || 0;
   let team2Score = Number(eventData.team2_series_score) || 0;
-  const config = parseMatchConfig(match.config);
-  const totalMaps = config?.num_maps ?? 1;
-  const requiredWins = Math.max(1, Math.ceil(totalMaps / 2));
-  let recoveredWinner: 'team1' | 'team2' | undefined;
-
-  // MatchZy Enhanced variants can emit a `series_end`-shaped event after an
-  // individual map, carrying the current maps-won score (for example 1-0 in
-  // a BO3). That is not a terminal series result. Only accept series_end as
-  // final when its score reaches the required number of map wins, or when the
-  // persisted map results prove that the series has already reached it.
-  if (totalMaps > 1) {
-    const mapResults = await getMapResults(match.slug);
-    const recordedTeam1Wins = mapResults.filter((result) => result.winnerTeam === 'team1').length;
-    const recordedTeam2Wins = mapResults.filter((result) => result.winnerTeam === 'team2').length;
-    // A maps-won score can never exceed the BO win target. MatchZy Enhanced
-    // sometimes puts the final ROUND score here (e.g. Cache 0-3), which must
-    // never be interpreted as a BO3 result. Scores above requiredWins are
-    // accepted only after MAT's persisted per-map results prove the series.
-    const hasPlausibleTerminalSeriesScore =
-      (team1Score === requiredWins && team2Score < requiredWins) ||
-      (team2Score === requiredWins && team1Score < requiredWins);
-    const hasTerminalSeriesScore =
-      hasPlausibleTerminalSeriesScore ||
-      recordedTeam1Wins >= requiredWins ||
-      recordedTeam2Wins >= requiredWins;
-
-    if (!hasTerminalSeriesScore) {
-      log.warn('Ignoring premature series_end before BO series is won', {
-        matchId: event.matchid,
-        slug: match.slug,
-        totalMaps,
-        requiredWins,
-        team1Score,
-        team2Score,
-        recordedTeam1Wins,
-        recordedTeam2Wins,
-      });
-
-      // If this alias also contains the current map's round score, process it
-      // as a map completion so the next-map state and map result are retained.
-      const hasMapScore =
-        eventData.team1_score !== undefined ||
-        eventData.team2_score !== undefined ||
-        extractNestedNumber(eventData, ['team1', 'score']) !== undefined ||
-        extractNestedNumber(eventData, ['team2', 'score']) !== undefined;
-      if (hasMapScore && mapResults.length === 0) {
-        await handleMapCompletion(match, event, eventData);
-      }
-      return;
-    }
-  }
-
-  // Some MatchZy Enhanced builds emit a series_end-shaped payload after each
-  // map with the final ROUND score in team*_series_score (for example 3-1 in
-  // a BO3). Validate impossible map scores against MAT's persisted map results:
-  // before Map 2 they are ignored; after a team has actually won enough maps,
-  // the persisted maps-won total becomes the authoritative final series score.
-  if (totalMaps > 1 && (team1Score > requiredWins || team2Score > requiredWins)) {
-    const mapResults = await getMapResults(match.slug);
-    const recordedTeam1Wins = mapResults.filter((result) => result.winnerTeam === 'team1').length;
-    const recordedTeam2Wins = mapResults.filter((result) => result.winnerTeam === 'team2').length;
-
-    if (recordedTeam1Wins < requiredWins && recordedTeam2Wins < requiredWins) {
-      log.warn('Ignoring impossible series_end score; treating it as a map-end alias', {
-        matchId: event.matchid,
-        slug: match.slug,
-        totalMaps,
-        requiredWins,
-        team1Score,
-        team2Score,
-        recordedTeam1Wins,
-        recordedTeam2Wins,
-      });
-      return;
-    }
-
-    team1Score = recordedTeam1Wins;
-    team2Score = recordedTeam2Wins;
-    recoveredWinner = recordedTeam1Wins >= requiredWins ? 'team1' : 'team2';
-  }
-
-  // Prefer the explicit winner field from the plugin. MatchZy variants use
-  // either winner: 'team1' or winner: { team: 'team1' }. When the payload had
-  // impossible scores, persisted map results above are authoritative instead.
+  // `series_end` is emitted by MatchZy Enhanced only after the plugin's
+  // per-team map-win counter reaches the format's required wins. In contrast,
+  // `map_result` carries current-map round scores and updates each team's
+  // nested `series_score`. Keep those event contracts separate.
   const rawWinner = eventData.winner;
-  const winnerTeamFromEvent = recoveredWinner ?? (
+  const winnerTeamFromEvent = (
     typeof rawWinner === 'string'
       ? rawWinner
       : (rawWinner as { team?: string } | undefined)?.team

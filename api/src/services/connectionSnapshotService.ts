@@ -511,10 +511,12 @@ async function reconcileMatchStatusFromPhase(
       targetStatus = 'live';
       break;
     case 'postgame':
-      // Keep using our existing "completed" semantics at the DB level;
-      // postgame at the plugin level means the series is effectively done.
-      targetStatus = 'completed';
-      break;
+      // CS2 enters GamePhase 5 after *each map*. MatchZy therefore reports
+      // "postgame" during the BO3/BO5 intermission as well as after the
+      // decisive map. A match report is only a live-state snapshot: it cannot
+      // decide bracket progression. `series_end` is the sole event allowed to
+      // mark a match completed.
+      return;
     default:
       // warmup / veto / etc. don't require reconciliation
       return;
