@@ -200,6 +200,26 @@ test.describe.serial('Operator-controlled execution queue', () => {
       },
     });
     expect(createBo3Guard.ok(), await createBo3Guard.text()).toBeTruthy();
+
+    // Exact MatchZy Enhanced payload captured from production match r1m1 / #36:
+    // Map 0 ends 3-0, while the BO3 series is only 1-0. This must advance to
+    // the next map, not mark the match or tournament completed.
+    const productionMapResult = await request.post('/api/events', {
+      headers: { 'x-matchzy-token': TEST_SERVER_TOKEN },
+      data: {
+        event: 'map_result',
+        matchid: bo3GuardSlug,
+        map_number: 0,
+        winner: { side: '2', team: 'team1' },
+        team1: { series_score: 1, score: 3, score_ct: 0, score_t: 0, players: [] },
+        team2: { series_score: 0, score: 0, score_ct: 0, score_t: 0, players: [] },
+      },
+    });
+    expect(productionMapResult.ok(), await productionMapResult.text()).toBeTruthy();
+    const afterProductionMapResult = await request.get(`/api/matches/${bo3GuardSlug}`);
+    expect(afterProductionMapResult.ok(), await afterProductionMapResult.text()).toBeTruthy();
+    expect((await afterProductionMapResult.json()).match.status).not.toBe('completed');
+
     const impossibleSeriesEnd = await request.post('/api/events', {
       headers: { 'x-matchzy-token': TEST_SERVER_TOKEN },
       data: {
@@ -216,14 +236,6 @@ test.describe.serial('Operator-controlled execution queue', () => {
     expect(afterImpossibleSeriesEnd.ok(), await afterImpossibleSeriesEnd.text()).toBeTruthy();
     expect((await afterImpossibleSeriesEnd.json()).match.status).not.toBe('completed');
 
-    await recordMapResult({
-      matchSlug: bo3GuardSlug,
-      mapNumber: 0,
-      mapName: 'de_nuke',
-      team1Score: 3,
-      team2Score: 1,
-      winnerTeam: 'team1',
-    });
     await recordMapResult({
       matchSlug: bo3GuardSlug,
       mapNumber: 1,
