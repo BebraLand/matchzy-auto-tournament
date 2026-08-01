@@ -245,6 +245,19 @@ class TournamentService {
 
     // Delete tournament (CASCADE will also delete matches and events)
     await db.execAsync('DELETE FROM tournament WHERE id = 1');
+
+    // Simulation data is ephemeral. A removed tournament must never leave synthetic
+    // teams or players in the operator's real roster.
+    await db.execAsync(`
+      DELETE FROM players
+      WHERE id IN (
+        SELECT player->>'steamId'
+        FROM teams, jsonb_array_elements(players::jsonb) AS player
+        WHERE teams.id LIKE 'simulation-%'
+      )
+    `);
+    await db.execAsync("DELETE FROM teams WHERE id LIKE 'simulation-%'");
+
     // Bracket slugs (for example r1m1) are reused by the next tournament.
     // Never allow its in-memory telemetry to be projected onto new DB rows.
     matchLiveStatsService.clearAll();
