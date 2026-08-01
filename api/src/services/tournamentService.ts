@@ -245,6 +245,9 @@ class TournamentService {
 
     // Delete tournament (CASCADE will also delete matches and events)
     await db.execAsync('DELETE FROM tournament WHERE id = 1');
+    // Bracket slugs (for example r1m1) are reused by the next tournament.
+    // Never allow its in-memory telemetry to be projected onto new DB rows.
+    matchLiveStatsService.clearAll();
     serverAllocationTracker.reset();
     log.debug('Tournament deleted from database');
   }
@@ -264,6 +267,8 @@ class TournamentService {
 
     // Delete existing matches
     await db.execAsync('DELETE FROM matches WHERE tournament_id = 1');
+    // A regenerated bracket also reuses round/match slugs.
+    matchLiveStatsService.clearAll();
 
     let matches: BracketMatch[] = [];
 

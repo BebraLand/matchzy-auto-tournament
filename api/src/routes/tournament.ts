@@ -13,6 +13,7 @@ import type { DbMatchRow } from '../types/database.types';
 import type { MatchConfig } from '../types/match.types';
 import { emitTournamentUpdate, emitBracketUpdate, emitHudProjectionInvalidated } from '../services/socketService';
 import { hudProjectionService } from '../services/hudProjectionService';
+import { matchLiveStatsService } from '../services/matchLiveStatsService';
 import {
   createShuffleTournament,
   registerPlayers,
@@ -1153,6 +1154,7 @@ router.post('/wipe-table/:table', async (req: Request, res: Response) => {
       await db.execAsync('DELETE FROM match_map_results');
       await db.execAsync('DELETE FROM player_match_stats');
       await db.execAsync('DELETE FROM matches');
+      matchLiveStatsService.clearAll();
     } else if (table === 'players') {
       // Delete related data first
       await db.execAsync('DELETE FROM player_rating_history');
