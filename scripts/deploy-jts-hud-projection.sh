@@ -14,8 +14,10 @@ rollback() {
   trap - ERR
   echo "DEPLOY FAILED, restoring $ROLLBACK_IMAGE..." >&2
   if [[ "$ROLLBACK_READY" == '1' ]]; then
-    MAT_IMAGE="$ROLLBACK_IMAGE" "${COMPOSE[@]}" up -d \
-      --no-deps --force-recreate matchzy-tournament || true
+    if ! MAT_IMAGE="$ROLLBACK_IMAGE" "${COMPOSE[@]}" up -d \
+      --no-deps --force-recreate matchzy-tournament; then
+      echo "ROLLBACK FAILED: Docker Compose could not start $ROLLBACK_IMAGE." >&2
+    fi
   fi
   exit "$code"
 }
@@ -50,8 +52,9 @@ BACKUP="backups/pre-jts-hud-${STAMP}.sql.gz"
 [[ -s "$BACKUP" ]]
 
 echo '[4/7] Capturing rollback image...'
-CURRENT_CONTAINER="$("${COMPOSE[@]}" ps -q matchzy-tournament)"
+CURRENT_CONTAINER="$("${COMPOSE[@]}" ps -q --all matchzy-tournament | head -n 1)"
 [[ -n "$CURRENT_CONTAINER" ]]
+[[ "$(docker inspect --format '{{.State.Running}}' "$CURRENT_CONTAINER")" == 'true' ]]
 CURRENT_IMAGE_ID="$(docker inspect --format '{{.Image}}' "$CURRENT_CONTAINER")"
 docker image tag "$CURRENT_IMAGE_ID" "$ROLLBACK_IMAGE"
 ROLLBACK_READY=1
