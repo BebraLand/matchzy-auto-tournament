@@ -681,12 +681,8 @@ const Tournament: React.FC = () => {
         seedingMethod: 'random',
       };
 
-      const simulation =
-        selectedTeams.length > 0 && selectedTeams.every((teamId) => teamId.startsWith('simulation-'));
       const settings = {
         ...baseSettings,
-        simulation,
-        simulationTimescale: simulation ? 1 : undefined,
         grandFinalMode: type === 'double_elimination' ? grandFinalMode : 'none',
       };
 

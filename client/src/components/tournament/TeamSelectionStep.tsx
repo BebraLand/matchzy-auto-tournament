@@ -19,7 +19,6 @@ interface TeamSelectionStepProps {
   onImportTeams?: () => void;
   onAddServer?: () => void;
   onBatchAddServers?: () => void;
-  onGenerateBotTeams?: (teamCount: number) => void;
 }
 
 export function TeamSelectionStep({
@@ -37,7 +36,6 @@ export function TeamSelectionStep({
   onImportTeams,
   onAddServer,
   onBatchAddServers,
-  onGenerateBotTeams,
 }: TeamSelectionStepProps) {
   // Hide shuffle-generated temporary teams from selection (IDs prefixed with "shuffle-")
   const selectableTeams = teams.filter((team) => !team.id.startsWith('shuffle-'));
@@ -56,21 +54,6 @@ export function TeamSelectionStep({
           variant="outlined"
         />
       </Box>
-
-      {onGenerateBotTeams && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            Solo test: generate bot teams, then configure this tournament normally. Bot teams auto-veto after the tournament starts.
-          </Typography>
-          <Box display="flex" gap={1}>
-            {[4, 6, 8].map((teamCount) => (
-              <Button key={teamCount} size="small" variant="outlined" onClick={() => onGenerateBotTeams(teamCount)}>
-                Generate {teamCount} bot teams
-              </Button>
-            ))}
-          </Box>
-        </Alert>
-      )}
 
       {/* Team Count Validation Alert */}
       {teamCountValidation && !teamCountValidation.isValid && (

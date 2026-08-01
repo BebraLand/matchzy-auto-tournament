@@ -290,22 +290,7 @@ export function TournamentFormSteps({
     }
   };
 
-  const { showWarning, showSuccess, showError } = useSnackbar();
-
-  const handleGenerateBotTeams = async (teamCount: number) => {
-    try {
-      const response = await api.post<{ success: boolean; teamIds: string[]; error?: string }>(
-        '/api/tournament/simulation/teams',
-        { teamCount }
-      );
-      if (!response.success) throw new Error(response.error || 'Failed to generate bot teams');
-      await onRefreshTeams?.();
-      onTeamsChange(response.teamIds);
-      showSuccess(`${teamCount} bot teams generated and selected. Continue configuring your tournament.`);
-    } catch (error) {
-      showError(error instanceof Error ? error.message : 'Failed to generate bot teams');
-    }
-  };
+  const { showWarning } = useSnackbar();
 
   // Use verification rules system
   const mapValidation = validateMapCount(maps, type, format);
@@ -644,7 +629,6 @@ export function TournamentFormSteps({
               canEdit={canEdit}
               saving={saving}
               onTeamsChange={onTeamsChange}
-              onGenerateBotTeams={handleGenerateBotTeams}
               onCreateTeam={() => setTeamModalOpen(true)}
               onImportTeams={() => setTeamImportModalOpen(true)}
               onAddServer={() => {

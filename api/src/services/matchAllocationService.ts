@@ -1445,7 +1445,7 @@ export class MatchAllocationService {
         emitBracketUpdate({ action: 'tournament_started' });
       }
 
-      if (operatorControlled && tournament.settings?.simulation !== true) {
+      if (operatorControlled) {
         await operatorControlService.ensureQueuePositions();
         return {
           success: true,
@@ -1462,8 +1462,7 @@ export class MatchAllocationService {
       // - Fresh bracket matches in 'pending' status, and
       // - Matches in 'ready' status with no veto_state and no server assigned
       //   (e.g. finals created before we enabled full auto-veto).
-      const simulationEnabled =
-        tournament.settings?.simulation === true || (await settingsService.isSimulationModeEnabled());
+      const simulationEnabled = await settingsService.isSimulationModeEnabled();
       if (simulationEnabled) {
         log.info(
           '[VETO-SIM] Simulation mode enabled – auto-veto will run for all pending matches with resolved teams.'
@@ -1556,7 +1555,7 @@ export class MatchAllocationService {
         emitBracketUpdate({ action: 'tournament_started' });
       }
 
-      if (operatorControlled && tournament.settings?.simulation !== true) {
+      if (operatorControlled) {
         await operatorControlService.ensureQueuePositions();
         return {
           success: true,
