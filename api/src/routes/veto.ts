@@ -689,9 +689,17 @@ router.post('/:matchSlug/action', async (req: Request, res: Response) => {
         pickedMaps: vetoState.pickedMaps.map((m: { mapName: string }) => m.mapName),
       });
 
-      // Update match status to 'ready' now that veto is completed
-      await db.updateAsync('matches', { status: 'ready' }, 'slug = ?', [matchSlug]);
-      log.info(`Match ${matchSlug} status updated to 'ready' after veto completion`);
+      // Persist the completed veto before generating the MatchZy config. The
+      // config builder reads veto_state back from the database; saving it only
+      // at the end of this request made it see the old pool and briefly choose
+      // its first map (for example Mirage) instead of the veto winner.
+      await db.updateAsync(
+        'matches',
+        { status: 'ready', veto_state: JSON.stringify(vetoState) },
+        'slug = ?',
+        [matchSlug]
+      );
+      log.info(`Match ${matchSlug} status and completed veto saved before config generation`);
 
       // NEW: Recompute and persist the fresh config snapshot so /api/matches and any readers of matches.config are in sync
       const t = await db.queryOneAsync<DbTournamentRow>('SELECT * FROM tournament WHERE id = ?', [
