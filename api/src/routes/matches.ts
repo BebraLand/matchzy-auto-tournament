@@ -1156,6 +1156,8 @@ router.post('/:slug/operator-action', requireAuth, async (req: Request, res: Res
       );
     } else if (action === 'open_veto') {
       match = await operatorControlService.openVeto(slug);
+      const { autoCompleteVetoForMatch } = await import('../services/vetoSimulationService');
+      void autoCompleteVetoForMatch(slug, { stepDelayMs: 1000 });
     } else if (action === 'postpone') {
       match = await matchExecutionLockService.runExclusive(slug, async () => {
         // Re-read inside the same lock used by allocation. The route-level
