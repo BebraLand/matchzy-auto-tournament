@@ -299,6 +299,18 @@ export default function Matches() {
 
         const removeMatch = (list: Match[]) => list.filter((m) => !matchIdOrSlugEquals(m));
 
+        // Live telemetry is intentionally a partial payload: it must update an
+        // existing card without being mistaken for a durable DB lifecycle
+        // transition (warmup/halftime are phases, not Match.status values).
+        if (match.liveStats && typeof match.status !== 'string') {
+          const patchExisting = (list: Match[]) =>
+            list.some(matchIdOrSlugEquals) ? upsertMatch(list, match) : list;
+          setUpcomingMatches(patchExisting);
+          setLiveMatches(patchExisting);
+          setMatchHistory(patchExisting);
+          return;
+        }
+
         if (match.deleted) {
           setUpcomingMatches((prev) => removeMatch(prev));
           setLiveMatches((prev) => removeMatch(prev));

@@ -109,15 +109,15 @@ export async function handleMatchEvent(event: MatchZyEvent): Promise<void> {
           });
           break;
         }
-        await updateMatchStatus(liveMatch, 'live');
-        playerConnectionService.markAllReady(liveMatch.slug);
-        updateLiveStats(liveMatch, parseScorePayload(eventData, 'live'));
         await db.updateAsync(
           'matches',
           { current_map: eventData.map_name, map_number: eventData.map_number },
           'id = ?',
           [liveMatch.id]
         );
+        await updateMatchStatus(liveMatch, 'live');
+        playerConnectionService.markAllReady(liveMatch.slug);
+        updateLiveStats(liveMatch, parseScorePayload(eventData, 'live'));
       } else {
         log.warn(`Going live event received for unknown match`, { matchId: event.matchid });
       }
@@ -444,6 +444,7 @@ function updateLiveStats(match: DbMatchRow, updates: Partial<MatchLiveStats>): v
   emitMatchUpdate({
     slug: match.slug,
     liveStats: stats,
+    matchPhase: stats.status === 'postgame' ? 'post_match' : undefined,
   });
 }
 

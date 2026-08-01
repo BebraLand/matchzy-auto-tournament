@@ -342,9 +342,7 @@ async function updateLiveStatsFromReport(matchSlug: string, report: MatchReport)
   emitMatchUpdate({
     slug: matchSlug,
     liveStats: stats,
-    // Use the mapped status for all UIs so phases like "going_live" and
-    // "warmup_ended" are treated as LIVE rather than a separate state.
-    status: mappedStatus,
+    matchPhase: stats.status === 'postgame' ? 'post_match' : undefined,
     team1Score: stats.team1SeriesScore,
     team2Score: stats.team2SeriesScore,
   });
