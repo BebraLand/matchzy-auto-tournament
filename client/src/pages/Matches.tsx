@@ -29,6 +29,7 @@ import ConfirmDialog from '../components/modals/ConfirmDialog';
 import { useTranslation } from 'react-i18next';
 import {
   OperatorControlRoom,
+  type MatchRuling,
   type OperatorAction,
   type TournamentControlMode,
 } from '../components/matches/OperatorControlRoom';
@@ -623,6 +624,41 @@ export default function Matches() {
     }
   };
 
+  const handleMatchRuling = async (match: Match, ruling: MatchRuling) => {
+    const winnerName =
+      ruling.kind === 'technical_win'
+        ? ruling.winnerSide === 'team1'
+          ? match.team1?.name || 'Team 1'
+          : match.team2?.name || 'Team 2'
+        : null;
+    const description =
+      ruling.kind === 'technical_win'
+        ? `Record a technical win for ${winnerName}. MAT will advance the bracket without changing ELO.`
+        : 'Void this no-show match. It leaves the execution queue immediately, so you can start another match.';
+
+    if (!window.confirm(`${description}\n\nContinue?`)) return;
+    const reason = window.prompt('Reason for the tournament ruling (saved to the audit log):');
+    if (!reason?.trim()) {
+      showError('A ruling reason is required');
+      return;
+    }
+
+    setOperatorBusyKey(match.slug);
+    try {
+      await api.post(`/api/matches/${match.slug}/ruling`, { ...ruling, reason });
+      showSuccess(
+        ruling.kind === 'technical_win'
+          ? `Technical win recorded: ${winnerName}`
+          : `No-show voided: ${match.slug}. The next queued match can now be started.`
+      );
+      await fetchMatches();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to apply tournament ruling');
+    } finally {
+      setOperatorBusyKey(null);
+    }
+  };
+
   const handleQueueReorder = async (slugs: string[]) => {
     setOperatorBusyKey('queue');
     try {
@@ -718,6 +754,7 @@ export default function Matches() {
           connectionStatuses={connectionStatuses}
           onModeChange={handleControlModeChange}
           onAction={handleOperatorAction}
+          onRuling={handleMatchRuling}
           onReorder={handleQueueReorder}
         />
       )}

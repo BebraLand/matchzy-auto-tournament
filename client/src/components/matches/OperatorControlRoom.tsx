@@ -38,6 +38,10 @@ export type OperatorAction =
   | 'go_live'
   | 'start_next_map';
 
+export type MatchRuling =
+  | { kind: 'technical_win'; winnerSide: 'team1' | 'team2' }
+  | { kind: 'void' };
+
 interface OperatorControlRoomProps {
   matches: Match[];
   controlMode: TournamentControlMode;
@@ -45,6 +49,7 @@ interface OperatorControlRoomProps {
   connectionStatuses: Map<string, { totalConnected: number }>;
   onModeChange: (mode: TournamentControlMode) => Promise<void>;
   onAction: (match: Match, action: OperatorAction) => Promise<void>;
+  onRuling: (match: Match, ruling: MatchRuling) => Promise<void>;
   onReorder: (slugs: string[]) => Promise<void>;
 }
 
@@ -84,6 +89,7 @@ export function OperatorControlRoom({
   connectionStatuses,
   onModeChange,
   onAction,
+  onRuling,
   onReorder,
 }: OperatorControlRoomProps) {
   const queued = matches
@@ -319,6 +325,37 @@ export function OperatorControlRoom({
                               </Button>
                             </span>
                           </Tooltip>
+                        )}
+                        <Button
+                          size="small"
+                          color="error"
+                          disabled={busy}
+                          onClick={() =>
+                            void onRuling(match, { kind: 'technical_win', winnerSide: 'team1' })
+                          }
+                        >
+                          Tech win {teamName(match, 'team1')}
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          disabled={busy}
+                          onClick={() =>
+                            void onRuling(match, { kind: 'technical_win', winnerSide: 'team2' })
+                          }
+                        >
+                          Tech win {teamName(match, 'team2')}
+                        </Button>
+                        {unstarted && (
+                          <Button
+                            size="small"
+                            color="error"
+                            variant="outlined"
+                            disabled={busy}
+                            onClick={() => void onRuling(match, { kind: 'void' })}
+                          >
+                            Void no-show
+                          </Button>
                         )}
                       </>
                     )}

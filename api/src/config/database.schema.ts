@@ -140,6 +140,22 @@ export function getSchemaSQL(): string {
     CREATE INDEX IF NOT EXISTS idx_matches_team_from_match1 ON matches(team1_from_match_id);
     CREATE INDEX IF NOT EXISTS idx_matches_team_from_match2 ON matches(team2_from_match_id);
 
+    -- Immutable tournament-operator decisions. A void is terminal for scheduling,
+    -- while a technical win also uses the normal bracket progression path.
+    CREATE TABLE IF NOT EXISTS match_rulings (
+      id SERIAL PRIMARY KEY,
+      match_slug TEXT NOT NULL,
+      ruling_type TEXT NOT NULL,
+      winner_id TEXT,
+      reason TEXT NOT NULL,
+      admin_steam_id TEXT,
+      created_at INTEGER NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::INTEGER,
+      FOREIGN KEY (match_slug) REFERENCES matches(slug) ON DELETE CASCADE,
+      FOREIGN KEY (winner_id) REFERENCES teams(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_match_rulings_match_slug ON match_rulings(match_slug);
+
     -- Match events table
     CREATE TABLE IF NOT EXISTS match_events (
       id SERIAL PRIMARY KEY,

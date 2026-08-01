@@ -22,6 +22,8 @@ import { operatorControlService } from '../services/operatorControlService';
 import { matchExecutionLockService } from '../services/matchExecutionLockService';
 import { applyAdminMatchAccess } from '../services/matchConfigAccessService';
 import { hudProjectionService } from '../services/hudProjectionService';
+import { matchRulingService } from '../services/matchRulingService';
+import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
 
 const router = Router();
 
@@ -1270,6 +1272,49 @@ router.post('/:slug/operator-action', requireAuth, async (req: Request, res: Res
         error: message,
         ...(typedError.details ? { details: typedError.details } : {}),
       });
+    }
+  });
+});
+
+/**
+ * POST /api/matches/:slug/ruling
+ * Apply a terminal tournament-operator decision. Unlike emergency force-cancel,
+ * technical wins progress the bracket through the normal winner/loser wiring.
+ */
+router.post('/:slug/ruling', requireAuth, async (req: Request, res: Response) => {
+  const { slug } = req.params;
+  return matchExecutionLockService.runExclusive(slug, async () => {
+    try {
+      const kind = req.body?.kind;
+      const winnerSide = req.body?.winnerSide;
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason : '';
+
+      if (kind !== 'technical_win' && kind !== 'void') {
+        return res.status(400).json({ success: false, error: 'Unknown ruling kind' });
+      }
+      if (kind === 'technical_win' && winnerSide !== 'team1' && winnerSide !== 'team2') {
+        return res.status(400).json({ success: false, error: 'Technical win requires team1 or team2' });
+      }
+
+      const sessionSteamId = (req as Request & { user?: { steamId?: string } }).user?.steamId;
+      const adminSteamId = sessionSteamId ?? getVerifiedPlayerSteamId(req.headers.cookie) ?? null;
+      const result = await matchRulingService.apply({
+        matchSlug: slug,
+        kind,
+        winnerSide,
+        reason,
+        adminSteamId,
+      });
+
+      return res.json({
+        success: true,
+        ruling: kind,
+        match: await getMatchDetailsBySlug(result.match.slug),
+        warnings: result.warnings.length > 0 ? result.warnings : undefined,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to apply match ruling';
+      return res.status(message.includes('not found') ? 404 : 409).json({ success: false, error: message });
     }
   });
 });

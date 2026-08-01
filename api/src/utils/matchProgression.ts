@@ -387,10 +387,15 @@ export async function checkTournamentCompletion(tournamentId: number = 1): Promi
       [tournamentId]
     );
 
-    // Count non-completed matches
+    // A cancelled match is a terminal operator ruling (for example both teams
+    // did not appear). It must not keep the tournament permanently open.
     const pendingMatches = await db.queryOneAsync<{ count: number | string }>(
-      'SELECT COUNT(*) as count FROM matches WHERE tournament_id = ? AND round >= 1 AND status != ?',
-      [tournamentId, 'completed']
+      `SELECT COUNT(*) as count
+       FROM matches
+       WHERE tournament_id = ?
+         AND round >= 1
+         AND status NOT IN ('completed', 'cancelled')`,
+      [tournamentId]
     );
 
     // Get detailed match status breakdown for debugging
