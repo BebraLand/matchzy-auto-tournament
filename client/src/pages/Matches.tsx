@@ -196,10 +196,15 @@ export default function Matches() {
       ) => {
         // Handle connection status updates
         if ('slug' in data && data.slug && 'connectionStatus' in data && data.connectionStatus) {
-          // We still accept connection status payloads here for backward
-          // compatibility, but the Matches list no longer uses the aggregate
-          // counts directly. The detailed Team view pulls live connection
-          // status from its own hook.
+          // OperatorControlRoom reads this map for its Go Live and attendance
+          // labels. Applying the socket payload here keeps 0/2 -> 1/2 (and
+          // reconnects) live without requiring a page refresh.
+          const { slug, connectionStatus } = data;
+          setConnectionStatuses((previous) => {
+            const next = new Map(previous);
+            next.set(slug, { totalConnected: connectionStatus.totalConnected });
+            return next;
+          });
           return;
         }
 

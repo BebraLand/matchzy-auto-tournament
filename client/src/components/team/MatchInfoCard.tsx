@@ -87,15 +87,15 @@ export function MatchInfoCard({
   const mapRoundsTeam2 = liveStats?.team2Score ?? 0;
   const mapNumber = liveStats?.mapNumber ?? match.mapNumber ?? null;
 
-  // A pool entry or veto selection is not the map currently being played.
-  // Before MAT has loaded the match, the server can still be on its previous
-  // default map (for example Mirage), which must never flash as the selected
-  // veto map. Only the loaded/live lifecycle plus server telemetry may label a
-  // map as current.
-  const serverHasLoadedMatchMap = match.status === 'loaded' || match.status === 'live';
-  const currentMapSlug = serverHasLoadedMatchMap
-    ? liveStats?.mapName || match.currentMap || null
-    : null;
+  // `matches.current_map` may still contain the map that was loaded before
+  // this match (for example de_mirage) during server preparation. Only a
+  // MatchZy telemetry phase that has actually crossed into play can label a
+  // map as "current". The veto/config map stays a selected map until then.
+  const hasActiveMapTelemetry =
+    liveStats?.status === 'live' ||
+    liveStats?.status === 'knife' ||
+    liveStats?.status === 'halftime';
+  const currentMapSlug = hasActiveMapTelemetry ? liveStats?.mapName || null : null;
   const currentMapData = useMemo(() => {
     if (!currentMapSlug) return null;
     const mapData = getMapData(currentMapSlug);

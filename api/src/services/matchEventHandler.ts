@@ -7,6 +7,7 @@ import { db } from '../config/database';
 import { log } from '../utils/logger';
 import { emitMatchUpdate, emitBracketUpdate } from './socketService';
 import { playerConnectionService } from './playerConnectionService';
+import { refreshConnectionsFromServer } from './connectionSnapshotService';
 import {
   matchLiveStatsService,
   type MatchLiveStats,
@@ -134,6 +135,15 @@ export async function handleMatchEvent(event: MatchZyEvent): Promise<void> {
         });
         break;
       }
+
+      // CS2 emits player_connect before it has always assigned the player to
+      // CT/T. A direct MatchZy snapshot one second later is authoritative for
+      // both first joins and reconnects, and prevents a stale 0/2 until a page
+      // reload when the early webhook has no usable team slot.
+      setTimeout(() => {
+        void refreshConnectionsFromServer(match.slug, { force: true });
+      }, 1000);
+
       const team = determinePlayerTeam(match, steamId, playerInfo?.team);
       if (!team) {
         log.warn('Could not determine team for player_connect event', {
