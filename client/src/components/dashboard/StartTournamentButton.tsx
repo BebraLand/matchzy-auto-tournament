@@ -42,8 +42,6 @@ export const StartTournamentButton: React.FC<StartTournamentButtonProps> = ({
   const [busyServerCount, setBusyServerCount] = useState<number | null>(null);
   const [loadingServers, setLoadingServers] = useState(false);
   const [enableSimulation, setEnableSimulation] = useState(false);
-  const [simulationTeamCount, setSimulationTeamCount] = useState<number | null>(null);
-  const [creatingSimulation, setCreatingSimulation] = useState(false);
   const isDev = useIsDevelopment();
   const { simulationEnabled, refresh: refreshSimulation } = useSimulationMode();
   const [outdatedServers, setOutdatedServers] = useState<
@@ -220,44 +218,8 @@ export const StartTournamentButton: React.FC<StartTournamentButtonProps> = ({
     }
   };
 
-  const createSimulationTournament = async () => {
-    if (!simulationTeamCount || creatingSimulation) return;
-    setCreatingSimulation(true);
-    setError('');
-    try {
-      await api.post('/api/tournament/simulation', { teamCount: simulationTeamCount });
-      await refreshData();
-      setSuccess(`Created ${simulationTeamCount}-team bot simulation. Open Operator Room and run it normally.`);
-      setSimulationTeamCount(null);
-      navigate('/tournament');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create bot simulation');
-    } finally {
-      setCreatingSimulation(false);
-    }
-  };
-
   return (
     <>
-      <Box sx={{ mb: 1 }}>
-        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-          Solo test: create a real bot tournament
-        </Typography>
-        <Box display="flex" gap={1}>
-          {[4, 6, 8].map((teamCount) => (
-            <Button
-              key={teamCount}
-              size="small"
-              variant="outlined"
-              startIcon={<SmartToyIcon />}
-              disabled={starting || creatingSimulation}
-              onClick={() => setSimulationTeamCount(teamCount)}
-            >
-              Simulate {teamCount}
-            </Button>
-          ))}
-        </Box>
-      </Box>
       <Button
         variant={variant}
         color="success"
@@ -283,22 +245,6 @@ export const StartTournamentButton: React.FC<StartTournamentButtonProps> = ({
           ? 'Start Simulation'
           : 'Start Tournament'}
       </Button>
-
-      <ConfirmDialog
-        open={simulationTeamCount !== null}
-        title="Create bot simulation?"
-        message={
-          <Typography variant="body2" color="text.secondary">
-            This replaces the current inactive tournament with a real {simulationTeamCount}-team bot tournament. Its matches use the normal Operator Room flow: veto, Prepare, Go Live, Start Next Map and reports.
-          </Typography>
-        }
-        confirmLabel={creatingSimulation ? 'Creating...' : 'Create simulation'}
-        cancelLabel="Cancel"
-        confirmColor="warning"
-        loading={creatingSimulation}
-        onConfirm={createSimulationTournament}
-        onCancel={() => !creatingSimulation && setSimulationTeamCount(null)}
-      />
 
       <ConfirmDialog
         open={showConfirm}

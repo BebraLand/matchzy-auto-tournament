@@ -478,6 +478,18 @@ router.post('/simulation', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/simulation/teams', async (req: Request, res: Response) => {
+  try {
+    const teamCount = Number(req.body?.teamCount);
+    const teamIds = await simulationTournamentService.createBotTeams(teamCount);
+    return res.status(201).json({ success: true, teamIds });
+  } catch (error) {
+    const err = error as Error;
+    log.error('Error generating simulation bot teams', err);
+    return res.status(400).json({ success: false, error: err.message || 'Failed to generate bot teams' });
+  }
+});
+
 /**
  * @openapi
  * /api/tournament:

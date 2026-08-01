@@ -29,6 +29,30 @@ function simulationSteamId(runId: string, teamIndex: number, playerIndex: number
  * veto, warmup, Go Live, reporting and map-transition paths as a real event.
  */
 class SimulationTournamentService {
+  async createBotTeams(teamCount: number): Promise<string[]> {
+    if (!SUPPORTED_TEAM_COUNTS.has(teamCount)) {
+      throw new Error('Bot generation supports 4, 6, or 8 teams.');
+    }
+
+    const runId = String(Date.now()).slice(-10);
+    const teamIds: string[] = [];
+    for (let teamIndex = 0; teamIndex < teamCount; teamIndex++) {
+      const teamNumber = teamIndex + 1;
+      const id = simulationTeamId(runId, teamIndex);
+      teamIds.push(id);
+      await teamService.createTeam({
+        id,
+        name: `SIM Team ${teamNumber}`,
+        tag: `S${teamNumber}`,
+        players: Array.from({ length: PLAYERS_PER_TEAM }, (_, playerIndex) => ({
+          steamId: simulationSteamId(runId, teamIndex, playerIndex),
+          name: `SIM ${teamNumber}-${playerIndex + 1}`,
+        })),
+      });
+    }
+    return teamIds;
+  }
+
   async create(teamCount: number): Promise<TournamentResponse> {
     if (!SUPPORTED_TEAM_COUNTS.has(teamCount)) {
       throw new Error('Simulation supports 4, 6, or 8 teams.');
@@ -48,32 +72,14 @@ class SimulationTournamentService {
       previousTournament?.maps && previousTournament.maps.length >= 3
         ? previousTournament.maps.slice(0, 3)
         : DEFAULT_MAPS;
-    const runId = String(Date.now()).slice(-10);
-    const teamIds: string[] = [];
-
     // There is only one active tournament in MAT. Remove its bracket with the
-    // canonical service so stale telemetry and allocation state cannot leak into
-    // reusable bracket slugs. Existing non-simulation teams are deliberately kept.
+    // canonical service so stale telemetry cannot leak into reusable slugs.
     if (previousTournament) {
       await tournamentService.deleteTournament();
     } else {
       matchLiveStatsService.clearAll();
     }
-
-    for (let teamIndex = 0; teamIndex < teamCount; teamIndex++) {
-      const teamNumber = teamIndex + 1;
-      const id = simulationTeamId(runId, teamIndex);
-      teamIds.push(id);
-      await teamService.createTeam({
-        id,
-        name: `SIM Team ${teamNumber}`,
-        tag: `S${teamNumber}`,
-        players: Array.from({ length: PLAYERS_PER_TEAM }, (_, playerIndex) => ({
-          steamId: simulationSteamId(runId, teamIndex, playerIndex),
-          name: `SIM ${teamNumber}-${playerIndex + 1}`,
-        })),
-      });
-    }
+    const teamIds = await this.createBotTeams(teamCount);
 
     // The existing elimination generator intentionally accepts powers of two only.
     // Six teams therefore use MAT's ordinary round-robin generator rather than
