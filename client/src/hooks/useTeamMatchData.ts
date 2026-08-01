@@ -376,6 +376,14 @@ export function useTeamMatchData(teamId: string | undefined): UseTeamMatchDataRe
           fetchConnectionStatus(messageSlug);
           fetchLiveStats(messageSlug);
         }
+
+        // A warmup report proves that Prepare completed, but the socket patch
+        // intentionally carries only live telemetry and may not include the
+        // freshly persisted veto/config maplist. Refresh the authoritative match
+        // projection once so the selected map banner appears without F5.
+        if (data.liveStats?.status === 'warmup') {
+          void loadTeamMatch(true);
+        }
         return;
       }
 
