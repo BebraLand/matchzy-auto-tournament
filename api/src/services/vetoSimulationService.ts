@@ -74,6 +74,14 @@ export async function autoCompleteVetoForMatch(
 ): Promise<void> {
   const stepDelayMs = options?.stepDelayMs ?? DEFAULT_STEP_DELAY_MS;
 
+  const simulationEnabled = await settingsService.isSimulationModeEnabled();
+  if (!simulationEnabled) {
+    log.debug(
+      `[VETO-SIM] Simulation mode disabled; skipping auto veto for match ${matchSlug}`
+    );
+    return;
+  }
+
   const match = await db.queryOneAsync<DbMatchRow>('SELECT * FROM matches WHERE slug = ?', [
     matchSlug,
   ]);
@@ -133,13 +141,6 @@ export async function autoCompleteVetoForMatch(
     completed_at: t.completed_at,
     teams: [],
   };
-
-  const simulationEnabled =
-    tournament.settings?.simulation === true || (await settingsService.isSimulationModeEnabled());
-  if (!simulationEnabled) {
-    log.debug(`[VETO-SIM] Simulation disabled for tournament; skipping auto veto for ${matchSlug}`);
-    return;
-  }
 
   // Only BO formats use veto; safeguard here in case caller forgot.
   if (!['bo1', 'bo3', 'bo5'].includes(tournament.format)) {
