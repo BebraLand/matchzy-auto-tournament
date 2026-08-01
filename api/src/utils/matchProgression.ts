@@ -387,15 +387,14 @@ export async function checkTournamentCompletion(tournamentId: number = 1): Promi
       [tournamentId]
     );
 
-    // A void has no winner. It is terminal for scheduling, but it must keep
-    // the tournament open for an explicit operator decision (for example,
-    // reopening the match or closing the tournament without a champion).
+    // A cancelled match is a terminal operator ruling (for example both teams
+    // did not appear). It must not keep the tournament permanently open.
     const pendingMatches = await db.queryOneAsync<{ count: number | string }>(
       `SELECT COUNT(*) as count
        FROM matches
        WHERE tournament_id = ?
          AND round >= 1
-         AND status != 'completed'`,
+         AND status NOT IN ('completed', 'cancelled')`,
       [tournamentId]
     );
 
