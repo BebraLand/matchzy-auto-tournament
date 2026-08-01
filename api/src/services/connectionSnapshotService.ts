@@ -342,7 +342,7 @@ async function updateLiveStatsFromReport(matchSlug: string, report: MatchReport)
   emitMatchUpdate({
     slug: matchSlug,
     liveStats: stats,
-    matchPhase: stats.status === 'postgame' ? 'post_match' : undefined,
+    matchPhase: stats.status === 'postgame' ? 'post_match' : stats.status,
     team1Score: stats.team1SeriesScore,
     team2Score: stats.team2SeriesScore,
   });

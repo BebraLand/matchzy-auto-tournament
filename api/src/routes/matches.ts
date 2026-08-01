@@ -925,10 +925,10 @@ router.get('/', async (req: Request, res: Response) => {
           vetoCompleted: vetoState?.status === 'completed',
           currentMap: row.current_map ?? undefined,
           mapNumber: typeof row.map_number === 'number' ? row.map_number : undefined,
-          matchPhase:
-            matchLiveStatsService.getStats(row.slug)?.status === 'postgame'
-              ? 'post_match'
-              : undefined,
+          matchPhase: (() => {
+            const phase = matchLiveStatsService.getStats(row.slug)?.status;
+            return phase === 'postgame' ? 'post_match' : phase;
+          })(),
           maps: undefined,
           operatorState: row.operator_state ?? 'queued',
           queuePosition: row.queue_position,

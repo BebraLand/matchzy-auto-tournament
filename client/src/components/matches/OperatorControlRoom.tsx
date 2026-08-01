@@ -156,6 +156,9 @@ export function OperatorControlRoom({
                 match.config?.expected_players_total ?? (match.config?.players_per_team ?? 5) * 2;
               const connectedPlayers = connectionStatuses.get(match.slug)?.totalConnected ?? 0;
               const awaitingNextMap = match.status === 'live' && match.matchPhase === 'post_match';
+              const readyToGoLive =
+                Boolean(match.serverId) &&
+                (match.status === 'loaded' || (match.status === 'live' && match.matchPhase === 'warmup'));
 
               return (
                 <Box
@@ -260,7 +263,7 @@ export function OperatorControlRoom({
                             Prepare
                           </Button>
                         )}
-                        {match.status === 'loaded' && match.serverId && (
+                        {readyToGoLive && (
                           <Button
                             size="small"
                             color="success"

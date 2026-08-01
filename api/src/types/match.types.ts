@@ -197,8 +197,8 @@ export interface MatchListItem {
   team2Score?: number;
   currentMap?: string | null;
   mapNumber?: number;
-  /** Runtime-only operator phase; `post_match` means MatchZy is waiting for css_nextmap. */
-  matchPhase?: 'post_match';
+  /** Runtime-only phase from MatchZy; `post_match` means it is waiting for css_nextmap. */
+  matchPhase?: 'warmup' | 'knife' | 'live' | 'halftime' | 'post_match';
   mapResults?: MatchMapResult[];
   maps?: string[];
   queuePosition?: number | null; // Position in allocation queue (1 = first in queue, null = already allocated)

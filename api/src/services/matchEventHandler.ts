@@ -444,7 +444,7 @@ function updateLiveStats(match: DbMatchRow, updates: Partial<MatchLiveStats>): v
   emitMatchUpdate({
     slug: match.slug,
     liveStats: stats,
-    matchPhase: stats.status === 'postgame' ? 'post_match' : undefined,
+    matchPhase: stats.status === 'postgame' ? 'post_match' : stats.status,
   });
 }
 
