@@ -22,7 +22,6 @@ import { MatchVetoHistory } from './MatchVetoHistory';
 import { MatchServerPanel } from './MatchServerPanel';
 import { api } from '../../utils/api';
 import { useSnackbar } from '../../contexts/SnackbarContext';
-import { useAuth } from '../../contexts/AuthContext';
 
 interface MatchInfoCardProps {
   match: TeamMatchInfo;
@@ -79,7 +78,6 @@ export function MatchInfoCard({
   const [copyFallbackCommand, setCopyFallbackCommand] = useState<string | null>(null);
   const [playerEloIndex, setPlayerEloIndex] = useState<Record<string, number> | null>(null);
   const { showError } = useSnackbar();
-  const { isAuthenticated } = useAuth();
 
   const liveStats = match.liveStats || null;
   const connectionStatus = match.connectionStatus || null;
@@ -465,10 +463,6 @@ export function MatchInfoCard({
     (match.status === 'ready' && isVetoCompleted) ||
     (match.status === 'pending' && isVetoCompleted && ['bo1', 'bo3', 'bo5'].includes(matchFormat))
   ) {
-    // Player-facing view: hide per-round score (rounds) and show only maps won.
-    // Admins keep the detailed rounds display.
-    const hideMapRounds = !isAuthenticated;
-
     return (
       <Card data-testid="match-details">
         <CardContent>
@@ -504,9 +498,9 @@ export function MatchInfoCard({
               // and "Current map score (Rounds)" can look duplicated or misleading. Hide the series row
               // and keep the per-map rounds instead.
               hideSeriesWins={
-                hideMapRounds ? false : isShuffleMatch || isCompletedMatch || matchFormat === 'bo1' || isManualMatch
+                isShuffleMatch || isCompletedMatch || matchFormat === 'bo1' || isManualMatch
               }
-              hideMapRounds={hideMapRounds}
+              hideMapRounds={false}
             />
 
             {liveStats?.status === 'postgame' && match.status !== 'completed' && (
