@@ -36,21 +36,6 @@ async function getSimulationTimescale(): Promise<number> {
   }
 }
 
-async function resolveSimulationSettings(tournament: TournamentResponse): Promise<{
-  simulation: boolean;
-  timescale: number | undefined;
-}> {
-  const simulation = tournament.settings.simulation === true || (await getSimulationFlag());
-  if (!simulation) return { simulation: false, timescale: undefined };
-
-  const configured = Number(tournament.settings.simulationTimescale);
-  const timescale =
-    Number.isFinite(configured) && configured >= 0.1 && configured <= 4
-      ? configured
-      : await getSimulationTimescale();
-  return { simulation: true, timescale };
-}
-
 /**
  * Normalize the tournament's maxRounds into a safe mp_maxrounds value.
  * - Accepts number or string (from DB / serialized JSON)
@@ -246,7 +231,8 @@ export const generateMatchConfig = async (
     ) as Array<'team1_ct' | 'team2_ct' | 'knife'>;
   }
 
-  const { simulation, timescale: simulationTimescale } = await resolveSimulationSettings(tournament);
+  const simulation = await getSimulationFlag();
+  const simulationTimescale = simulation ? await getSimulationTimescale() : undefined;
 
   const maxRounds = resolveMaxRounds(tournament);
 
@@ -445,7 +431,8 @@ async function generateShuffleMatchConfig(
     ...matchzyEnhancedCvars,
   };
 
-  const { simulation, timescale: simulationTimescale } = await resolveSimulationSettings(tournament);
+  const simulation = await getSimulationFlag();
+  const simulationTimescale = simulation ? await getSimulationTimescale() : undefined;
 
   // For shuffle we want players_per_team to reflect the configured teamSize
   // (e.g. 2 for 2v2) so the plugin's ready logic is correct. Fall back to the

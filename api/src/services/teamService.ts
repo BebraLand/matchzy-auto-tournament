@@ -148,7 +148,7 @@ class TeamService {
     // "test-team-"), we skip Steam avatar lookups entirely and rely on the
     // frontend's generated avatars / SVG fallback instead.
     const enrichedPlayers = await this.enrichPlayersWithAvatars(input.players, {
-      skipSteamAvatar: input.id.startsWith('test-team-') || input.id.startsWith('simulation-'),
+      skipSteamAvatar: input.id.startsWith('test-team-'),
     });
 
     // Auto-create players in players table (for shuffle tournaments)

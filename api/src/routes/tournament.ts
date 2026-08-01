@@ -31,7 +31,6 @@ import { serverInitializationService } from '../services/serverInitializationSer
 import { checkTournamentCompletion } from '../utils/matchProgression';
 import { cs2UpdateService } from '../services/cs2UpdateService';
 import { extractCs2StatusVersionLine, parseCs2BuildId } from '../utils/cs2Version';
-import { simulationTournamentService } from '../services/simulationTournamentService';
 
 const router = Router();
 
@@ -456,25 +455,6 @@ router.post('/', async (req: Request, res: Response) => {
       success: false,
       error: err.message || 'Failed to create tournament',
     });
-  }
-});
-
-/** Create a real MAT tournament whose roster slots are populated by MatchZy bots. */
-router.post('/simulation', async (req: Request, res: Response) => {
-  try {
-    const teamCount = Number(req.body?.teamCount);
-    const tournament = await simulationTournamentService.create(teamCount);
-    return res.status(201).json({
-      success: true,
-      tournament,
-      message: `Simulation tournament created with ${teamCount} bot teams. Use the Operator Room normally.`,
-    });
-  } catch (error) {
-    const err = error as Error;
-    log.error('Error creating simulation tournament', err);
-    return res
-      .status(400)
-      .json({ success: false, error: err.message || 'Failed to create simulation tournament' });
   }
 });
 
