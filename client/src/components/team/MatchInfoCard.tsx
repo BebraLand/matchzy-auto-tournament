@@ -93,7 +93,17 @@ export function MatchInfoCard({
     liveStats?.status === 'live' ||
     liveStats?.status === 'knife' ||
     liveStats?.status === 'halftime';
-  const currentMapSlug = hasActiveMapTelemetry ? liveStats?.mapName || null : null;
+  // In warmup, the server has already loaded the veto-selected map, but it is
+  // not an active/live map yet. Use the generated match config rather than
+  // `matches.current_map`, which can still be a stale previous-server value.
+  const configuredMapNumber = liveStats?.mapNumber ?? match.mapNumber ?? 0;
+  const selectedWarmupMapSlug =
+    liveStats?.status === 'warmup' && Array.isArray(match.config?.maplist)
+      ? match.config.maplist[configuredMapNumber] ?? null
+      : null;
+  const currentMapSlug = hasActiveMapTelemetry
+    ? liveStats?.mapName || null
+    : selectedWarmupMapSlug;
   const currentMapData = useMemo(() => {
     if (!currentMapSlug) return null;
     const mapData = getMapData(currentMapSlug);
