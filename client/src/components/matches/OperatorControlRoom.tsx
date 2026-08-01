@@ -35,12 +35,14 @@ export type OperatorAction =
   | 'postpone'
   | 'hold'
   | 'resume'
-  | 'go_live';
+  | 'go_live'
+  | 'start_next_map';
 
 interface OperatorControlRoomProps {
   matches: Match[];
   controlMode: TournamentControlMode;
   busyKey: string | null;
+  connectionStatuses: Map<string, { totalConnected: number }>;
   onModeChange: (mode: TournamentControlMode) => Promise<void>;
   onAction: (match: Match, action: OperatorAction) => Promise<void>;
   onReorder: (slugs: string[]) => Promise<void>;
@@ -79,6 +81,7 @@ export function OperatorControlRoom({
   matches,
   controlMode,
   busyKey,
+  connectionStatuses,
   onModeChange,
   onAction,
   onReorder,
@@ -149,6 +152,10 @@ export function OperatorControlRoom({
               const parkedMatch =
                 match.operatorState === 'postponed' || match.operatorState === 'held';
               const unstarted = match.status === 'pending' || match.status === 'ready';
+              const expectedPlayers =
+                match.config?.expected_players_total ?? (match.config?.players_per_team ?? 5) * 2;
+              const connectedPlayers = connectionStatuses.get(match.slug)?.totalConnected ?? 0;
+              const awaitingNextMap = match.status === 'live' && match.matchPhase === 'post_match';
 
               return (
                 <Box
@@ -196,6 +203,13 @@ export function OperatorControlRoom({
                       <Chip size="small" color={operatorColor(match)} label={operatorLabel(match)} />
                       {match.queuePosition != null && (
                         <Chip size="small" variant="outlined" label={`Queue #${match.queuePosition}`} />
+                      )}
+                      {match.status === 'loaded' && (
+                        <Chip
+                          size="small"
+                          color={connectedPlayers >= expectedPlayers ? 'success' : 'warning'}
+                          label={`${connectedPlayers}/${expectedPlayers} connected`}
+                        />
                       )}
                     </Box>
                     <Typography variant="caption" color="text.secondary">
@@ -255,7 +269,19 @@ export function OperatorControlRoom({
                             disabled={busy}
                             onClick={() => void onAction(match, 'go_live')}
                           >
-                            Go Live
+                            Go Live ({connectedPlayers}/{expectedPlayers})
+                          </Button>
+                        )}
+                        {awaitingNextMap && (
+                          <Button
+                            size="small"
+                            color="success"
+                            variant="contained"
+                            startIcon={<FastForward />}
+                            disabled={busy}
+                            onClick={() => void onAction(match, 'start_next_map')}
+                          >
+                            Start Next Map
                           </Button>
                         )}
                         {unstarted && (

@@ -142,6 +142,8 @@ export function getMatchZyServerConfigCommands(config: {
   seriesEndKickDelayDemoUpload?: number | null;
   demoUploadUrl?: string | null;
   debugChatEnabled?: boolean | null;
+  operatorReadyGate?: boolean | null;
+  operatorManualNextMap?: boolean | null;
 }): string[] {
   const commands: string[] = [];
 
@@ -230,6 +232,12 @@ export function getMatchZyServerConfigCommands(config: {
 
   if (config.debugChatEnabled !== undefined && config.debugChatEnabled !== null) {
     commands.push(`matchzy_debug_chat ${config.debugChatEnabled ? '1' : '0'}`);
+  }
+  if (config.operatorReadyGate !== undefined && config.operatorReadyGate !== null) {
+    commands.push(`matchzy_operator_ready_gate ${config.operatorReadyGate ? '1' : '0'}`);
+  }
+  if (config.operatorManualNextMap !== undefined && config.operatorManualNextMap !== null) {
+    commands.push(`matchzy_operator_manual_next_map ${config.operatorManualNextMap ? '1' : '0'}`);
   }
 
   return commands;

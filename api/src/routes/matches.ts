@@ -1213,6 +1213,22 @@ router.post('/:slug/operator-action', requireAuth, async (req: Request, res: Res
       if (!allocation.success) {
         return res.status(409).json({ success: false, error: allocation.error });
       }
+    } else if (action === 'start_next_map') {
+      if (match.status !== 'live' || !match.server_id) {
+        return res.status(409).json({
+          success: false,
+          error: 'Only a live match with a prepared server can start its next map.',
+        });
+      }
+      const { rconService } = await import('../services/rconService');
+      const result = await rconService.sendCommand(match.server_id, 'css_nextmap');
+      if (!result.success) {
+        const rconError = new Error(result.error ?? 'Server rejected the next-map command.') as Error & {
+          statusCode?: number;
+        };
+        rconError.statusCode = 502;
+        throw rconError;
+      }
     } else {
       return res.status(400).json({
         success: false,

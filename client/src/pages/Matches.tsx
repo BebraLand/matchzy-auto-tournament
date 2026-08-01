@@ -60,6 +60,9 @@ export default function Matches() {
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [controlMode, setControlMode] = useState<TournamentControlMode>('automatic');
   const [operatorBusyKey, setOperatorBusyKey] = useState<string | null>(null);
+  const [connectionStatuses, setConnectionStatuses] = useState<Map<string, { totalConnected: number }>>(
+    () => new Map()
+  );
   const fetchGenerationRef = useRef(0);
   const activeFetchesRef = useRef(0);
   const hasLoadedMatchesRef = useRef(false);
@@ -118,6 +121,21 @@ export default function Matches() {
         setUpcomingMatches(upcoming);
         setLiveMatches(live);
         setMatchHistory(history);
+        void Promise.all(
+          live.map(async (match) => {
+            try {
+              const response = await api.get<{ success: boolean; totalConnected?: number }>(
+                `/api/events/connections/${match.slug}`
+              );
+              return [match.slug, response.totalConnected ?? 0] as const;
+            } catch {
+              return [match.slug, 0] as const;
+            }
+          })
+        ).then((statuses) => {
+          if (generation !== fetchGenerationRef.current) return;
+          setConnectionStatuses(new Map(statuses.map(([slug, totalConnected]) => [slug, { totalConnected }])));
+        });
         // Clear any selections that no longer exist
         setSelectedMatchSlugs((prev) => {
           if (prev.size === 0) return prev;
@@ -564,6 +582,17 @@ export default function Matches() {
     try {
       if (action === 'go_live') {
         if (!match.serverId) throw new Error('Match does not have a prepared server');
+        const expectedPlayers =
+          match.config?.expected_players_total ?? (match.config?.players_per_team ?? 5) * 2;
+        const connectedPlayers = connectionStatuses.get(match.slug)?.totalConnected ?? 0;
+        if (
+          connectedPlayers < expectedPlayers &&
+          !window.confirm(
+            `Only ${connectedPlayers}/${expectedPlayers} required players are connected. Go live anyway?`
+          )
+        ) {
+          return;
+        }
         await api.post('/api/rcon/start-match', { serverId: match.serverId });
       } else {
         await api.post(`/api/matches/${match.slug}/operator-action`, { action });
@@ -669,6 +698,7 @@ export default function Matches() {
           matches={[...upcomingMatches, ...liveMatches]}
           controlMode={controlMode}
           busyKey={operatorBusyKey}
+          connectionStatuses={connectionStatuses}
           onModeChange={handleControlModeChange}
           onAction={handleOperatorAction}
           onReorder={handleQueueReorder}

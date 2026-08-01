@@ -12,6 +12,7 @@ import type { MatchConfig } from '../types/match.types';
 import { matchLiveStatsService } from './matchLiveStatsService';
 import { serverInitializationService } from './serverInitializationService';
 import { settingsService } from './settingsService';
+import { operatorControlService } from './operatorControlService';
 import { getMatchZyServerConfigCommands } from '../utils/matchzyRconCommands';
 
 export interface MatchLoadOptions {
@@ -126,6 +127,8 @@ export async function loadMatchOnServer(
     // each match load so updates take effect without requiring a server init reset.
     try {
       const matchzyCore = await settingsService.getMatchzyCoreDefaults();
+      const controlMode = await operatorControlService.getControlMode();
+      const operatorControlsEnabled = controlMode !== 'automatic';
       const cmds = getMatchZyServerConfigCommands({
         autostartMode: matchzyCore.autostartMode,
         minimumReadyRequired: matchzyCore.minimumReadyRequired,
@@ -141,6 +144,8 @@ export async function loadMatchOnServer(
         seriesEndKickDelayNoDemo: matchzyCore.seriesEndKickDelayNoDemo,
         seriesEndKickDelayDemoNoUpload: matchzyCore.seriesEndKickDelayDemoNoUpload,
         seriesEndKickDelayDemoUpload: matchzyCore.seriesEndKickDelayDemoUpload,
+        operatorReadyGate: operatorControlsEnabled,
+        operatorManualNextMap: operatorControlsEnabled,
       });
       for (const cmd of cmds) {
         const result = await rconService.sendCommand(serverId, cmd);
