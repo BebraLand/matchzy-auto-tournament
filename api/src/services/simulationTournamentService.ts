@@ -55,6 +55,17 @@ const NICKNAMES = [
   'Orbit',
 ];
 
+export interface SimulationTournamentOptions {
+  name?: string;
+  type?: 'single_elimination' | 'double_elimination' | 'round_robin' | 'swiss' | 'shuffle';
+  format?: 'bo1' | 'bo3' | 'bo5';
+  maps?: string[];
+  maxRounds?: number;
+  overtimeMode?: 'enabled' | 'disabled';
+  overtimeSegments?: number;
+  grandFinalMode?: 'none' | 'simple' | 'double';
+}
+
 function hash(seed: string): number {
   let value = 2166136261;
   for (let i = 0; i < seed.length; i += 1) {
@@ -80,7 +91,11 @@ function avatar(seed: string): string {
 }
 
 class SimulationTournamentService {
-  async create(teamCount: number, playersPerTeam: number): Promise<TournamentResponse> {
+  async create(
+    teamCount: number,
+    playersPerTeam: number,
+    options: SimulationTournamentOptions = {}
+  ): Promise<TournamentResponse> {
     if (!Number.isInteger(teamCount) || teamCount < MIN_TEAM_COUNT || teamCount > MAX_TEAM_COUNT) {
       throw new Error(`Simulation supports ${MIN_TEAM_COUNT}-${MAX_TEAM_COUNT} teams.`);
     }
@@ -104,7 +119,13 @@ class SimulationTournamentService {
 
     const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const teamIds: string[] = [];
-    const maps = current?.maps?.length >= 3 ? current.maps.slice(0, 3) : DEFAULT_MAPS;
+    const maps = options.maps?.length
+      ? options.maps
+      : current?.maps && current.maps.length >= 3
+        ? current.maps.slice(0, 3)
+        : DEFAULT_MAPS;
+    const type = options.type ?? 'single_elimination';
+    const format = type === 'shuffle' ? 'bo1' : options.format ?? 'bo3';
 
     if (current && current.settings?.simulation !== true) {
       throw new Error('Refusing to replace a real tournament. Delete it or use an empty experimental VM.');
@@ -151,14 +172,14 @@ class SimulationTournamentService {
       }
 
       const tournament = await tournamentService.createTournament({
-        name: `Simulation ${teamCount} Teams (${playersPerTeam}v${playersPerTeam})`,
-        type: 'single_elimination',
-        format: 'bo3',
+        name: options.name?.trim() || `Simulation ${teamCount} Teams (${playersPerTeam}v${playersPerTeam})`,
+        type,
+        format,
         maps,
         teamIds,
-        maxRounds: 24,
-        overtimeMode: 'disabled',
-        overtimeSegments: 0,
+        maxRounds: options.maxRounds ?? 24,
+        overtimeMode: options.overtimeMode ?? 'disabled',
+        overtimeSegments: options.overtimeSegments ?? 0,
         settings: {
           controlMode: 'assisted',
           checkInRequired: false,
@@ -166,6 +187,9 @@ class SimulationTournamentService {
           seedingMethod: 'manual',
           simulation: true,
           simulationTimescale: 1,
+          ...(type === 'double_elimination' && {
+            grandFinalMode: options.grandFinalMode ?? 'simple',
+          }),
         },
       });
 

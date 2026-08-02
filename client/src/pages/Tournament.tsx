@@ -325,9 +325,22 @@ const Tournament: React.FC = () => {
     window.history.replaceState({}, '', '/tournament');
   };
 
-  const handleCreateSimulation = async (teamCount: number, playersPerTeam: number) => {
+  const handleCreateSimulation = async (
+    teamCount: number,
+    playersPerTeam: number,
+    options: {
+      name: string;
+      type: string;
+      format: string;
+      maps: string[];
+      maxRounds: number;
+      overtimeMode: 'enabled' | 'disabled';
+      overtimeSegments: number;
+      grandFinalMode: 'none' | 'simple' | 'double';
+    }
+  ) => {
     try {
-      await api.post('/api/tournament/simulation', { teamCount, playersPerTeam });
+      await api.post('/api/tournament/simulation', { teamCount, playersPerTeam, options });
       // Simulation creates the isolated bot teams first, then deliberately enters
       // the same setup wizard as a normal tournament. The only special part is
       // the generated roster; all tournament settings remain operator-controlled.

@@ -40,7 +40,8 @@ router.post('/simulation', requireAuth, async (req: Request, res: Response) => {
   try {
     const tournament = await simulationTournamentService.create(
       Number(req.body?.teamCount),
-      req.body?.playersPerTeam === undefined ? 5 : Number(req.body.playersPerTeam)
+      req.body?.playersPerTeam === undefined ? 5 : Number(req.body.playersPerTeam),
+      req.body?.options ?? {}
     );
     return res.status(201).json({ success: true, tournament });
   } catch (error) {
