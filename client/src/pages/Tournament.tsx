@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { useSnackbar } from '../contexts/SnackbarContext';
@@ -78,6 +78,7 @@ const Tournament: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const openSimulationForEditingRef = useRef(false);
 
   // Action state
   const { showSuccess, showError } = useSnackbar();
@@ -327,11 +328,15 @@ const Tournament: React.FC = () => {
   const handleCreateSimulation = async (teamCount: number, playersPerTeam: number) => {
     try {
       await api.post('/api/tournament/simulation', { teamCount, playersPerTeam });
+      // Simulation creates the isolated bot teams first, then deliberately enters
+      // the same setup wizard as a normal tournament. The only special part is
+      // the generated roster; all tournament settings remain operator-controlled.
+      openSimulationForEditingRef.current = true;
       await refreshData();
       setShowWelcome(false);
-      setShowForm(false);
-      setIsEditing(false);
-      showSuccess(`Simulation created: ${teamCount} teams, ${playersPerTeam} players per team`);
+      setShowForm(true);
+      setIsEditing(true);
+      showSuccess(`Simulation teams created: ${teamCount} teams, ${playersPerTeam} players per team`);
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Failed to create simulation tournament');
       throw error;
@@ -423,9 +428,11 @@ const Tournament: React.FC = () => {
       } else {
         setGrandFinalMode('none');
       }
-      setIsEditing(false);
+      const openSimulationForEditing = openSimulationForEditingRef.current;
+      openSimulationForEditingRef.current = false;
+      setIsEditing(openSimulationForEditing ? true : false);
       setShowWelcome(false);
-      setShowForm(false);
+      setShowForm(openSimulationForEditing ? true : false);
       // Clear draft when tournament exists (we're viewing/editing existing tournament)
       clearDraft();
     } else {
