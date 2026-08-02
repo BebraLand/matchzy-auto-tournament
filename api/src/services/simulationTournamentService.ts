@@ -2,13 +2,13 @@ import { db } from '../config/database';
 import { log } from '../utils/logger';
 import { teamService } from './teamService';
 import { tournamentService } from './tournamentService';
-import type { TournamentResponse } from '../types/tournament.types';
+
 
 const MIN_TEAM_COUNT = 2;
 const MAX_TEAM_COUNT = 8;
 const MIN_PLAYERS_PER_TEAM = 1;
 const MAX_PLAYERS_PER_TEAM = 5;
-const DEFAULT_MAPS = ['de_dust2', 'de_cache', 'de_inferno'];
+
 const COUNTRIES = ['LT', 'LV', 'EE', 'FI', 'SE', 'PL', 'DE', 'FR', 'NL', 'US'];
 const TEAM_PREFIXES = ['Neon', 'Silent', 'Quantum', 'Iron', 'Polar', 'Rapid', 'Crimson', 'Nova'];
 const TEAM_SUFFIXES = ['Wolves', 'Foxes', 'Orbit', 'Forge', 'Ravens', 'Pulse', 'Core', 'Drift'];
@@ -55,16 +55,6 @@ const NICKNAMES = [
   'Orbit',
 ];
 
-export interface SimulationTournamentOptions {
-  name?: string;
-  type?: 'single_elimination' | 'double_elimination' | 'round_robin' | 'swiss' | 'shuffle';
-  format?: 'bo1' | 'bo3' | 'bo5';
-  maps?: string[];
-  maxRounds?: number;
-  overtimeMode?: 'enabled' | 'disabled';
-  overtimeSegments?: number;
-  grandFinalMode?: 'none' | 'simple' | 'double';
-}
 
 function hash(seed: string): number {
   let value = 2166136261;
@@ -91,11 +81,22 @@ function avatar(seed: string): string {
 }
 
 class SimulationTournamentService {
-  async create(
+  async discardTeams(teamIds: string[]): Promise<void> {
+    for (const id of teamIds) {
+      if (!id.startsWith('simulation-')) continue;
+      const team = await teamService.getTeamById(id);
+      if (!team) continue;
+      for (const player of team.players) {
+        await db.deleteAsync('players', 'id = ?', [player.steamId]);
+      }
+      await teamService.deleteTeam(id);
+    }
+  }
+
+  async createTeams(
     teamCount: number,
     playersPerTeam: number,
-    options: SimulationTournamentOptions = {}
-  ): Promise<TournamentResponse> {
+  ): Promise<{ teamIds: string[] }> {
     if (!Number.isInteger(teamCount) || teamCount < MIN_TEAM_COUNT || teamCount > MAX_TEAM_COUNT) {
       throw new Error(`Simulation supports ${MIN_TEAM_COUNT}-${MAX_TEAM_COUNT} teams.`);
     }
@@ -119,14 +120,6 @@ class SimulationTournamentService {
 
     const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const teamIds: string[] = [];
-    const maps = options.maps?.length
-      ? options.maps
-      : current?.maps && current.maps.length >= 3
-        ? current.maps.slice(0, 3)
-        : DEFAULT_MAPS;
-    const type = options.type ?? 'single_elimination';
-    const format = type === 'shuffle' ? 'bo1' : options.format ?? 'bo3';
-
     if (current && current.settings?.simulation !== true) {
       throw new Error('Refusing to replace a real tournament. Delete it or use an empty experimental VM.');
     }
@@ -171,34 +164,12 @@ class SimulationTournamentService {
         });
       }
 
-      const tournament = await tournamentService.createTournament({
-        name: options.name?.trim() || `Simulation ${teamCount} Teams (${playersPerTeam}v${playersPerTeam})`,
-        type,
-        format,
-        maps,
-        teamIds,
-        maxRounds: options.maxRounds ?? 24,
-        overtimeMode: options.overtimeMode ?? 'disabled',
-        overtimeSegments: options.overtimeSegments ?? 0,
-        settings: {
-          controlMode: 'assisted',
-          checkInRequired: false,
-          autoAdvance: false,
-          seedingMethod: 'manual',
-          simulation: true,
-          simulationTimescale: 1,
-          ...(type === 'double_elimination' && {
-            grandFinalMode: options.grandFinalMode ?? 'simple',
-          }),
-        },
-      });
-
-      log.success('[SIMULATION] Created isolated bot tournament', {
+      log.success('[SIMULATION] Created isolated bot teams for draft', {
         teamCount,
         playersPerTeam,
         teamIds,
       });
-      return tournament;
+      return { teamIds };
     } catch (error) {
       for (const id of teamIds) {
         try {

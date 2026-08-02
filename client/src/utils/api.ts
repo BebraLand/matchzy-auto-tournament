@@ -77,8 +77,11 @@ export const api = {
   /**
    * DELETE request
    */
-  async delete(endpoint: string) {
-    return this.fetch(endpoint, { method: 'DELETE' });
+  async delete(endpoint: string, data?: unknown) {
+    return this.fetch(endpoint, {
+      method: 'DELETE',
+      body: data ? JSON.stringify(data) : undefined,
+    });
   },
 
 };

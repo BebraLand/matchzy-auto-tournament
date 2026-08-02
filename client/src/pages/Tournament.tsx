@@ -79,6 +79,7 @@ const Tournament: React.FC = () => {
   const [showWelcome, setShowWelcome] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const openSimulationForEditingRef = useRef(false);
+  const [simulationDraftTeamIds, setSimulationDraftTeamIds] = useState<string[]>([]);
 
   // Action state
   const { showSuccess, showError } = useSnackbar();
@@ -327,22 +328,35 @@ const Tournament: React.FC = () => {
 
   const handleCreateSimulation = async () => {
     try {
-      await api.post('/api/tournament/simulation', {
+      const response = await api.post<{ success: boolean; teamIds: string[] }>('/api/tournament/simulation', {
         teamCount: 4,
         playersPerTeam: 5,
       });
       // Simulation creates the isolated bot teams first, then deliberately enters
       // the same setup wizard as a normal tournament. The only special part is
-      // the generated roster; all tournament settings remain operator-controlled.
+      // generated roster; all tournament settings remain operator-controlled.
       openSimulationForEditingRef.current = true;
+      setSimulationDraftTeamIds(response.teamIds);
+      setSelectedTeams(response.teamIds);
       await refreshData();
       setShowWelcome(false);
       setShowForm(true);
       setIsEditing(true);
-      showSuccess('Simulation teams created. Configure the tournament in the normal setup wizard.');
+      showSuccess('Simulation teams prepared. Configure the tournament in the normal setup wizard.');
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Failed to create simulation tournament');
       throw error;
+    }
+  };
+
+  const discardSimulationDraft = async () => {
+    if (simulationDraftTeamIds.length === 0) return;
+    try {
+      await api.delete('/api/tournament/simulation', { teamIds: simulationDraftTeamIds });
+    } catch (error) {
+      showError(error instanceof Error ? error.message : 'Failed to discard simulation draft');
+    } finally {
+      setSimulationDraftTeamIds([]);
     }
   };
 
@@ -714,6 +728,14 @@ const Tournament: React.FC = () => {
       const settings = {
         ...baseSettings,
         grandFinalMode: type === 'double_elimination' ? grandFinalMode : 'none',
+        ...(simulationDraftTeamIds.length > 0 && {
+          simulation: true,
+          simulationTimescale: 1,
+          controlMode: 'assisted',
+          autoAdvance: false,
+          checkInRequired: false,
+          seedingMethod: 'manual',
+        }),
       };
 
       const payload = {
@@ -737,6 +759,7 @@ const Tournament: React.FC = () => {
         // Clear draft when tournament is successfully created
         if (!tournament) {
           clearDraft();
+          setSimulationDraftTeamIds([]);
         }
         await refreshData();
       } else {
@@ -986,6 +1009,7 @@ const Tournament: React.FC = () => {
           onSave={handleSave}
           onRefreshTeams={refreshData}
           onBackToWelcome={() => {
+            void discardSimulationDraft();
             clearDraft(); // Clear all session storage
             setShowWelcome(true);
             setShowForm(false);
@@ -1007,6 +1031,7 @@ const Tournament: React.FC = () => {
               setMaps(tournament.maps || []);
               setIsEditing(false);
             } else {
+              void discardSimulationDraft();
               setShowForm(false);
               setShowWelcome(true);
               // Clear step when canceling new tournament creation

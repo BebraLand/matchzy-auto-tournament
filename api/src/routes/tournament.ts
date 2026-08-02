@@ -38,16 +38,28 @@ const router = Router();
 /** Create an isolated MAT bracket populated with synthetic teams for one-person testing. */
 router.post('/simulation', requireAuth, async (req: Request, res: Response) => {
   try {
-    const tournament = await simulationTournamentService.create(
+    const draft = await simulationTournamentService.createTeams(
       Number(req.body?.teamCount),
-      req.body?.playersPerTeam === undefined ? 5 : Number(req.body.playersPerTeam),
-      req.body?.options ?? {}
+      req.body?.playersPerTeam === undefined ? 5 : Number(req.body.playersPerTeam)
     );
-    return res.status(201).json({ success: true, tournament });
+    return res.status(201).json({ success: true, ...draft });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to create simulation tournament';
-    log.error('[SIMULATION] Failed to create tournament', error);
+    const message = error instanceof Error ? error.message : 'Failed to create simulation draft';
+    log.error('[SIMULATION] Failed to create draft', error);
     return res.status(400).json({ success: false, error: message });
+  }
+});
+
+router.delete('/simulation', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const teamIds = Array.isArray(req.body?.teamIds)
+      ? req.body.teamIds.filter((id: unknown): id is string => typeof id === 'string')
+      : [];
+    await simulationTournamentService.discardTeams(teamIds);
+    return res.json({ success: true });
+  } catch (error) {
+    log.error('[SIMULATION] Failed to discard draft teams', error);
+    return res.status(400).json({ success: false, error: 'Failed to discard simulation draft' });
   }
 });
 
