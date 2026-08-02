@@ -394,7 +394,13 @@ const Tournament: React.FC = () => {
       setName(tournament.name);
       setType(tournament.type);
       setFormat(tournament.format);
-      setSelectedTeams(tournament.teamIds || []);
+      // Prefer persisted IDs, but fall back to the detailed team list so
+      // generated simulation teams remain selected with older API responses.
+      setSelectedTeams(
+        tournament.teamIds?.length
+          ? tournament.teamIds
+          : (tournament.teams || []).map((team) => team.id),
+      );
       setMaps(tournament.maps || []);
       // Load shuffle settings if tournament is shuffle type
       if (tournament.type === 'shuffle' && tournament.teamSize) {
