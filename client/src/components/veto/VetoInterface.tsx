@@ -31,6 +31,7 @@ interface VetoInterfaceProps {
   team1Name?: string;
   team2Name?: string;
   currentTeamSlug?: string; // For security - which team is viewing this
+  operatorMode?: boolean;
   onComplete?: (vetoState: VetoState) => void;
 }
 
@@ -39,6 +40,7 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
   team1Name: propTeam1Name,
   team2Name: propTeam2Name,
   currentTeamSlug,
+  operatorMode = false,
   onComplete,
 }) => {
   const { t } = useTranslation();
@@ -220,7 +222,7 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mapName,
-          teamSlug: currentTeamSlug, // Send which team is making the action
+          teamSlug: actingTeamSlug, // Send which team is making the action
         }),
       });
 
@@ -249,7 +251,7 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           side,
-          teamSlug: currentTeamSlug, // Send which team is making the action
+          teamSlug: actingTeamSlug, // Send which team is making the action
         }),
       });
 
@@ -364,13 +366,21 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
   // Determine if it's this team's turn. Require valid team IDs and currentTeamSlug;
   // otherwise we cannot reliably tell whose turn it is (don't default to "your turn").
   const isMyTurn =
-    !!currentTeamSlug &&
+    (operatorMode || !!currentTeamSlug) &&
     !!vetoState.team1Id &&
     !!vetoState.team2Id &&
     hasKnownCurrentTurn &&
-    (currentTurn === 'team1'
-      ? currentTeamSlug === vetoState.team1Id
-      : currentTeamSlug === vetoState.team2Id);
+    (operatorMode ||
+      (currentTurn === 'team1'
+        ? currentTeamSlug === vetoState.team1Id
+        : currentTeamSlug === vetoState.team2Id));
+
+  const actingTeamSlug =
+    operatorMode && hasKnownCurrentTurn
+      ? currentTurn === 'team1'
+        ? vetoState.team1Id
+        : vetoState.team2Id
+      : currentTeamSlug;
 
   return (
     <Box data-testid="veto-interface">

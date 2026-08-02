@@ -6,6 +6,9 @@ import {
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   FormControl,
   IconButton,
   InputLabel,
@@ -26,6 +29,7 @@ import {
   Tune,
 } from '@mui/icons-material';
 import type { Match } from '../../types';
+import { VetoInterface } from '../veto/VetoInterface';
 
 export type TournamentControlMode = 'automatic' | 'assisted' | 'manual';
 export type OperatorAction =
@@ -92,6 +96,7 @@ export function OperatorControlRoom({
   onRuling,
   onReorder,
 }: OperatorControlRoomProps) {
+  const [vetoMatch, setVetoMatch] = React.useState<Match | null>(null);
   const queued = matches
     .filter(
       (match) =>
@@ -111,6 +116,11 @@ export function OperatorControlRoom({
     const reordered = [...queued];
     [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
     await onReorder(reordered.map((match) => match.slug));
+  };
+
+  const openVeto = async (match: Match) => {
+    await onAction(match, 'open_veto');
+    setVetoMatch(match);
   };
 
   if (matches.length === 0) return null;
@@ -172,6 +182,7 @@ export function OperatorControlRoom({
                   data-testid={`operator-match-${match.slug}`}
                   display="flex"
                   alignItems="center"
+                  flexWrap="wrap"
                   gap={1.5}
                   p={1.25}
                   border={1}
@@ -204,7 +215,10 @@ export function OperatorControlRoom({
                     </Tooltip>
                   </Box>
 
-                  <Box minWidth={0} flex={1}>
+                  <Box
+                    minWidth={{ xs: 'min(100%, 220px)', sm: 260 }}
+                    flex="1 1 260px"
+                  >
                     <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
                       <Typography fontWeight={750} noWrap>
                         {teamName(match, 'team1')} vs {teamName(match, 'team2')}
@@ -226,7 +240,15 @@ export function OperatorControlRoom({
                     </Typography>
                   </Box>
 
-                  <Stack direction="row" spacing={0.75} flexWrap="wrap" justifyContent="flex-end" useFlexGap>
+                  <Stack
+                    direction="row"
+                    spacing={0.75}
+                    flex="2 1 620px"
+                    minWidth={0}
+                    flexWrap="wrap"
+                    justifyContent="flex-start"
+                    useFlexGap
+                  >
                     {parkedMatch ? (
                       <Button
                         size="small"
@@ -254,7 +276,7 @@ export function OperatorControlRoom({
                             variant="outlined"
                             startIcon={<PublishedWithChanges />}
                             disabled={busy}
-                            onClick={() => void onAction(match, 'open_veto')}
+                            onClick={() => void openVeto(match)}
                           >
                             Open Veto
                           </Button>
@@ -367,6 +389,25 @@ export function OperatorControlRoom({
           )}
         </Stack>
       </CardContent>
+      <Dialog
+        open={vetoMatch !== null}
+        onClose={() => setVetoMatch(null)}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>Map veto</DialogTitle>
+        <DialogContent>
+          {vetoMatch && (
+            <VetoInterface
+              matchSlug={vetoMatch.slug}
+              team1Name={teamName(vetoMatch, 'team1')}
+              team2Name={teamName(vetoMatch, 'team2')}
+              operatorMode
+              onComplete={() => setVetoMatch(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
