@@ -54,6 +54,7 @@ interface VetoState {
 }
 
 const DEFAULT_STEP_DELAY_MS = 1000;
+const activeVetoSimulationSlugs = new Set<string>();
 
 function getRandomElement<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
@@ -72,15 +73,10 @@ export async function autoCompleteVetoForMatch(
   matchSlug: string,
   options?: { stepDelayMs?: number }
 ): Promise<void> {
-  const stepDelayMs = options?.stepDelayMs ?? DEFAULT_STEP_DELAY_MS;
-
-  const simulationEnabled = await settingsService.isSimulationModeEnabled();
-  if (!simulationEnabled) {
-    log.debug(
-      `[VETO-SIM] Simulation mode disabled; skipping auto veto for match ${matchSlug}`
-    );
+  if (activeVetoSimulationSlugs.has(matchSlug)) {
     return;
   }
+  const stepDelayMs = options?.stepDelayMs ?? DEFAULT_STEP_DELAY_MS;
 
   const match = await db.queryOneAsync<DbMatchRow>('SELECT * FROM matches WHERE slug = ?', [
     matchSlug,
@@ -141,6 +137,13 @@ export async function autoCompleteVetoForMatch(
     completed_at: t.completed_at,
     teams: [],
   };
+
+  if (tournament.settings?.simulation !== true) {
+    log.debug(`[VETO-SIM] Tournament ${t.id} is not marked for simulation; skipping ${matchSlug}`);
+    return;
+  }
+
+  activeVetoSimulationSlugs.add(matchSlug);
 
   // Only BO formats use veto; safeguard here in case caller forgot.
   if (!['bo1', 'bo3', 'bo5'].includes(tournament.format)) {
@@ -339,35 +342,10 @@ export async function autoCompleteVetoForMatch(
         );
       }
 
-      // Auto-allocate and load match, same as manual veto completion path
-      const baseUrl = await settingsService.getWebhookUrl();
-      if (!baseUrl) {
-        log.warn(
-          `[VETO-SIM] Webhook URL not configured; skipping auto-load for match ${matchSlug} after automated veto`
-        );
-      } else {
-        setImmediate(async () => {
-          try {
-            const result = await matchAllocationService.allocateSingleMatch(matchSlug, baseUrl);
-            if (result.success) {
-              log.success(
-                `[VETO-SIM] Match ${matchSlug} loaded on server ${result.serverId} after automated veto`
-              );
-            } else {
-              log.warn(
-                `[VETO-SIM] Failed to allocate server for match ${matchSlug} after automated veto: ${result.error}`
-              );
-              matchAllocationService.startPollingForServer(matchSlug, baseUrl);
-            }
-          } catch (err) {
-            log.error(
-              `[VETO-SIM] Error loading match after automated veto for ${matchSlug}`,
-              err as Error
-            );
-            matchAllocationService.startPollingForServer(matchSlug, baseUrl);
-          }
-        });
-      }
+      activeVetoSimulationSlugs.delete(matchSlug);
+
+      // Stop at the normal MAT boundary. The operator must explicitly Prepare
+      // and Go Live from the Operator Room after the bot veto is complete.
 
       break;
     } else {

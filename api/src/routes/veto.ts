@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../config/database';
 import { log } from '../utils/logger';
 import { emitBracketUpdate, emitMatchUpdate, emitVetoUpdate } from '../services/socketService';
+import { autoCompleteVetoForMatch } from '../services/vetoSimulationService';
 import { matchAllocationService } from '../services/matchAllocationService';
 import type { DbMatchRow, DbTournamentRow } from '../types/database.types';
 import type { TournamentResponse } from '../types/tournament.types';
@@ -363,6 +364,22 @@ router.get('/:matchSlug', async (req: Request, res: Response) => {
         ]);
         // Use tournament maps order, filtering to only include maps that exist in veto state
         vetoState.allMaps = tournamentMaps.filter((mapId: string) => allMapsSet.has(mapId));
+      }
+    }
+
+    // A simulation tournament still uses the real veto endpoint and state. Once
+    // the operator has opened veto, let synthetic teams perform delayed actions;
+    // completion stops before Prepare/Go Live so the operator can test those steps.
+    const tournamentForSimulation = match.tournament_id
+      ? await db.queryOneAsync<{ settings: string | null }>(
+          'SELECT settings FROM tournament WHERE id = ?',
+          [match.tournament_id]
+        )
+      : null;
+    if (tournamentForSimulation?.settings) {
+      const settings = JSON.parse(tournamentForSimulation.settings) as { simulation?: boolean };
+      if (settings.simulation === true && vetoState.status !== 'completed') {
+        void autoCompleteVetoForMatch(matchSlug, { stepDelayMs: 700 });
       }
     }
 

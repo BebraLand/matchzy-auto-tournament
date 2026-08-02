@@ -31,8 +31,21 @@ import { serverInitializationService } from '../services/serverInitializationSer
 import { checkTournamentCompletion } from '../utils/matchProgression';
 import { cs2UpdateService } from '../services/cs2UpdateService';
 import { extractCs2StatusVersionLine, parseCs2BuildId } from '../utils/cs2Version';
+import { simulationTournamentService } from '../services/simulationTournamentService';
 
 const router = Router();
+
+/** Create a normal MAT bracket populated with synthetic teams for one-person testing. */
+router.post('/simulation', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const tournament = await simulationTournamentService.create(Number(req.body?.teamCount));
+    return res.status(201).json({ success: true, tournament });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create simulation tournament';
+    log.error('[SIMULATION] Failed to create tournament', error);
+    return res.status(400).json({ success: false, error: message });
+  }
+});
 
 /**
  * Ensure MatchZy webhooks are configured for all enabled servers at the moment

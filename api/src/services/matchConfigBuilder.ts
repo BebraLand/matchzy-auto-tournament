@@ -231,8 +231,14 @@ export const generateMatchConfig = async (
     ) as Array<'team1_ct' | 'team2_ct' | 'knife'>;
   }
 
-  const simulation = await getSimulationFlag();
-  const simulationTimescale = simulation ? await getSimulationTimescale() : undefined;
+  // Simulation is opt-in per tournament. A global switch must not affect real events.
+  const simulation = tournament.settings?.simulation === true;
+  const configuredTimescale = Number(tournament.settings?.simulationTimescale);
+  const simulationTimescale = simulation
+    ? Number.isFinite(configuredTimescale) && configuredTimescale >= 0.1 && configuredTimescale <= 4
+      ? configuredTimescale
+      : 1
+    : undefined;
 
   const maxRounds = resolveMaxRounds(tournament);
 
@@ -431,8 +437,14 @@ async function generateShuffleMatchConfig(
     ...matchzyEnhancedCvars,
   };
 
-  const simulation = await getSimulationFlag();
-  const simulationTimescale = simulation ? await getSimulationTimescale() : undefined;
+  // Simulation is opt-in per tournament. A global switch must not affect real events.
+  const simulation = tournament.settings?.simulation === true;
+  const configuredTimescale = Number(tournament.settings?.simulationTimescale);
+  const simulationTimescale = simulation
+    ? Number.isFinite(configuredTimescale) && configuredTimescale >= 0.1 && configuredTimescale <= 4
+      ? configuredTimescale
+      : 1
+    : undefined;
 
   // For shuffle we want players_per_team to reflect the configured teamSize
   // (e.g. 2 for 2v2) so the plugin's ready logic is correct. Fall back to the

@@ -34,6 +34,9 @@ export interface TournamentSettings {
    * - manual: require operator approval for every veto/allocation transition
    */
   controlMode?: TournamentControlMode;
+  /** Explicitly marks a tournament as an operator-only bot simulation. */
+  simulation?: boolean;
+  simulationTimescale?: number;
   /**
    * Grand final behaviour for double elimination tournaments.
    * - 'none'   -> Winners bracket final decides champion (no cross‑bracket GF)
