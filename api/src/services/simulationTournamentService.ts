@@ -12,8 +12,48 @@ const DEFAULT_MAPS = ['de_dust2', 'de_cache', 'de_inferno'];
 const COUNTRIES = ['LT', 'LV', 'EE', 'FI', 'SE', 'PL', 'DE', 'FR', 'NL', 'US'];
 const TEAM_PREFIXES = ['Neon', 'Silent', 'Quantum', 'Iron', 'Polar', 'Rapid', 'Crimson', 'Nova'];
 const TEAM_SUFFIXES = ['Wolves', 'Foxes', 'Orbit', 'Forge', 'Ravens', 'Pulse', 'Core', 'Drift'];
-const FIRST_NAMES = ['Alex', 'Mika', 'Jonas', 'Lukas', 'Noah', 'Erik', 'Mantas', 'Emil'];
-const LAST_NAMES = ['Vale', 'Kern', 'Nox', 'Ryder', 'Stone', 'Voss', 'Kite', 'Ray'];
+const FIRST_NAMES = [
+  'Alex',
+  'Mika',
+  'Jonas',
+  'Lukas',
+  'Noah',
+  'Erik',
+  'Mantas',
+  'Emil',
+  'Dario',
+  'Nils',
+  'Oskar',
+  'Tomas',
+];
+const LAST_NAMES = [
+  'Vale',
+  'Kern',
+  'Nox',
+  'Ryder',
+  'Stone',
+  'Voss',
+  'Kite',
+  'Ray',
+  'Marlow',
+  'Vega',
+  'North',
+  'Kovac',
+];
+const NICKNAMES = [
+  'Blitz',
+  'Ghost',
+  'Maverick',
+  'Pulse',
+  'Rook',
+  'Frost',
+  'Zero',
+  'Viper',
+  'Sparks',
+  'Drift',
+  'Echo',
+  'Orbit',
+];
 
 function hash(seed: string): number {
   let value = 2166136261;
@@ -98,9 +138,11 @@ class SimulationTournamentService {
             const playerSeed = `${teamSeed}:player:${playerIndex}`;
             const first = pick(FIRST_NAMES, runId, teamIndex * 10 + playerIndex);
             const last = pick(LAST_NAMES, runId, teamIndex * 10 + playerIndex + 100);
+            const nickname = pick(NICKNAMES, runId, teamIndex * 10 + playerIndex + 200);
             return {
               steamId: steamId(runId, teamIndex, playerIndex),
-              name: `${first} '${first.slice(0, 2).toUpperCase()}${playerIndex + 1}' ${last}`,
+              name: `${first} '${nickname}' ${last}`,
+              countryCode: pick(COUNTRIES, runId, teamIndex * 10 + playerIndex + 300),
               avatar: avatar(playerSeed),
               elo: 1000 + (hash(playerSeed) % 2000),
             };
