@@ -91,17 +91,21 @@ class TournamentService {
       overtimeSegments,
     } = input;
 
-    // Shuffle tournaments don't use teams, skip validation
-    if (type !== 'shuffle') {
-      // Validate team count based on tournament type
-      validateTeamCount(type, teamIds.length);
-    }
-
     const tournamentSettings: TournamentSettings = {
       ...DEFAULT_SETTINGS,
       matchFormat: format,
       ...settings,
     };
+
+    // Simulation brackets may use non-power-of-two team counts; the bracket
+    // generator handles the resulting byes. Real tournaments keep the normal
+    // format validation.
+    if (
+      type !== 'shuffle' &&
+      !(type === 'single_elimination' && tournamentSettings.simulation === true)
+    ) {
+      validateTeamCount(type, teamIds.length);
+    }
 
     const now = Math.floor(Date.now() / 1000);
 

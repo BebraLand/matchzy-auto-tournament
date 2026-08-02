@@ -4,8 +4,10 @@ import { teamService } from './teamService';
 import { tournamentService } from './tournamentService';
 import type { TournamentResponse } from '../types/tournament.types';
 
-const SUPPORTED_TEAM_COUNTS = new Set([4, 8]);
-const PLAYERS_PER_TEAM = 5;
+const MIN_TEAM_COUNT = 2;
+const MAX_TEAM_COUNT = 8;
+const MIN_PLAYERS_PER_TEAM = 1;
+const MAX_PLAYERS_PER_TEAM = 5;
 const DEFAULT_MAPS = ['de_dust2', 'de_cache', 'de_inferno'];
 const COUNTRIES = ['LT', 'LV', 'EE', 'FI', 'SE', 'PL', 'DE', 'FR', 'NL', 'US'];
 const TEAM_PREFIXES = ['Neon', 'Silent', 'Quantum', 'Iron', 'Polar', 'Rapid', 'Crimson', 'Nova'];
@@ -38,9 +40,18 @@ function avatar(seed: string): string {
 }
 
 class SimulationTournamentService {
-  async create(teamCount: number): Promise<TournamentResponse> {
-    if (!SUPPORTED_TEAM_COUNTS.has(teamCount)) {
-      throw new Error('Simulation supports 4 or 8 teams.');
+  async create(teamCount: number, playersPerTeam: number): Promise<TournamentResponse> {
+    if (!Number.isInteger(teamCount) || teamCount < MIN_TEAM_COUNT || teamCount > MAX_TEAM_COUNT) {
+      throw new Error(`Simulation supports ${MIN_TEAM_COUNT}-${MAX_TEAM_COUNT} teams.`);
+    }
+    if (
+      !Number.isInteger(playersPerTeam) ||
+      playersPerTeam < MIN_PLAYERS_PER_TEAM ||
+      playersPerTeam > MAX_PLAYERS_PER_TEAM
+    ) {
+      throw new Error(
+        `Simulation supports ${MIN_PLAYERS_PER_TEAM}-${MAX_PLAYERS_PER_TEAM} players per team.`
+      );
     }
 
     const current = await tournamentService.getTournament();
@@ -83,7 +94,7 @@ class SimulationTournamentService {
           tag,
           countryCode: pick(COUNTRIES, runId, teamIndex + 40),
           logoUrl: avatar(teamSeed),
-          players: Array.from({ length: PLAYERS_PER_TEAM }, (_, playerIndex) => {
+          players: Array.from({ length: playersPerTeam }, (_, playerIndex) => {
             const playerSeed = `${teamSeed}:player:${playerIndex}`;
             const first = pick(FIRST_NAMES, runId, teamIndex * 10 + playerIndex);
             const last = pick(LAST_NAMES, runId, teamIndex * 10 + playerIndex + 100);
@@ -98,7 +109,7 @@ class SimulationTournamentService {
       }
 
       const tournament = await tournamentService.createTournament({
-        name: `Simulation ${teamCount} Teams`,
+        name: `Simulation ${teamCount} Teams (${playersPerTeam}v${playersPerTeam})`,
         type: 'single_elimination',
         format: 'bo3',
         maps,
@@ -116,7 +127,11 @@ class SimulationTournamentService {
         },
       });
 
-      log.success('[SIMULATION] Created isolated bot tournament', { teamCount, teamIds });
+      log.success('[SIMULATION] Created isolated bot tournament', {
+        teamCount,
+        playersPerTeam,
+        teamIds,
+      });
       return tournament;
     } catch (error) {
       for (const id of teamIds) {

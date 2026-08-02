@@ -8,35 +8,6 @@ import { matchzyConfigService } from './matchzyConfigService';
 import { applyAdminMatchAccess } from './matchConfigAccessService';
 
 /**
- * Determine whether matches should be simulated (bots instead of real players).
- *
- * This is intended as a dev-mode helper. In production, it always returns false
- * regardless of the stored setting so we never accidentally run live events in
- * simulation mode.
- */
-async function getSimulationFlag(): Promise<boolean> {
-  try {
-    return await settingsService.isSimulationModeEnabled();
-  } catch (error) {
-    log.warn('Failed to read simulate_matches setting, defaulting simulation=false', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return false;
-  }
-}
-
-async function getSimulationTimescale(): Promise<number> {
-  try {
-    return await settingsService.getSimulationTimescale();
-  } catch (error) {
-    log.warn('Failed to read simulation_timescale setting, defaulting to 1.0', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return 1;
-  }
-}
-
-/**
  * Normalize the tournament's maxRounds into a safe mp_maxrounds value.
  * - Accepts number or string (from DB / serialized JSON)
  * - Falls back to 24 (MR24) when missing/invalid.

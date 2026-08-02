@@ -324,6 +324,20 @@ const Tournament: React.FC = () => {
     window.history.replaceState({}, '', '/tournament');
   };
 
+  const handleCreateSimulation = async (teamCount: number, playersPerTeam: number) => {
+    try {
+      await api.post('/api/tournament/simulation', { teamCount, playersPerTeam });
+      await refreshData();
+      setShowWelcome(false);
+      setShowForm(false);
+      setIsEditing(false);
+      showSuccess(`Simulation created: ${teamCount} teams, ${playersPerTeam} players per team`);
+    } catch (error) {
+      showError(error instanceof Error ? error.message : 'Failed to create simulation tournament');
+      throw error;
+    }
+  };
+
   const [currentMapPoolId, setCurrentMapPoolId] = useState<number | null>(null);
 
   const handleSaveTemplate = (mapPoolId: number | null) => {
@@ -918,6 +932,7 @@ const Tournament: React.FC = () => {
         <TournamentWelcomeScreen
           onCreateNew={handleCreateNew}
           onLoadTemplate={handleLoadTemplate}
+          onCreateSimulation={handleCreateSimulation}
         />
       )}
 

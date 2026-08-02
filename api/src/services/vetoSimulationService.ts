@@ -4,9 +4,7 @@ import type { DbMatchRow, DbTournamentRow } from '../types/database.types';
 import type { TournamentResponse } from '../types/tournament.types';
 import { getVetoOrder } from '../utils/vetoConfig';
 import { emitVetoUpdate } from './socketService';
-import { settingsService } from './settingsService';
 import { generateMatchConfig } from './matchConfigBuilder';
-import { matchAllocationService } from './matchAllocationService';
 
 type VetoActionType = 'ban' | 'pick' | 'side_pick';
 type VetoTeam = 'team1' | 'team2';

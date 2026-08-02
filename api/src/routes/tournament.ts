@@ -35,10 +35,13 @@ import { simulationTournamentService } from '../services/simulationTournamentSer
 
 const router = Router();
 
-/** Create a normal MAT bracket populated with synthetic teams for one-person testing. */
+/** Create an isolated MAT bracket populated with synthetic teams for one-person testing. */
 router.post('/simulation', requireAuth, async (req: Request, res: Response) => {
   try {
-    const tournament = await simulationTournamentService.create(Number(req.body?.teamCount));
+    const tournament = await simulationTournamentService.create(
+      Number(req.body?.teamCount),
+      req.body?.playersPerTeam === undefined ? 5 : Number(req.body.playersPerTeam)
+    );
     return res.status(201).json({ success: true, tournament });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create simulation tournament';
