@@ -51,8 +51,26 @@ interface VetoState {
   completedAt?: string;
 }
 
-const DEFAULT_STEP_DELAY_MS = 1000;
-const activeVetoSimulationSlugs = new Set<string>();
+export const SIMULATION_VETO_STEP_DELAY_MS = 1800;
+const vetoLocks = new Map<string, Promise<void>>();
+
+export async function acquireVetoLock(matchSlug: string): Promise<() => void> {
+  const previous = vetoLocks.get(matchSlug) ?? Promise.resolve();
+  let releaseCurrent!: () => void;
+  const current = new Promise<void>((resolve) => {
+    releaseCurrent = resolve;
+  });
+  const queued = previous.then(() => current);
+  vetoLocks.set(matchSlug, queued);
+  await previous;
+
+  return () => {
+    releaseCurrent();
+    if (vetoLocks.get(matchSlug) === queued) {
+      vetoLocks.delete(matchSlug);
+    }
+  };
+}
 
 function getRandomElement<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
@@ -71,10 +89,19 @@ export async function autoCompleteVetoForMatch(
   matchSlug: string,
   options?: { stepDelayMs?: number }
 ): Promise<void> {
-  if (activeVetoSimulationSlugs.has(matchSlug)) {
-    return;
+  const releaseVetoLock = await acquireVetoLock(matchSlug);
+  try {
+    await runAutoCompleteVetoForMatch(matchSlug, options);
+  } finally {
+    releaseVetoLock();
   }
-  const stepDelayMs = options?.stepDelayMs ?? DEFAULT_STEP_DELAY_MS;
+}
+
+async function runAutoCompleteVetoForMatch(
+  matchSlug: string,
+  options?: { stepDelayMs?: number }
+): Promise<void> {
+  const stepDelayMs = options?.stepDelayMs ?? SIMULATION_VETO_STEP_DELAY_MS;
 
   const match = await db.queryOneAsync<DbMatchRow>('SELECT * FROM matches WHERE slug = ?', [
     matchSlug,
@@ -140,8 +167,6 @@ export async function autoCompleteVetoForMatch(
     log.debug(`[VETO-SIM] Tournament ${t.id} is not marked for simulation; skipping ${matchSlug}`);
     return;
   }
-
-  activeVetoSimulationSlugs.add(matchSlug);
 
   // Only BO formats use veto; safeguard here in case caller forgot.
   if (!['bo1', 'bo3', 'bo5'].includes(tournament.format)) {
@@ -339,8 +364,6 @@ export async function autoCompleteVetoForMatch(
           e as Error
         );
       }
-
-      activeVetoSimulationSlugs.delete(matchSlug);
 
       // Stop at the normal MAT boundary. The operator must explicitly Prepare
       // and Go Live from the Operator Room after the bot veto is complete.

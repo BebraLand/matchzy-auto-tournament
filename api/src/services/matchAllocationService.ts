@@ -9,7 +9,10 @@ import { generateRoundMatches, advanceToNextRound } from './shuffleTournamentSer
 import { log } from '../utils/logger';
 import { getLastServerTestEvent } from './serverConnectivityService';
 import { settingsService } from './settingsService';
-import { autoCompleteVetoForMatch } from './vetoSimulationService';
+import {
+  autoCompleteVetoForMatch,
+  SIMULATION_VETO_STEP_DELAY_MS,
+} from './vetoSimulationService';
 import { operatorControlService } from './operatorControlService';
 import type { ServerResponse } from '../types/server.types';
 import type { DbMatchRow } from '../types/database.types';
@@ -1489,7 +1492,7 @@ export class MatchAllocationService {
           for (const m of pendingMatches) {
             const slug = m.slug;
             setImmediate(() => {
-              void autoCompleteVetoForMatch(slug, { stepDelayMs: 1000 });
+              void autoCompleteVetoForMatch(slug, { stepDelayMs: SIMULATION_VETO_STEP_DELAY_MS });
             });
           }
         }

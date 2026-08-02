@@ -2,7 +2,11 @@ import { Router, Request, Response } from 'express';
 import { db } from '../config/database';
 import { log } from '../utils/logger';
 import { emitBracketUpdate, emitMatchUpdate, emitVetoUpdate } from '../services/socketService';
-import { autoCompleteVetoForMatch } from '../services/vetoSimulationService';
+import {
+  acquireVetoLock,
+  autoCompleteVetoForMatch,
+  SIMULATION_VETO_STEP_DELAY_MS,
+} from '../services/vetoSimulationService';
 import { matchAllocationService } from '../services/matchAllocationService';
 import type { DbMatchRow, DbTournamentRow } from '../types/database.types';
 import type { TournamentResponse } from '../types/tournament.types';
@@ -379,7 +383,7 @@ router.get('/:matchSlug', async (req: Request, res: Response) => {
     if (tournamentForSimulation?.settings) {
       const settings = JSON.parse(tournamentForSimulation.settings) as { simulation?: boolean };
       if (settings.simulation === true && vetoState.status !== 'completed') {
-        void autoCompleteVetoForMatch(matchSlug, { stepDelayMs: 700 });
+        void autoCompleteVetoForMatch(matchSlug, { stepDelayMs: SIMULATION_VETO_STEP_DELAY_MS });
       }
     }
 
@@ -439,8 +443,10 @@ router.get('/:matchSlug', async (req: Request, res: Response) => {
  * users are blocked here and can only see the public, read‑only views.
  */
 router.post('/:matchSlug/action', async (req: Request, res: Response) => {
+  let releaseVetoLock: (() => void) | undefined;
   try {
     const { matchSlug } = req.params;
+    releaseVetoLock = await acquireVetoLock(matchSlug);
     const { mapName, side, teamSlug } = req.body;
 
     const match = await db.queryOneAsync<DbMatchRow>('SELECT * FROM matches WHERE slug = ?', [
@@ -882,6 +888,8 @@ router.post('/:matchSlug/action', async (req: Request, res: Response) => {
       success: false,
       error: 'Failed to process veto action',
     });
+  } finally {
+    releaseVetoLock?.();
   }
 });
 
