@@ -161,17 +161,18 @@ export default function BroadcastVeto() {
   const getMapCaption = (mapName: string, stage: MapStage) => {
     if (stage === 'banned') {
       const action = veto?.actions.find((entry) => entry.action === 'ban' && entry.mapName === mapName);
-      return action ? `BANNED BY ${teamName(action.team)}` : 'BANNED';
+      return action ? `BAN · ${teamName(action.team)}` : 'BAN';
     }
     const picked = pickedByMap.get(mapName);
     if (stage === 'decider') {
-      if (picked?.knifeRound) return 'DECIDER · KNIFE ROUND';
-      return picked?.sideTeam1 ? `DECIDER · TEAM 1 ${picked.sideTeam1}` : 'DECIDER';
+      if (picked?.knifeRound) return 'KNIFE ROUND';
+      return picked?.sideTeam1
+        ? `${veto?.team1Name || 'TEAM 1'} · STARTS ${picked.sideTeam1}`
+        : 'DECIDER';
     }
     if (picked) {
-      const pickedLabel = `MAP ${picked.mapNumber} · PICKED BY ${teamName(picked.pickedBy)}`;
-      const side = picked.sideTeam1 ? ` · TEAM 1 ${picked.sideTeam1}` : '';
-      return `${pickedLabel}${side}`;
+      const side = picked.sideTeam1 ? ` · ${veto?.team1Name || 'TEAM 1'} STARTS ${picked.sideTeam1}` : '';
+      return `${teamName(picked.pickedBy)}${side}`;
     }
     return veto?.status === 'completed' ? 'NOT PLAYED' : 'IN THE POOL';
   };
@@ -235,6 +236,12 @@ export default function BroadcastVeto() {
             const isLatest = latestAction?.mapName === mapName;
             const metadata = maps.get(mapName);
             const image = metadata?.imageUrl || getMapFullImageUrl(mapName);
+            const picked = pickedByMap.get(mapName);
+            const pickedLogo = picked?.pickedBy === 'team1'
+              ? teamLogos.team1
+              : picked?.pickedBy === 'team2'
+                ? teamLogos.team2
+                : null;
             return (
               <article
                 className={`map-card ${stage} ${isLatest ? 'latest' : ''}`}
@@ -243,9 +250,17 @@ export default function BroadcastVeto() {
               >
                 <img src={image} alt="" />
                 <div className="map-shade" />
-                <div className="map-stage">{stage === 'available' ? 'AVAILABLE' : stage.toUpperCase()}</div>
+                <div className="map-stage">
+                  <span>{metadata?.displayName || getMapDisplayName(mapName)}</span>
+                  {isLatest && <b>LIVE</b>}
+                </div>
+                {pickedLogo && (
+                  <div className="map-team-mark">
+                    <img src={pickedLogo} alt="" />
+                  </div>
+                )}
                 <div className="map-info">
-                  <h2>{metadata?.displayName || getMapDisplayName(mapName)}</h2>
+                  <strong>{stage === 'available' ? 'AVAILABLE' : stage === 'banned' ? 'BAN' : stage === 'picked' ? 'PICK' : 'DECIDER'}</strong>
                   <p>{getMapCaption(mapName, stage)}</p>
                 </div>
               </article>
@@ -317,6 +332,22 @@ const broadcastStyles = `
   .versus span { font-size:34px;font-style:normal;letter-spacing:-.04em; }.versus small { font-size:9px; }
   .veto-turn { margin:18px 0 28px; }.veto-turn strong { font-size:clamp(18px,1.35vw,27px);letter-spacing:.045em; }
   .map-grid { grid-template-columns:repeat(7,minmax(0,1fr));gap:10px; }.map-card { border-color:rgba(136,163,191,.28);box-shadow:0 12px 28px rgba(0,0,0,.22);background:radial-gradient(circle at 70% 20%,#16283a,#0b1420 65%); }.map-card img { opacity:.76; }.map-info h2 { font-weight:850; }.map-stage { letter-spacing:.09em; }
+  .map-grid { grid-template-columns:repeat(7,minmax(0,1fr)); max-width:1500px; gap:12px; padding:18px 22px 20px; background:rgba(8,10,12,.8); }
+  .map-card { min-height:clamp(190px,24vh,250px); border-radius:20px; border:1px solid rgba(255,255,255,.3); box-shadow:0 15px 35px rgba(0,0,0,.42); }
+  .map-card img { opacity:.78; transition:transform .7s ease, opacity .7s ease, filter .7s ease; }
+  .map-card:hover img { transform:scale(1.06); opacity:.9; }
+  .map-card.banned { border-color:rgba(255,132,142,.8); }.map-card.banned .map-shade { background:linear-gradient(180deg,rgba(42,12,18,.25),rgba(67,10,18,.82)); }
+  .map-card.picked { border-color:rgba(68,207,168,.9); box-shadow:0 0 0 1px rgba(68,207,168,.18),0 15px 35px rgba(0,0,0,.42); }.map-card.picked .map-shade { background:linear-gradient(180deg,rgba(7,27,28,.15),rgba(4,45,37,.72)); }
+  .map-card.decider { border-color:rgba(255,207,92,.9); }.map-card.decider .map-shade { background:linear-gradient(180deg,rgba(40,30,8,.2),rgba(76,52,7,.8)); }
+  .map-stage { top:14px; left:14px; right:14px; display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; letter-spacing:.13em; }
+  .map-stage span { padding:6px 9px; border-radius:7px; background:rgba(7,11,15,.72); color:#f0f5f8; box-shadow:0 5px 14px rgba(0,0,0,.24); }
+  .map-stage b { padding:6px 9px; border-radius:999px; background:rgba(82,212,166,.8); color:#071713; font-size:10px; letter-spacing:.12em; box-shadow:0 0 16px rgba(82,212,166,.45); }
+  .map-team-mark { position:absolute; z-index:1; inset:26% 20% 24%; display:grid; place-items:center; pointer-events:none; }
+  .map-team-mark img { position:static; width:min(58%,110px); height:min(58%,110px); object-fit:contain; opacity:1; filter:drop-shadow(0 8px 12px rgba(0,0,0,.7)); }
+  .map-info { left:14px; right:14px; bottom:15px; display:flex; flex-direction:column; align-items:flex-start; gap:5px; }
+  .map-info strong { padding:6px 10px; border:1px solid currentColor; border-radius:7px; background:rgba(7,11,15,.62); color:#f3f7fa; font-size:10px; letter-spacing:.14em; }
+  .map-card.banned .map-info strong { color:#ffb3bb; }.map-card.picked .map-info strong { color:#9bf1d2; }.map-card.decider .map-info strong { color:#ffe59a; }
+  .map-info p { max-width:100%; margin:0; color:#f4f7fb; font-size:clamp(9px,.66vw,13px); letter-spacing:.08em; font-weight:850; line-height:1.25; text-shadow:0 2px 7px rgba(0,0,0,.8); }
   .timeline-action { border:0;border-left:2px solid #47789e;background:rgba(15,25,38,.86); }.timeline-action.team2 { border-left-color:#b67a2e; }
   .veto-standby { background:radial-gradient(circle at 50% 42%,rgba(40,69,101,.32),transparent 34%),#080d15; }.veto-standby:before,.veto-standby:after { width:22vw;background:linear-gradient(90deg,transparent,rgba(89,151,197,.48)); }.standby-mark { display:none; }.veto-standby h1 { font-size:clamp(50px,5vw,96px);font-style:normal;font-weight:850;letter-spacing:-.035em;line-height:1; }.veto-standby h2 { margin-top:24px;font-size:clamp(14px,1vw,20px);letter-spacing:.12em;font-weight:700; }.standby-kicker { margin-bottom:18px;letter-spacing:.2em;color:#77b8e5; }
   .veto-loading, .veto-error { display: grid; place-items: center; min-height: 100vh; color: #b8dbf7; letter-spacing: .18em; font-weight: 900; }.veto-error { color: #ff9ca2; }
