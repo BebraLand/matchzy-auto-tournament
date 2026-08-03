@@ -164,7 +164,10 @@ export default function BroadcastVeto() {
       return action ? `BANNED BY ${teamName(action.team)}` : 'BANNED';
     }
     const picked = pickedByMap.get(mapName);
-    if (stage === 'decider') return 'DECIDER · KNIFE ROUND';
+    if (stage === 'decider') {
+      if (picked?.knifeRound) return 'DECIDER · KNIFE ROUND';
+      return picked?.sideTeam1 ? `DECIDER · TEAM 1 ${picked.sideTeam1}` : 'DECIDER';
+    }
     if (picked) {
       const pickedLabel = `MAP ${picked.mapNumber} · PICKED BY ${teamName(picked.pickedBy)}`;
       const side = picked.sideTeam1 ? ` · TEAM 1 ${picked.sideTeam1}` : '';
