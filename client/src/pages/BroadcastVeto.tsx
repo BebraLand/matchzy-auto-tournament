@@ -332,7 +332,7 @@ const broadcastStyles = `
   .versus span { font-size:34px;font-style:normal;letter-spacing:-.04em; }.versus small { font-size:9px; }
   .veto-turn { margin:18px 0 28px; }.veto-turn strong { font-size:clamp(18px,1.35vw,27px);letter-spacing:.045em; }
   .map-grid { grid-template-columns:repeat(7,minmax(0,1fr));gap:10px; }.map-card { border-color:rgba(136,163,191,.28);box-shadow:0 12px 28px rgba(0,0,0,.22);background:radial-gradient(circle at 70% 20%,#16283a,#0b1420 65%); }.map-card img { opacity:.76; }.map-info h2 { font-weight:850; }.map-stage { letter-spacing:.09em; }
-  .map-grid { grid-template-columns:repeat(7,minmax(0,1fr)); max-width:1500px; gap:12px; padding:18px 22px 20px; background:rgba(8,10,12,.8); }
+  .map-grid { grid-template-columns:repeat(7,minmax(0,1fr)); max-width:1500px; gap:12px; padding:0; background:transparent; }
   .map-card { min-height:clamp(190px,24vh,250px); border-radius:20px; border:1px solid rgba(255,255,255,.3); box-shadow:0 15px 35px rgba(0,0,0,.42); }
   .map-card img { opacity:.78; transition:transform .7s ease, opacity .7s ease, filter .7s ease; }
   .map-card:hover img { transform:scale(1.06); opacity:.9; }
