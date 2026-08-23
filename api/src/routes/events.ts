@@ -190,6 +190,15 @@ async function handleEventRequest(
     log.webhookReceived(event.event, actualMatchSlug);
 
     const serverId = resolvedMatch?.server_id || matchSlugOrServerIdFromUrl || payloadServerId || 'unknown';
+    // The admin connectivity test temporarily places a test_<host>_<port>
+    // identifier in the webhook URL. MatchZy still sends the real server_id
+    // in the payload, so retain both identities: the temporary ID lets the
+    // test request finish, while allocation/tracking must use the real ID.
+    const isTemporaryTestServerId = Boolean(
+      matchSlugOrServerIdFromUrl?.startsWith('test_')
+    );
+    const trackedServerId =
+      isTemporaryTestServerId && payloadServerId ? payloadServerId : serverId;
 
     // Handle server_configured event from MatchZy Enhanced
     // Sent when server is configured with webhook URL or on startup
@@ -203,8 +212,8 @@ async function handleEventRequest(
         plugin_version: ev.plugin_version,
       });
 
-      if (serverId && serverId !== 'unknown') {
-        await serverTrackingService.updateHeartbeat(serverId);
+      if (trackedServerId && trackedServerId !== 'unknown') {
+        await serverTrackingService.updateHeartbeat(trackedServerId);
       } else if (ev.server_id) {
         await serverTrackingService.updateHeartbeat(ev.server_id);
       }
@@ -221,13 +230,16 @@ async function handleEventRequest(
       if (serverId && serverId !== 'unknown') {
         recordServerTestEvent(serverId);
       }
+      if (trackedServerId && trackedServerId !== serverId && trackedServerId !== 'unknown') {
+        recordServerTestEvent(trackedServerId);
+      }
     }
 
     // Handle CS2 update-required marker from MatchZy Enhanced safe auto-updater.
     // This is a server-level signal (matchid=-1) and should not enter the match event pipeline.
     if (event.event === 'cs2_update_required') {
       const ev = event as Cs2UpdateRequiredEvent;
-      const effectiveServerId = ev.server_id || serverId;
+      const effectiveServerId = ev.server_id || trackedServerId;
       if (effectiveServerId && effectiveServerId !== 'unknown') {
         await serverTrackingService.setCs2UpdateRequired(effectiveServerId, ev.required_version, {
           phase: ev.phase ?? null,
@@ -253,7 +265,7 @@ async function handleEventRequest(
     // This is a server-level signal and should not enter the match event pipeline.
     if (event.event === 'server_health') {
       const ev = event as ServerHealthEvent;
-      const effectiveServerId = ev.server_id || serverId;
+      const effectiveServerId = ev.server_id || trackedServerId;
       if (effectiveServerId && effectiveServerId !== 'unknown') {
         await serverTrackingService.setServerHealth(effectiveServerId, {
           dbOk: Boolean(ev.db_ok),
@@ -273,15 +285,15 @@ async function handleEventRequest(
     }
 
     // Update server heartbeat for ALL events (shows server is alive)
-    if (serverId && serverId !== 'unknown') {
-      await serverTrackingService.updateHeartbeat(serverId);
+    if (trackedServerId && trackedServerId !== 'unknown') {
+      await serverTrackingService.updateHeartbeat(trackedServerId);
     }
 
     // Emit server-level event for admin monitoring UI (Server Events Monitor).
     // This allows the frontend to subscribe to `server:event` and
     // `server:event:{serverId}` streams without needing to join on matches.
-    if (serverId && serverId !== 'unknown') {
-      emitServerEvent(serverId, {
+    if (trackedServerId && trackedServerId !== 'unknown') {
+      emitServerEvent(trackedServerId, {
         timestamp: Date.now(),
         matchSlug: actualMatchSlug,
         event,
@@ -293,9 +305,9 @@ async function handleEventRequest(
       log.info('[EVENTS] Event received, no match loaded', {
         matchid: actualMatchSlug,
         event: event.event,
-        serverId,
+        serverId: trackedServerId,
       });
-      logWebhookEvent(serverId, actualMatchSlug, event);
+      logWebhookEvent(trackedServerId, actualMatchSlug, event);
       return res.status(200).json({
         success: true,
         message: 'Event received (no active match)',
