@@ -743,7 +743,7 @@ export default function Matches() {
   return (
     <Box data-testid="matches-page" sx={{ width: '100%', height: '100%' }}>
       {renderAllocationBanner()}
-      {hasMatches && tournamentStatus !== 'setup' && (
+      {hasMatches && (
         <HudIntegrationPanel matches={[...upcomingMatches, ...liveMatches, ...matchHistory]} />
       )}
       {hasMatches && tournamentStatus !== 'setup' && (

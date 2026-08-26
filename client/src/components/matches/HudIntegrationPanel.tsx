@@ -41,8 +41,8 @@ export function HudIntegrationPanel({ matches }: { matches: Match[] }) {
     () =>
       matches.filter(
         (match) =>
-          match.team1 &&
-          match.team2 &&
+          (match.team1 || match.config?.team1) &&
+          (match.team2 || match.config?.team2) &&
           match.operatorState !== 'held' &&
           match.operatorState !== 'postponed' &&
           match.status !== 'cancelled'

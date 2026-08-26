@@ -3,7 +3,8 @@ import { db } from '../config/database';
 import { getMapResults } from './matchMapResultService';
 import type { PlayerRecord } from './playerService';
 import type { VetoState } from '../types/veto.types';
-import type { MatchConfig } from '../types/match.types';
+import type { MatchConfig, MatchTeam } from '../types/match.types';
+import { normalizeConfigPlayers } from '../utils/playerTransform';
 import type {
   HudCurrentResponseV1,
   HudMapProjection,
@@ -21,7 +22,7 @@ const BROADCAST_MATCH_SETTING = 'jts_hud_broadcast_match_slug';
 type MatchRow = {
   id: number;
   slug: string;
-  tournament_id: number;
+  tournament_id?: number | null;
   round: number;
   match_number: number;
   bracket?: string | null;
@@ -129,7 +130,8 @@ class HudProjectionService {
     }
     const match = await db.queryOneAsync<MatchRow>('SELECT * FROM matches WHERE slug = ?', [slug]);
     if (!match) throw new Error(`Match '${slug}' not found`);
-    if (!match.team1_id || !match.team2_id) {
+    const config = parseJson<Partial<MatchConfig>>(match.config, {});
+    if (!(match.team1_id || config.team1) || !(match.team2_id || config.team2)) {
       throw new Error('Broadcast match must have two assigned teams');
     }
     if (match.operator_state === 'held' || match.operator_state === 'postponed') {
@@ -165,11 +167,18 @@ class HudProjectionService {
   private async projectTeam(
     teamId: string,
     publicBaseUrl: string,
-    playerRecords: Map<string, PlayerRecord>
+    playerRecords: Map<string, PlayerRecord>,
+    fallbackTeam?: MatchTeam
   ): Promise<HudTeamProjection> {
     const team = await db.queryOneAsync<TeamRow>('SELECT * FROM teams WHERE id = ?', [teamId]);
-    if (!team) throw new Error(`Team '${teamId}' not found`);
-    const roster = parseJson<RosterPlayer[]>(team.players, []);
+    if (!team && !fallbackTeam) throw new Error(`Team '${teamId}' not found`);
+    const roster = team
+      ? parseJson<RosterPlayer[]>(team.players, [])
+      : normalizeConfigPlayers(fallbackTeam?.players).map((player) => ({
+          steamId: player.steamid,
+          name: player.name,
+          avatar: player.avatar,
+        }));
     const players: HudPlayerProjection[] = roster.map((entry) => {
       const profile = playerRecords.get(entry.steamId);
       return {
@@ -181,28 +190,44 @@ class HudProjectionService {
         avatarUrl: absoluteUrl(profile?.avatar_url || entry.avatar, publicBaseUrl),
         photoUrl: absoluteUrl(profile?.photo_url, publicBaseUrl),
         countryCode: profile?.country_code || null,
-        teamId: team.id,
+        teamId,
       };
     });
 
     return {
-      id: team.id,
-      name: team.name,
-      tag: team.tag || team.name.slice(0, 4).toUpperCase(),
-      countryCode: team.country_code || null,
-      logoUrl: absoluteUrl(team.logo_url, publicBaseUrl),
+      id: team?.id || teamId,
+      name: team?.name || fallbackTeam?.name || teamId,
+      tag:
+        team?.tag ||
+        fallbackTeam?.tag ||
+        (team?.name || fallbackTeam?.name || teamId).slice(0, 4).toUpperCase(),
+      countryCode: team?.country_code || fallbackTeam?.flag || null,
+      logoUrl: absoluteUrl(team?.logo_url || fallbackTeam?.logo, publicBaseUrl),
       players,
     };
   }
 
-  private async getPlayerRecords(teamIds: string[]): Promise<Map<string, PlayerRecord>> {
-    const teams = await db.queryAsync<TeamRow>(
-      `SELECT * FROM teams WHERE id IN (${teamIds.map(() => '?').join(',')})`,
-      teamIds
-    );
+  private async getPlayerRecords(
+    teamIds: string[],
+    fallbackTeams: MatchTeam[] = []
+  ): Promise<Map<string, PlayerRecord>> {
+    const teams =
+      teamIds.length > 0
+        ? await db.queryAsync<TeamRow>(
+            `SELECT * FROM teams WHERE id IN (${teamIds.map(() => '?').join(',')})`,
+            teamIds
+          )
+        : [];
     const steamIds = Array.from(
       new Set(
-        teams.flatMap((team) => parseJson<RosterPlayer[]>(team.players, []).map((p) => p.steamId))
+        [
+          ...teams.flatMap((team) =>
+            parseJson<RosterPlayer[]>(team.players, []).map((p) => p.steamId)
+          ),
+          ...fallbackTeams.flatMap((team) =>
+            normalizeConfigPlayers(team.players).map((player) => player.steamid)
+          ),
+        ]
       )
     );
     if (steamIds.length === 0) return new Map();
@@ -281,25 +306,44 @@ class HudProjectionService {
     publicBaseUrl: string
   ): Promise<HudProjectionV1 | null> {
     const match = await db.queryOneAsync<MatchRow>('SELECT * FROM matches WHERE slug = ?', [slug]);
-    if (!match || !match.team1_id || !match.team2_id) return null;
-    const tournament = await db.queryOneAsync<TournamentRow>(
-      'SELECT * FROM tournament WHERE id = ?',
-      [match.tournament_id]
-    );
+    if (!match) return null;
+
+    const config = parseJson<Partial<MatchConfig>>(match.config, {});
+    const configTeam1 = config.team1;
+    const configTeam2 = config.team2;
+    const team1Id = match.team1_id || configTeam1?.id || `${slug}:team1`;
+    const team2Id = match.team2_id || configTeam2?.id || `${slug}:team2`;
+    if ((!configTeam1 && !match.team1_id) || (!configTeam2 && !match.team2_id)) return null;
+    const projectionMatch = { ...match, team1_id: team1Id, team2_id: team2Id };
+
+    const tournament = match.tournament_id
+      ? await db.queryOneAsync<TournamentRow>('SELECT * FROM tournament WHERE id = ?', [
+          match.tournament_id,
+        ])
+      : {
+          id: 0,
+          name: 'Manual Matches',
+          type: 'manual',
+          format: 'bo1',
+          status: match.status === 'completed' ? 'completed' : 'in_progress',
+          settings: null,
+        };
     if (!tournament) return null;
 
     const veto = parseJson<VetoState | null>(match.veto_state, null);
-    const config = parseJson<Partial<MatchConfig>>(match.config, {});
-    const playerRecords = await this.getPlayerRecords([match.team1_id, match.team2_id]);
-    const [team1, team2, maps] = await Promise.all([
-      this.projectTeam(match.team1_id, publicBaseUrl, playerRecords),
-      this.projectTeam(match.team2_id, publicBaseUrl, playerRecords),
-      this.projectMaps(match, veto, config),
+    const fallbackTeams = [configTeam1, configTeam2].filter(
+      (team): team is MatchTeam => Boolean(team)
+    );
+    const playerRecords = await this.getPlayerRecords([team1Id, team2Id], fallbackTeams);
+    const [projectedTeam1, projectedTeam2, maps] = await Promise.all([
+      this.projectTeam(team1Id, publicBaseUrl, playerRecords, config.team1),
+      this.projectTeam(team2Id, publicBaseUrl, playerRecords, config.team2),
+      this.projectMaps(projectionMatch, veto, config),
     ]);
     const seriesScore = maps.reduce(
       (score, map) => {
-        if (map.winnerTeamId === team1.id) score.team1 += 1;
-        if (map.winnerTeamId === team2.id) score.team2 += 1;
+        if (map.winnerTeamId === projectedTeam1.id) score.team1 += 1;
+        if (map.winnerTeamId === projectedTeam2.id) score.team2 += 1;
         return score;
       },
       { team1: 0, team2: 0 }
@@ -323,12 +367,12 @@ class HudProjectionService {
           : null,
       currentMap: match.current_map || null,
       currentMapNumber: typeof match.map_number === 'number' ? match.map_number + 1 : null,
-      team1,
-      team2,
+      team1: projectedTeam1,
+      team2: projectedTeam2,
       seriesScore,
       veto: {
         status: veto?.status || (match.veto_opened_at ? 'in_progress' : 'not_started'),
-        actions: this.projectVeto(veto, match),
+        actions: this.projectVeto(veto, projectionMatch),
       },
       maps,
       simulation: Boolean(config.simulation || tournamentSettings.simulation),
