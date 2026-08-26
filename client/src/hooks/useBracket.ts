@@ -342,6 +342,7 @@ export const useBracket = () => {
       const isTournamentAction =
         action &&
         [
+          'tournament_created',
           'tournament_started',
           'tournament_reset',
           'tournament_restarted',
@@ -379,6 +380,8 @@ export const useBracket = () => {
             'tournament_updated',
             'tournament_completed',
             'tournament_started',
+            'tournament_created',
+            'tournament_deleted',
             // Structural changes that add/remove matches or change bracket occupants
             'round_advanced',
             'match_ready',
@@ -497,10 +500,12 @@ export const useBracket = () => {
 
     newSocket.on('match:update', applyMatchPatch);
     newSocket.on('bracket:update', handleBracketUpdate);
+    newSocket.on('tournament:update', handleBracketUpdate);
 
     return () => {
       newSocket.off('match:update', applyMatchPatch);
       newSocket.off('bracket:update', handleBracketUpdate);
+      newSocket.off('tournament:update', handleBracketUpdate);
       newSocket.close();
     };
   }, [loadBracket, showSuccess, showSnackbar]);

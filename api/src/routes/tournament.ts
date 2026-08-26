@@ -472,6 +472,9 @@ router.post('/', async (req: Request, res: Response) => {
 
     const tournament = await tournamentService.createTournament(input);
 
+    emitTournamentUpdate({ action: 'tournament_created', ...tournament });
+    emitBracketUpdate({ action: 'tournament_created' });
+
     return res.json({
       success: true,
       tournament,
@@ -1432,6 +1435,8 @@ router.post('/shuffle', async (req: Request, res: Response) => {
     }
 
     const tournament = await createShuffleTournament(config);
+
+    emitTournamentUpdate({ action: 'tournament_created', ...tournament });
 
     return res.status(201).json({
       success: true,

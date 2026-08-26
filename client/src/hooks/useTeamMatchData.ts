@@ -420,6 +420,7 @@ export function useTeamMatchData(teamId: string | undefined): UseTeamMatchDataRe
       }
 
       const refreshActions = new Set([
+        'tournament_created',
         'tournament_reset',
         'tournament_started',
         'tournament_restarted',

@@ -136,6 +136,18 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
 
     newSocket.on('connect', refreshFromServer);
     newSocket.on(`match:update:${matchSlug}`, refreshFromServer);
+    const handleTournamentUpdate = (event?: { deleted?: boolean; action?: string }) => {
+      if (event?.deleted || event?.action === 'tournament_deleted') {
+        loadGenerationRef.current += 1;
+        setVetoState(null);
+        setAllMaps(new Map());
+        setError(t('vetoInterface.errors.matchNotFound'));
+        setLoading(false);
+        return;
+      }
+      refreshFromServer();
+    };
+    newSocket.on('tournament:update', handleTournamentUpdate);
 
     newSocket.on(`veto:update:${matchSlug}`, (updatedVeto: VetoState | null) => {
       if (!updatedVeto) {
@@ -155,9 +167,10 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
     });
 
     return () => {
+      newSocket.off('tournament:update', handleTournamentUpdate);
       newSocket.close();
     };
-  }, [matchSlug, loadVetoState]);
+  }, [matchSlug, loadVetoState, t]);
 
   // Memoize mapsToShow - must be called before any early returns (Rules of Hooks)
   const mapsToShow = useMemo(() => {

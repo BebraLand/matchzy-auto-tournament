@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { io } from 'socket.io-client';
 import { api } from '../utils/api';
 import type { Tournament, TournamentResponse } from '../types';
 
@@ -44,6 +45,19 @@ export const useTournamentStatus = (): UseTournamentStatusResult => {
 
   useEffect(() => {
     void fetchTournament();
+  }, [fetchTournament]);
+
+  useEffect(() => {
+    const socket = io();
+    const handleTournamentUpdate = () => {
+      void fetchTournament();
+    };
+
+    socket.on('tournament:update', handleTournamentUpdate);
+    return () => {
+      socket.off('tournament:update', handleTournamentUpdate);
+      socket.close();
+    };
   }, [fetchTournament]);
 
   return {

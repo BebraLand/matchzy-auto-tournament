@@ -937,6 +937,11 @@ const Tournament: React.FC = () => {
     const handleTournamentUpdate = (data?: { action?: string; status?: string }) => {
       if (!data) return;
 
+      if (data.action === 'tournament_deleted') {
+        void refreshData();
+        return;
+      }
+
       // For any status-bearing update, refresh tournament data so the wizard
       // can move into the correct step (setup vs live).
       if (data.status) {

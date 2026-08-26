@@ -574,6 +574,8 @@ export default function PlayerProfile() {
       }
 
       const refreshActions = new Set([
+        'tournament_created',
+        'tournament_deleted',
         'tournament_reset',
         'tournament_started',
         'tournament_restarted',
