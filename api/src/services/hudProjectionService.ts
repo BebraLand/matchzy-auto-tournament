@@ -151,9 +151,15 @@ class HudProjectionService {
 
     const candidates = await db.queryAsync<MatchRow>(
       `SELECT * FROM matches
-       WHERE status IN ('live', 'loaded', 'completed')
+       WHERE status IN ('pending', 'ready', 'loaded', 'live', 'completed')
          AND COALESCE(operator_state, 'queued') NOT IN ('held', 'postponed')
-       ORDER BY CASE status WHEN 'live' THEN 0 WHEN 'loaded' THEN 1 ELSE 2 END,
+       ORDER BY CASE status
+                  WHEN 'live' THEN 0
+                  WHEN 'loaded' THEN 1
+                  WHEN 'ready' THEN 2
+                  WHEN 'pending' THEN 3
+                  ELSE 4
+                END,
                 loaded_at DESC NULLS LAST, id DESC`
     );
     if (candidates.length === 0) return null;
