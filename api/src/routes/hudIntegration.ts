@@ -6,6 +6,7 @@ import {
   disconnectHudIntegrationClients,
   emitHudProjectionInvalidated,
 } from '../services/socketService';
+import type { HudTokenMode } from '../services/hudTokenService';
 
 const router = Router();
 
@@ -17,10 +18,12 @@ function publicBaseUrl(req: Request): string {
 async function requireHudToken(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authorization = req.get('authorization');
   const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
-  if (!(await hudTokenService.verifyToken(token))) {
+  const mode = await hudTokenService.resolveToken(token);
+  if (!mode) {
     res.status(401).json({ success: false, error: 'Invalid or missing MAT HUD token' });
     return;
   }
+  res.locals.hudTokenMode = mode;
   next();
 }
 
@@ -32,14 +35,20 @@ router.get('/status', requireAuth, async (_req: Request, res: Response) => {
   res.json({ success: true, token, broadcastMatchSlug });
 });
 
-router.post('/token', requireAuth, async (_req: Request, res: Response) => {
+router.post('/token', requireAuth, async (req: Request, res: Response) => {
   try {
-    const created = await hudTokenService.createToken();
+    const requestedMode = (req.body as { mode?: HudTokenMode } | undefined)?.mode;
+    if (requestedMode && requestedMode !== 'manual' && requestedMode !== 'automatic') {
+      res.status(400).json({ success: false, error: 'Token mode must be manual or automatic' });
+      return;
+    }
+    const created = await hudTokenService.createToken(requestedMode || 'manual');
     disconnectHudIntegrationClients();
     res.status(201).json({
       success: true,
       token: created.token,
       createdAt: created.createdAt,
+      mode: created.mode,
       warning: 'Copy this token now. MAT stores only its hash and cannot show it again.',
     });
   } catch (error) {
@@ -76,7 +85,17 @@ router.use('/v1', requireHudToken);
 
 router.get('/v1/current', async (req: Request, res: Response) => {
   try {
-    const projection = await hudProjectionService.getCurrentProjection(publicBaseUrl(req));
+    const rawSteamIds = typeof req.query.steamIds === 'string' ? req.query.steamIds : '';
+    const steamIds = rawSteamIds
+      .split(',')
+      .map((steamId) => steamId.trim())
+      .filter(Boolean);
+    const tokenMode = (res.locals.hudTokenMode || 'manual') as HudTokenMode;
+    res.setHeader('X-MAT-HUD-Token-Mode', tokenMode);
+    const projection = await hudProjectionService.getCurrentProjection(publicBaseUrl(req), {
+      automatic: tokenMode === 'automatic',
+      steamIds,
+    });
     res.setHeader('Cache-Control', 'private, no-store');
     res.json(projection);
   } catch (error) {

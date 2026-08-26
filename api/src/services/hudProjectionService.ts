@@ -61,6 +61,11 @@ type TeamRow = {
 
 type RosterPlayer = { steamId: string; name: string; avatar?: string; elo?: number };
 
+type CurrentProjectionOptions = {
+  automatic?: boolean;
+  steamIds?: string[];
+};
+
 function parseJson<T>(value: string | null | undefined, fallback: T): T {
   if (!value) return fallback;
   try {
@@ -141,7 +146,65 @@ class HudProjectionService {
     return slug;
   }
 
-  private async resolveCurrentMatch(): Promise<MatchRow | null> {
+  private async resolveAutomaticMatch(steamIds: string[]): Promise<MatchRow | null> {
+    if (steamIds.length < 2) return null;
+
+    const candidates = await db.queryAsync<MatchRow>(
+      `SELECT * FROM matches
+       WHERE status IN ('live', 'loaded', 'completed')
+         AND COALESCE(operator_state, 'queued') NOT IN ('held', 'postponed')
+       ORDER BY CASE status WHEN 'live' THEN 0 WHEN 'loaded' THEN 1 ELSE 2 END,
+                loaded_at DESC NULLS LAST, id DESC`
+    );
+    if (candidates.length === 0) return null;
+
+    const teamIds = Array.from(
+      new Set(
+        candidates.flatMap((match) => {
+          const config = parseJson<Partial<MatchConfig>>(match.config, {});
+          return [match.team1_id || config.team1?.id, match.team2_id || config.team2?.id].filter(
+            (id): id is string => Boolean(id)
+          );
+        })
+      )
+    );
+    const teams = teamIds.length
+      ? await db.queryAsync<TeamRow>(
+          `SELECT * FROM teams WHERE id IN (${teamIds.map(() => '?').join(',')})`,
+          teamIds
+        )
+      : [];
+    const teamsById = new Map(teams.map((team) => [team.id, team]));
+    const observed = new Set(steamIds);
+
+    const ranked = candidates
+      .map((match) => {
+        const config = parseJson<Partial<MatchConfig>>(match.config, {});
+        const roster = [
+          { id: match.team1_id || config.team1?.id, fallback: config.team1 },
+          { id: match.team2_id || config.team2?.id, fallback: config.team2 },
+        ].flatMap(({ id, fallback }) => {
+          const team = id ? teamsById.get(id) : undefined;
+          return team
+            ? parseJson<RosterPlayer[]>(team.players, []).map((player) => player.steamId)
+            : normalizeConfigPlayers(fallback?.players).map((player) => player.steamid);
+        });
+        const overlap = new Set(roster.filter((steamId) => observed.has(steamId))).size;
+        return { match, overlap };
+      })
+      .sort((left, right) => right.overlap - left.overlap || right.match.id - left.match.id);
+
+    const best = ranked[0];
+    const second = ranked[1];
+    // ponytail: SteamID overlap is deterministic and cheap; ambiguous matches stay empty.
+    if (!best || best.overlap < 2 || (second && second.overlap === best.overlap)) return null;
+    return best.match;
+  }
+
+  private async resolveCurrentMatch(
+    options: CurrentProjectionOptions = {}
+  ): Promise<MatchRow | null> {
+    if (options.automatic) return this.resolveAutomaticMatch(options.steamIds || []);
     const selected = await this.getBroadcastMatchSlug();
     if (selected) {
       const match = await db.queryOneAsync<MatchRow>(
@@ -219,16 +282,14 @@ class HudProjectionService {
           )
         : [];
     const steamIds = Array.from(
-      new Set(
-        [
-          ...teams.flatMap((team) =>
-            parseJson<RosterPlayer[]>(team.players, []).map((p) => p.steamId)
-          ),
-          ...fallbackTeams.flatMap((team) =>
-            normalizeConfigPlayers(team.players).map((player) => player.steamid)
-          ),
-        ]
-      )
+      new Set([
+        ...teams.flatMap((team) =>
+          parseJson<RosterPlayer[]>(team.players, []).map((p) => p.steamId)
+        ),
+        ...fallbackTeams.flatMap((team) =>
+          normalizeConfigPlayers(team.players).map((player) => player.steamid)
+        ),
+      ])
     );
     if (steamIds.length === 0) return new Map();
     const players = await db.queryAsync<PlayerRecord>(
@@ -331,8 +392,8 @@ class HudProjectionService {
     if (!tournament) return null;
 
     const veto = parseJson<VetoState | null>(match.veto_state, null);
-    const fallbackTeams = [configTeam1, configTeam2].filter(
-      (team): team is MatchTeam => Boolean(team)
+    const fallbackTeams = [configTeam1, configTeam2].filter((team): team is MatchTeam =>
+      Boolean(team)
     );
     const playerRecords = await this.getPlayerRecords([team1Id, team2Id], fallbackTeams);
     const [projectedTeam1, projectedTeam2, maps] = await Promise.all([
@@ -394,8 +455,11 @@ class HudProjectionService {
     return { ...core, revision, generatedAt: new Date().toISOString() };
   }
 
-  async getCurrentProjection(publicBaseUrl: string): Promise<HudCurrentResponseV1> {
-    const match = await this.resolveCurrentMatch();
+  async getCurrentProjection(
+    publicBaseUrl: string,
+    options: CurrentProjectionOptions = {}
+  ): Promise<HudCurrentResponseV1> {
+    const match = await this.resolveCurrentMatch(options);
     if (!match) {
       return {
         contract: 'bebraland-mat-hud',

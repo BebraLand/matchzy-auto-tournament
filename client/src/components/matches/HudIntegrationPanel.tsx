@@ -21,7 +21,7 @@ import { useSnackbar } from '../../contexts/SnackbarContext';
 
 type IntegrationStatus = {
   success: boolean;
-  token: { configured: boolean; createdAt: string | null };
+  token: { configured: boolean; createdAt: string | null; mode: 'manual' | 'automatic' };
   broadcastMatchSlug: string | null;
 };
 
@@ -30,6 +30,7 @@ type TokenResponse = {
   token: string;
   createdAt: string;
   warning: string;
+  mode: 'manual' | 'automatic';
 };
 
 export function HudIntegrationPanel({ matches }: { matches: Match[] }) {
@@ -72,13 +73,15 @@ export function HudIntegrationPanel({ matches }: { matches: Match[] }) {
     }
   };
 
-  const generateToken = async () => {
+  const generateToken = async (mode: 'manual' | 'automatic') => {
     setBusy(true);
     try {
-      const response = await api.post<TokenResponse>('/api/integrations/jts-hud/token', {});
+      const response = await api.post<TokenResponse>('/api/integrations/jts-hud/token', { mode });
       setGeneratedToken(response.token);
       await refresh();
-      showSuccess('New read-only MAT HUD token generated');
+      showSuccess(
+        `${mode === 'automatic' ? 'Automatic' : 'Manual'} read-only MAT HUD token generated`
+      );
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Failed to generate MAT HUD token');
     } finally {
@@ -114,27 +117,30 @@ export function HudIntegrationPanel({ matches }: { matches: Match[] }) {
                 </Typography>
               </Box>
               <Typography variant="body2" color="text.secondary">
-                Select the one MAT match that JTs-Hud and OBS should display.
+                Select a MAT match for a manual token, or let an automatic token identify it from
+                the observer's live players.
               </Typography>
             </Box>
             <Chip
               color={status?.token.configured ? 'success' : 'default'}
               label={
-                status?.token.configured ? 'Read-only token configured' : 'Token not configured'
+                status?.token.configured
+                  ? `${status.token.mode === 'automatic' ? 'Automatic' : 'Manual'} token configured`
+                  : 'Token not configured'
               }
             />
           </Box>
 
           <FormControl fullWidth size="small">
-            <InputLabel id="broadcast-match-label">Broadcast match</InputLabel>
+            <InputLabel id="broadcast-match-label">Manual broadcast match</InputLabel>
             <Select
               labelId="broadcast-match-label"
               value={status?.broadcastMatchSlug || ''}
-              label="Broadcast match"
+              label="Manual broadcast match"
               disabled={busy}
               onChange={(event) => void selectBroadcast(event.target.value)}
             >
-              <MenuItem value="">None / automatic live fallback</MenuItem>
+              <MenuItem value="">None / automatic token selection</MenuItem>
               {eligibleMatches.map((match) => (
                 <MenuItem key={match.slug} value={match.slug}>
                   {match.team1?.name || 'TBD'} vs {match.team2?.name || 'TBD'} · {match.slug}
@@ -148,9 +154,21 @@ export function HudIntegrationPanel({ matches }: { matches: Match[] }) {
               variant="outlined"
               startIcon={<Key />}
               disabled={busy}
-              onClick={() => void generateToken()}
+              onClick={() => void generateToken('manual')}
             >
-              {status?.token.configured ? 'Regenerate HUD token' : 'Generate HUD token'}
+              {status?.token.mode === 'manual' && status.token.configured
+                ? 'Regenerate manual token'
+                : 'Generate manual token'}
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<LiveTv />}
+              disabled={busy}
+              onClick={() => void generateToken('automatic')}
+            >
+              {status?.token.mode === 'automatic' && status.token.configured
+                ? 'Regenerate automatic token'
+                : 'Generate automatic token'}
             </Button>
           </Box>
 
