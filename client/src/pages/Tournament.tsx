@@ -326,11 +326,11 @@ const Tournament: React.FC = () => {
     window.history.replaceState({}, '', '/tournament');
   };
 
-  const handleCreateSimulation = async () => {
+  const handleCreateSimulation = async (teamCount: number, playersPerTeam: number) => {
     try {
       const response = await api.post<{ success: boolean; teamIds: string[] }>('/api/tournament/simulation', {
-        teamCount: 4,
-        playersPerTeam: 5,
+        teamCount,
+        playersPerTeam,
       });
       // Simulation creates the isolated bot teams first, then deliberately enters
       // the same setup wizard as a normal tournament. The only special part is
@@ -350,7 +350,6 @@ const Tournament: React.FC = () => {
   };
 
   const discardSimulationDraft = async () => {
-    if (simulationDraftTeamIds.length === 0) return;
     try {
       await api.delete('/api/tournament/simulation', { teamIds: simulationDraftTeamIds });
     } catch (error) {

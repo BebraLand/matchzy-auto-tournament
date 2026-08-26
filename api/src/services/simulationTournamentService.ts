@@ -5,7 +5,7 @@ import { tournamentService } from './tournamentService';
 
 
 const MIN_TEAM_COUNT = 2;
-const MAX_TEAM_COUNT = 8;
+const MAX_TEAM_COUNT = 16;
 const MIN_PLAYERS_PER_TEAM = 1;
 const MAX_PLAYERS_PER_TEAM = 5;
 
@@ -82,14 +82,34 @@ function avatar(seed: string): string {
 
 class SimulationTournamentService {
   async discardTeams(teamIds: string[]): Promise<void> {
-    for (const id of teamIds) {
-      if (!id.startsWith('simulation-')) continue;
-      const team = await teamService.getTeamById(id);
-      if (!team) continue;
-      for (const player of team.players) {
-        await db.deleteAsync('players', 'id = ?', [player.steamId]);
+    const requestedIds = teamIds.filter((id) => id.startsWith('simulation-'));
+    const where = requestedIds.length
+      ? `id IN (${requestedIds.map(() => '?').join(',')})`
+      : "id LIKE 'simulation-%'";
+    const params = requestedIds.length ? requestedIds : [];
+    const teams = await db.queryAsync<{ id: string; players: string }>(
+      `SELECT id, players FROM teams WHERE ${where}`,
+      params
+    );
+    const playerIds = teams.flatMap((team) => {
+      try {
+        return (JSON.parse(team.players) as Array<{ steamId?: string }>)
+          .map((player) => player.steamId)
+          .filter((steamId): steamId is string => Boolean(steamId));
+      } catch {
+        return [];
       }
-      await teamService.deleteTeam(id);
+    });
+
+    if (playerIds.length > 0) {
+      await db.deleteAsync(
+        'players',
+        `id IN (${playerIds.map(() => '?').join(',')})`,
+        playerIds
+      );
+    }
+    if (teams.length > 0) {
+      await db.deleteAsync('teams', where, params);
     }
   }
 
@@ -171,12 +191,10 @@ class SimulationTournamentService {
       });
       return { teamIds };
     } catch (error) {
-      for (const id of teamIds) {
-        try {
-          await teamService.deleteTeam(id);
-        } catch {
-          // Best-effort cleanup; preserve the original creation error.
-        }
+      try {
+        await this.discardTeams(teamIds);
+      } catch (cleanupError) {
+        log.error('[SIMULATION] Failed to clean up partially created teams', cleanupError);
       }
       throw error;
     }
