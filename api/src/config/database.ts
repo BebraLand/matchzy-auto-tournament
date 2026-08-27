@@ -159,6 +159,7 @@ class DatabaseManager {
         { table: 'player_match_stats', column: 'score', type: 'INTEGER' },
         { table: 'player_match_stats', column: 'rounds_played', type: 'INTEGER' },
         { table: 'players', column: 'is_admin', type: 'INTEGER NOT NULL DEFAULT 0' },
+        { table: 'players', column: 'is_spectator', type: 'INTEGER NOT NULL DEFAULT 0' },
         { table: 'players', column: 'first_name', type: 'TEXT' },
         { table: 'players', column: 'last_name', type: 'TEXT' },
         { table: 'players', column: 'country_code', type: 'TEXT' },

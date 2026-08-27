@@ -7,17 +7,20 @@ test.describe.serial('Match config admin access', () => {
   const playingAdminId = '76561198000910001';
   const observingAdminId = '76561198000910002';
   const explicitSpectatorId = '76561198000910003';
+  const persistentSpectatorId = '76561198000910005';
 
   test.beforeEach(async () => {
     await Promise.all([
       playerService.deletePlayer(playingAdminId),
       playerService.deletePlayer(observingAdminId),
       playerService.deletePlayer(explicitSpectatorId),
+      playerService.deletePlayer(persistentSpectatorId),
     ]);
 
     await playerService.createPlayer({ id: playingAdminId, name: 'Playing Admin', isAdmin: true });
     await playerService.createPlayer({ id: observingAdminId, name: 'Observing Admin', isAdmin: true });
     await playerService.createPlayer({ id: explicitSpectatorId, name: 'Guest Caster' });
+    await playerService.createPlayer({ id: persistentSpectatorId, name: 'Persistent Caster', isSpectator: true });
   });
 
   test.afterEach(async () => {
@@ -25,6 +28,7 @@ test.describe.serial('Match config admin access', () => {
       playerService.deletePlayer(playingAdminId),
       playerService.deletePlayer(observingAdminId),
       playerService.deletePlayer(explicitSpectatorId),
+      playerService.deletePlayer(persistentSpectatorId),
     ]);
   });
 
@@ -57,6 +61,7 @@ test.describe.serial('Match config admin access', () => {
     expect(config.spectators?.players).toEqual(expect.objectContaining({
       [explicitSpectatorId]: 'Guest Caster',
       [observingAdminId]: 'Observing Admin',
+      [persistentSpectatorId]: 'Persistent Caster',
     }));
     expect(config.spectators?.players).not.toHaveProperty(playingAdminId);
   });

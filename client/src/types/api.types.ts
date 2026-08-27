@@ -204,6 +204,7 @@ export interface PlayerDetail {
   createdAt: number;
   updatedAt: number;
   isAdmin?: boolean;
+  isSpectator?: boolean;
 }
 
 export interface PlayersResponse extends ApiResponse {

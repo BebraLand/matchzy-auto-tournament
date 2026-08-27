@@ -210,6 +210,7 @@
     "eloHelperNew": "Leave empty to use default (1500 Skill Rating).",
     "eloHelperEdit": "Changing ELO will reset the player's rating and stats. This action cannot be undone.",
     "isAdminLabel": "Is admin (has in-game admin rights for all matches)",
+    "isSpectatorLabel": "Is spectator (can join all matches as observer/caster)",
     "currentElo": "Current ELO: {{value}}",
     "startingElo": "Starting ELO: {{value}}",
     "matchesPlayed": "Matches Played: {{count}}",

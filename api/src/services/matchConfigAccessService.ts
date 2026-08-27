@@ -19,25 +19,26 @@ function getRosterSteamIds(players: unknown): string[] {
 }
 
 /**
- * Attach global MatchZy admin rights and grant spectator access to admins who
- * are not participating in either team roster.
+ * Attach global MatchZy admin rights and grant spectator access to configured
+ * observers/casters and admins who are not participating in either team roster.
  *
  * A Steam ID must belong to exactly one MatchZy roster. Playing admins remain
- * team players; only non-playing admins are added to spectators. Explicitly
- * configured non-admin spectators are preserved.
+ * team players; only non-playing privileged users are added to spectators.
+ * Explicitly configured non-admin spectators are preserved.
  */
 export async function applyAdminMatchAccess(
   config: MatchConfig,
   options: { addAdminSpectators?: boolean } = {}
 ): Promise<void> {
-  const adminRows = await db.queryAsync<{ id: string; name: string }>(
-    'SELECT id, name FROM players WHERE is_admin = 1 ORDER BY id'
+  const accessRows = await db.queryAsync<{ id: string; name: string; is_admin: number }>(
+    'SELECT id, name, is_admin FROM players WHERE is_admin = 1 OR is_spectator = 1 ORDER BY id'
   );
-  const admins = Array.isArray(adminRows) ? adminRows : [];
+  const accessPlayers = Array.isArray(accessRows) ? accessRows : [];
+  const admins = accessPlayers.filter((player) => player.is_admin === 1);
   config.admins = admins.map((admin) => admin.id);
 
-  // Stored manual configs must not own computed admin spectators. They are
-  // resolved when the MatchZy JSON is served so demoted admins lose access.
+  // Stored manual configs must not own computed access spectators. They are
+  // resolved when the MatchZy JSON is served so role changes take effect.
   if (options.addAdminSpectators === false) {
     return;
   }
@@ -56,9 +57,9 @@ export async function applyAdminMatchAccess(
     delete spectatorPlayers[steamId];
   }
 
-  for (const admin of admins) {
-    if (!rosterIds.has(admin.id)) {
-      spectatorPlayers[admin.id] = admin.name;
+  for (const player of accessPlayers) {
+    if (!rosterIds.has(player.id)) {
+      spectatorPlayers[player.id] = player.name;
     }
   }
 

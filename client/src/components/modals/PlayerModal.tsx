@@ -50,6 +50,7 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
   const [teams, setTeams] = useState<Team[]>([]);
   const [elo, setElo] = useState<number | ''>('');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSpectator, setIsSpectator] = useState(false);
 
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -74,6 +75,7 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
       setElo(player.currentElo);
       setPendingElo('');
       setIsAdmin(Boolean(player.isAdmin));
+      setIsSpectator(Boolean(player.isSpectator));
     } else {
       resetForm();
     }
@@ -109,6 +111,7 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
     setTeamId('');
     setElo('');
     setIsAdmin(false);
+    setIsSpectator(false);
     setError('');
   };
 
@@ -208,6 +211,7 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
         photoUrl: photoUrl.trim() || undefined,
         elo: elo !== '' ? Number(elo) : undefined,
         isAdmin,
+        isSpectator,
       };
 
       if (isEditing) {
@@ -424,6 +428,17 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
                 />
               }
               label={t('playerModal.isAdminLabel')}
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={isSpectator}
+                  onChange={(e) => setIsSpectator(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label={t('playerModal.isSpectatorLabel')}
             />
 
             {isEditing && (

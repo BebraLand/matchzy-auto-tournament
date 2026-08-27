@@ -34,6 +34,7 @@ export interface CreatePlayerInput {
   photoUrl?: string;
   elo?: number; // Optional - defaults to 1500 Skill Rating (OpenSkill baseline)
   isAdmin?: boolean;
+  isSpectator?: boolean;
 }
 
 export interface UpdatePlayerInput {
@@ -45,6 +46,7 @@ export interface UpdatePlayerInput {
   photoUrl?: string;
   elo?: number;
   isAdmin?: boolean;
+  isSpectator?: boolean;
 }
 
 export interface PlayerResponse {
@@ -61,6 +63,7 @@ export interface PlayerResponse {
   createdAt: number;
   updatedAt: number;
   isAdmin?: boolean;
+  isSpectator?: boolean;
 }
 
 class PlayerService {
@@ -101,6 +104,7 @@ class PlayerService {
       createdAt: player.created_at,
       updatedAt: player.updated_at,
       isAdmin: (player as unknown as { is_admin?: number | boolean }).is_admin === 1,
+      isSpectator: (player as unknown as { is_spectator?: number | boolean }).is_spectator === 1,
     };
   }
 
@@ -179,7 +183,7 @@ class PlayerService {
     // Convert Skill Rating to OpenSkill rating
     const openskillRating = eloToOpenSkill(elo, 0); // New player, 0 matches
 
-    const playerData: Omit<PlayerRecord, 'id'> & { is_admin?: number } = {
+    const playerData: Omit<PlayerRecord, 'id'> & { is_admin?: number; is_spectator?: number } = {
       name: input.name,
       avatar_url: input.avatar || undefined,
       first_name: this.normalizeOptionalText(input.firstName),
@@ -197,6 +201,9 @@ class PlayerService {
 
     if (typeof input.isAdmin === 'boolean') {
       playerData.is_admin = input.isAdmin ? 1 : 0;
+    }
+    if (typeof input.isSpectator === 'boolean') {
+      playerData.is_spectator = input.isSpectator ? 1 : 0;
     }
 
     await db.insertAsync('players', {
@@ -222,7 +229,7 @@ class PlayerService {
       return null;
     }
 
-    const updates: Partial<PlayerRecord> & { is_admin?: number } = {
+    const updates: Partial<PlayerRecord> & { is_admin?: number; is_spectator?: number } = {
       updated_at: Math.floor(Date.now() / 1000),
     };
 
@@ -260,6 +267,9 @@ class PlayerService {
 
     if (input.isAdmin !== undefined) {
       updates.is_admin = input.isAdmin ? 1 : 0;
+    }
+    if (input.isSpectator !== undefined) {
+      updates.is_spectator = input.isSpectator ? 1 : 0;
     }
 
     await db.updateAsync('players', updates, 'id = ?', [playerId]);

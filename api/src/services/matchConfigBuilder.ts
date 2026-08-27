@@ -27,6 +27,26 @@ function resolveMaxRounds(tournament: TournamentResponse): number {
   return maxRounds;
 }
 
+function getStoredSpectators(configJson?: string): Record<string, string> {
+  if (!configJson) return {};
+
+  try {
+    const stored = JSON.parse(configJson) as { spectators?: { players?: unknown } };
+    const players = stored.spectators?.players;
+    if (players && typeof players === 'object' && !Array.isArray(players)) {
+      return Object.fromEntries(
+        Object.entries(players as Record<string, unknown>).filter(
+          ([, name]) => typeof name === 'string' && name.trim() !== ''
+        ) as Array<[string, string]>
+      );
+    }
+  } catch (error) {
+    log.warn('Failed to read stored match spectators', error as Error);
+  }
+
+  return {};
+}
+
 export const generateMatchConfig = async (
   tournament: TournamentResponse,
   team1Id?: string,
@@ -114,10 +134,13 @@ export const generateMatchConfig = async (
   let existingMatch: DbMatchRow | null = null;
   if (slug) {
     existingMatch =
-      (await db.queryOneAsync<DbMatchRow>('SELECT id, veto_state FROM matches WHERE slug = ?', [
+      (await db.queryOneAsync<DbMatchRow>('SELECT id, veto_state, config FROM matches WHERE slug = ?', [
         slug,
       ])) ?? null;
-    console.log('match', existingMatch);
+    console.log(
+      'match',
+      existingMatch ? { id: existingMatch.id, hasVetoState: Boolean(existingMatch.veto_state) } : null
+    );
     if (existingMatch?.veto_state) {
       console.log('match.veto_state', existingMatch.veto_state);
       try {
@@ -246,7 +269,7 @@ export const generateMatchConfig = async (
     // Your allocator / match loader should read this and configure the server accordingly.
     // veto_per_map_sides: per_map_sides, // ['team1_ct' | 'team2_ct' | 'knife'] per map index
 
-    spectators: { players: {} },
+    spectators: { players: getStoredSpectators(existingMatch?.config) },
 
     // Round limit configuration
     cvars,
@@ -328,13 +351,15 @@ async function generateShuffleMatchConfig(
   // Get map for this round from match
   let mapForRound: string | null = null;
   let matchId: number | null = null;
+  let storedMatchConfig: string | undefined;
   if (slug) {
     const match = await db.queryOneAsync<DbMatchRow>(
-      'SELECT id, current_map, round FROM matches WHERE slug = ?',
+      'SELECT id, current_map, round, config FROM matches WHERE slug = ?',
       [slug]
     );
     if (match) {
       matchId = match.id;
+      storedMatchConfig = match.config;
     }
     if (match?.current_map) {
       mapForRound = match.current_map;
@@ -449,7 +474,7 @@ async function generateShuffleMatchConfig(
     overtimeMode: tournament.overtimeMode,
     overtimeSegments: tournament.overtimeSegments,
 
-    spectators: { players: {} },
+    spectators: { players: getStoredSpectators(storedMatchConfig) },
 
     // Expected players are purely informational for our own UIs. MatchZy uses
     // players_per_team + min_players_to_ready as the authoritative values.

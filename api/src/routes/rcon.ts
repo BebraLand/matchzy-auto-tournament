@@ -6,11 +6,114 @@ import { log } from '../utils/logger';
 import { getWebhookBaseUrl } from '../utils/urlHelper';
 import { getMatchZyWebhookCommands } from '../utils/matchzyRconCommands';
 import { getLastServerTestEvent } from '../services/serverConnectivityService';
+import { db } from '../config/database';
+import { playerService } from '../services/playerService';
+import type { MatchConfig, MatchPlayer } from '../types/match.types';
 
 const router = Router();
 
+type MatchPlayerTarget = 'team1' | 'team2' | 'spec';
+
+function normalizeMatchPlayers(value: unknown): MatchPlayer {
+  if (Array.isArray(value)) {
+    return Object.fromEntries(
+      value.flatMap((entry) => {
+        if (!entry || typeof entry !== 'object') return [];
+        const player = entry as { steamid?: unknown; steamId?: unknown; name?: unknown };
+        const steamId = player.steamid || player.steamId;
+        return typeof steamId === 'string' && typeof player.name === 'string'
+          ? [[steamId, player.name] as [string, string]]
+          : [];
+      })
+    );
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).filter(
+        ([, name]) => typeof name === 'string' && name.trim() !== ''
+      ) as Array<[string, string]>
+    );
+  }
+
+  return {};
+}
+
 // Apply authentication to all RCON routes
 router.use(requireAuth);
+
+/**
+ * Add a player to the live MatchZy roster and persist the same assignment in
+ * the match JSON used for reloads and future config requests.
+ */
+router.post('/:serverId/add-player', async (req: Request, res: Response) => {
+  try {
+    const { serverId } = req.params;
+    const { matchSlug, steamId, team, nickname } = req.body as {
+      matchSlug?: string;
+      steamId?: string;
+      team?: MatchPlayerTarget;
+      nickname?: string;
+    };
+
+    if (!matchSlug || !steamId || !team || !['team1', 'team2', 'spec'].includes(team)) {
+      return res.status(400).json({
+        success: false,
+        error: 'matchSlug, steamId, and team are required',
+      });
+    }
+    if (!/^7656\d{13}$/.test(steamId)) {
+      return res.status(400).json({ success: false, error: 'Invalid Steam ID64' });
+    }
+
+    const match = await db.queryOneAsync<{ id: number; server_id?: string | null; config: string }>(
+      'SELECT id, server_id, config FROM matches WHERE slug = ?',
+      [matchSlug]
+    );
+    if (!match) return res.status(404).json({ success: false, error: 'Match not found' });
+    if (match.server_id !== serverId) {
+      return res.status(400).json({ success: false, error: 'Match is not assigned to this server' });
+    }
+
+    const player = await playerService.getPlayerById(steamId);
+    if (!player) return res.status(404).json({ success: false, error: 'Player not found' });
+
+    let config: MatchConfig;
+    try {
+      config = JSON.parse(match.config) as MatchConfig;
+    } catch {
+      return res.status(500).json({ success: false, error: 'Stored match config is invalid' });
+    }
+
+    const safeNickname = (nickname || player.name).trim().replace(/["\\]/g, '').slice(0, 64);
+    const result = await rconService.sendCommand(
+      serverId,
+      `matchzy_addplayer ${steamId} ${team}${safeNickname ? ` "${safeNickname}"` : ''}`
+    );
+    if (!result.success) return res.status(400).json(result);
+
+    const team1Players = normalizeMatchPlayers(config.team1?.players);
+    const team2Players = normalizeMatchPlayers(config.team2?.players);
+    const spectatorPlayers = normalizeMatchPlayers(config.spectators?.players);
+    delete team1Players[steamId];
+    delete team2Players[steamId];
+    delete spectatorPlayers[steamId];
+
+    if (team === 'team1') team1Players[steamId] = safeNickname;
+    if (team === 'team2') team2Players[steamId] = safeNickname;
+    if (team === 'spec') spectatorPlayers[steamId] = safeNickname;
+
+    config.team1 = { ...config.team1, players: team1Players };
+    config.team2 = { ...config.team2, players: team2Players };
+    config.spectators = { ...config.spectators, players: spectatorPlayers };
+    await db.updateAsync('matches', { config: JSON.stringify(config) }, 'id = ?', [match.id]);
+
+    return res.json({ ...result, matchSlug, steamId, team });
+  } catch (error) {
+    log.error('Error adding player to match', error as Error);
+    return res.status(500).json({ success: false, error: 'Failed to add player to match' });
+  }
+});
 
 /**
  * GET /api/rcon/test/:serverId

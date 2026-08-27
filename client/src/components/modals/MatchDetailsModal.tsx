@@ -1147,6 +1147,7 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
                     team2Name={match.team2?.name || 'Team 2'}
                     existingTeam1Players={match.config?.team1?.players || []}
                     existingTeam2Players={match.config?.team2?.players || []}
+                    existingSpectatorPlayers={match.config?.spectators?.players || []}
                     onSuccess={(message) => {
                       setSuccess(message);
                       setTimeout(() => setSuccess(''), 3000);

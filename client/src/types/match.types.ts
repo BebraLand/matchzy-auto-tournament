@@ -68,6 +68,9 @@ export interface MatchConfig {
   expected_players_team2?: number;
   team1?: MatchConfigTeam;
   team2?: MatchConfigTeam;
+  spectators?: {
+    players?: MatchConfigPlayer[] | Record<string, string>;
+  };
   cvars?: {
     [key: string]: string | number;
   };

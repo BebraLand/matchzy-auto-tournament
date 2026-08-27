@@ -20,8 +20,6 @@ import { normalizeConfigPlayers } from '../../utils/playerUtils';
 interface Player {
   steamId: string;
   name: string;
-  teamName: string;
-  teamId: string;
 }
 
 interface AddBackupPlayerProps {
@@ -31,6 +29,7 @@ interface AddBackupPlayerProps {
   team2Name: string;
   existingTeam1Players: unknown;
   existingTeam2Players: unknown;
+  existingSpectatorPlayers?: unknown;
   onSuccess?: (message: string) => void;
   onError?: (message: string) => void;
 }
@@ -42,6 +41,7 @@ export const AddBackupPlayer: React.FC<AddBackupPlayerProps> = ({
   team2Name,
   existingTeam1Players,
   existingTeam2Players,
+  existingSpectatorPlayers,
   onSuccess,
   onError,
 }) => {
@@ -66,6 +66,10 @@ export const AddBackupPlayer: React.FC<AddBackupPlayerProps> = ({
     () => normalizeConfigPlayers(existingTeam2Players),
     [existingTeam2Players]
   );
+  const normalizedSpectatorPlayers = useMemo(
+    () => normalizeConfigPlayers(existingSpectatorPlayers),
+    [existingSpectatorPlayers]
+  );
 
   const loadAllPlayers = useCallback(
     async (force = false) => {
@@ -79,31 +83,14 @@ export const AddBackupPlayer: React.FC<AddBackupPlayerProps> = ({
       try {
         const response = await api.get<{
           success: boolean;
-          teams: Array<{
-            id: string;
-            name: string;
-            players: Array<{ steamid?: string; steamId?: string; name: string }>;
-          }>;
-        }>('/api/teams');
+          players: Array<{ id: string; name: string }>;
+        }>('/api/players');
 
-        if (response.success && Array.isArray(response.teams)) {
-          const players: Player[] = [];
-
-          for (const team of response.teams) {
-            if (!Array.isArray(team.players)) continue;
-            for (const player of team.players) {
-              const steamId = player.steamid || player.steamId;
-              if (!steamId) continue;
-              players.push({
-                steamId,
-                name: player.name,
-                teamName: team.name,
-                teamId: team.id,
-              });
-            }
-          }
-
-          setAllPlayers(players);
+        if (response.success && Array.isArray(response.players)) {
+          setAllPlayers(response.players.map((player) => ({
+            steamId: player.id,
+            name: player.name,
+          })));
         }
       } catch (err) {
         console.error('Failed to load players:', err);
@@ -122,21 +109,24 @@ export const AddBackupPlayer: React.FC<AddBackupPlayerProps> = ({
   const existingSteamIds = useMemo(() => {
     const ids = new Set<string>();
     normalizedTeam1Players.forEach((player) => {
-      if (player.steamid) ids.add(player.steamid);
+      if (player.steamid) ids.add(player.steamid.toLowerCase());
     });
     normalizedTeam2Players.forEach((player) => {
-      if (player.steamid) ids.add(player.steamid);
+      if (player.steamid) ids.add(player.steamid.toLowerCase());
+    });
+    normalizedSpectatorPlayers.forEach((player) => {
+      if (player.steamid) ids.add(player.steamid.toLowerCase());
     });
     return ids;
-  }, [normalizedTeam1Players, normalizedTeam2Players]);
+  }, [normalizedSpectatorPlayers, normalizedTeam1Players, normalizedTeam2Players]);
 
   const availablePlayers = useMemo(
-    () => allPlayers.filter((player) => player.steamId && !existingSteamIds.has(player.steamId)),
+    () => allPlayers.filter((player) => player.steamId && !existingSteamIds.has(player.steamId.toLowerCase())),
     [allPlayers, existingSteamIds]
   );
 
   useEffect(() => {
-    if (selectedPlayer && existingSteamIds.has(selectedPlayer.steamId)) {
+    if (selectedPlayer && existingSteamIds.has(selectedPlayer.steamId.toLowerCase())) {
       setSelectedPlayer(null);
     }
   }, [existingSteamIds, selectedPlayer]);
@@ -149,6 +139,7 @@ export const AddBackupPlayer: React.FC<AddBackupPlayerProps> = ({
       const response = await api.post<{ success: boolean; error: string }>(
         `/api/rcon/${serverId}/add-player`,
         {
+          matchSlug,
           steamId: selectedPlayer.steamId,
           team: targetTeam,
           nickname: customName.trim() || selectedPlayer.name,
@@ -193,13 +184,13 @@ export const AddBackupPlayer: React.FC<AddBackupPlayerProps> = ({
             options={availablePlayers}
             value={selectedPlayer}
             onChange={(_event, newValue) => setSelectedPlayer(newValue)}
-            getOptionLabel={(option) => `${option.name} (${option.teamName})`}
+            getOptionLabel={(option) => `${option.name} (${option.steamId})`}
             renderOption={(props, option) => (
               <Box component="li" {...props}>
                 <Box>
                   <Typography variant="body2">{option.name}</Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {option.teamName} • {option.steamId}
+                    {option.steamId}
                   </Typography>
                 </Box>
               </Box>
@@ -247,7 +238,7 @@ export const AddBackupPlayer: React.FC<AddBackupPlayerProps> = ({
                 <strong>Selected:</strong> {selectedPlayer.name}
               </Typography>
               <Typography variant="caption" display="block">
-                From team: {selectedPlayer.teamName}
+                Registered player
               </Typography>
               <Typography variant="caption" display="block">
                 Steam ID: {selectedPlayer.steamId}
