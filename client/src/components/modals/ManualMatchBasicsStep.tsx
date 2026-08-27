@@ -1,5 +1,5 @@
 import React from 'react';
-import { Autocomplete, Box, TextField, Typography, MenuItem } from '@mui/material';
+import { Autocomplete, Box, TextField, Typography } from '@mui/material';
 import type { Team } from '../../types';
 import { PlayerAvatar } from '../player/PlayerAvatar';
 import type { PlayerDetail } from '../../types/api.types';
@@ -57,6 +57,81 @@ export const ManualMatchBasicsStep: React.FC<ManualMatchBasicsStepProps> = ({
 
   const findPlayerById = (id: string): PlayerDetail | null =>
     players.find((p) => p.id === id) || null;
+
+  const renderTeamSelector = (
+    label: string,
+    teamId: string,
+    mode: 'existing' | 'new',
+    otherTeamId: string,
+    onTeamChange: (teamId: string) => void,
+    onModeChange: (mode: 'existing' | 'new') => void
+  ) => {
+    const newTeamOption: Team = { id: '__new__', name: 'New team (this match only)' };
+    const options = [
+      newTeamOption,
+      ...teams
+        .filter((team) => team.id !== otherTeamId)
+        .filter((team) => !busyTeamIds?.has(team.id)),
+    ];
+    const selectedTeam =
+      mode === 'new'
+        ? newTeamOption
+        : options.find((team) => team.id === teamId) || null;
+
+    return (
+      <Autocomplete
+        options={options}
+        value={selectedTeam}
+        onChange={(_event, newValue) => {
+          if (!newValue) {
+            onModeChange('existing');
+            onTeamChange('');
+          } else if (newValue.id === newTeamOption.id) {
+            onModeChange('new');
+            onTeamChange('');
+          } else {
+            onModeChange('existing');
+            onTeamChange(newValue.id);
+          }
+        }}
+        isOptionEqualToValue={(option, value) => option.id === value.id}
+        getOptionLabel={(option) =>
+          option.id === newTeamOption.id ? option.name : `${option.name} (${option.id})`
+        }
+        filterOptions={(teamOptions, state) => {
+          const query = state.inputValue.toLowerCase();
+          if (!query) return teamOptions;
+          return teamOptions.filter((team) =>
+            `${team.name} ${team.id}`.toLowerCase().includes(query)
+          );
+        }}
+        renderOption={(props, option) => (
+          <Box component="li" {...props}>
+            <Typography variant="body2">
+              {option.id === newTeamOption.id ? option.name : `${option.name} (${option.id})`}
+            </Typography>
+          </Box>
+        )}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={label}
+            placeholder="Select a team or search by name…"
+            helperText={
+              teams.length === 0
+                ? 'No existing teams – using a one-off team for this match.'
+                : mode === 'new'
+                ? 'Team for this match only. Players are defined below.'
+                : `Optional – select ${label} from existing teams, or choose "New team" to define players only.`
+            }
+          />
+        )}
+        noOptionsText="No teams found"
+        disabled={loadingTeams}
+        fullWidth
+      />
+    );
+  };
 
   const renderNewTeamSelectors = (
     labelPrefix: string,
@@ -152,44 +227,14 @@ export const ManualMatchBasicsStep: React.FC<ManualMatchBasicsStepProps> = ({
   return (
     <>
       {/* Team 1 */}
-      <TextField
-        select
-        label="Team 1"
-        value={team1Mode === 'new' ? '__new__' : team1Id}
-        onChange={(e) => {
-          const value = e.target.value;
-          if (value === '__new__') {
-            onTeam1ModeChange('new');
-            onTeam1Change('');
-          } else {
-            onTeam1ModeChange('existing');
-            onTeam1Change(value);
-          }
-        }}
-        fullWidth
-        disabled={loadingTeams}
-        helperText={
-          teams.length === 0
-            ? 'No existing teams – using a one-off team for this match.'
-            : team1Mode === 'new'
-            ? 'Team for this match only. Players are defined below.'
-            : 'Optional – select Team 1 from existing teams, or choose "New team" to define players only.'
-        }
-        error={false}
-      >
-        <MenuItem value="">
-          <em>None</em>
-        </MenuItem>
-        <MenuItem value="__new__">New team (this match only)</MenuItem>
-        {teams
-          .filter((team) => team.id !== team2Id)
-          .filter((team) => !busyTeamIds?.has(team.id))
-          .map((team) => (
-            <MenuItem key={team.id} value={team.id}>
-              {team.name} ({team.id})
-            </MenuItem>
-          ))}
-      </TextField>
+      {renderTeamSelector(
+        'Team 1',
+        team1Id,
+        team1Mode,
+        team2Id,
+        onTeam1Change,
+        onTeam1ModeChange
+      )}
       {team1Mode === 'new' && (
         renderNewTeamSelectors(
           'Team 1',
@@ -201,44 +246,14 @@ export const ManualMatchBasicsStep: React.FC<ManualMatchBasicsStepProps> = ({
       )}
 
       {/* Team 2 */}
-      <TextField
-        select
-        label="Team 2"
-        value={team2Mode === 'new' ? '__new__' : team2Id}
-        onChange={(e) => {
-          const value = e.target.value;
-          if (value === '__new__') {
-            onTeam2ModeChange('new');
-            onTeam2Change('');
-          } else {
-            onTeam2ModeChange('existing');
-            onTeam2Change(value);
-          }
-        }}
-        fullWidth
-        disabled={loadingTeams}
-        helperText={
-          teams.length === 0
-            ? 'No existing teams – using a one-off team for this match.'
-            : team2Mode === 'new'
-            ? 'Team for this match only. Players are defined below.'
-            : 'Optional – select Team 2 from existing teams, or choose "New team" to define players only.'
-        }
-        error={false}
-      >
-        <MenuItem value="">
-          <em>None</em>
-        </MenuItem>
-        <MenuItem value="__new__">New team (this match only)</MenuItem>
-        {teams
-          .filter((team) => team.id !== team1Id)
-          .filter((team) => !busyTeamIds?.has(team.id))
-          .map((team) => (
-            <MenuItem key={team.id} value={team.id}>
-              {team.name} ({team.id})
-            </MenuItem>
-          ))}
-      </TextField>
+      {renderTeamSelector(
+        'Team 2',
+        team2Id,
+        team2Mode,
+        team1Id,
+        onTeam2Change,
+        onTeam2ModeChange
+      )}
       {team2Mode === 'new' && (
         renderNewTeamSelectors(
           'Team 2',
