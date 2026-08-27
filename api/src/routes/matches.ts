@@ -1603,14 +1603,22 @@ router.post('/:slug/reallocate', requireAuth, async (req: Request, res: Response
       });
     }
 
+    const requestedServerId =
+      typeof req.body?.serverId === 'string' && req.body.serverId !== oldServerId
+        ? req.body.serverId
+        : undefined;
     const availableServers = await matchAllocationService.getAvailableServers();
-    const fallback = availableServers.find((s) => s.id !== oldServerId);
+    const fallback = requestedServerId
+      ? availableServers.find((s) => s.id === requestedServerId)
+      : availableServers.find((s) => s.id !== oldServerId);
 
     if (!fallback) {
       return res.status(409).json({
         success: false,
         error:
-          'No alternative idle servers are available for reallocation. Please free up a server or update existing ones.',
+          requestedServerId
+            ? 'Selected server is not available for reallocation.'
+            : 'No alternative idle servers are available for reallocation. Please free up a server or update existing ones.',
       });
     }
 

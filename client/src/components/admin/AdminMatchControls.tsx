@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Autocomplete,
   Box,
   Button,
   TextField,
@@ -31,6 +32,12 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CloseIcon from '@mui/icons-material/Close';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { api } from '../../utils/api';
+
+interface ReallocationServer {
+  id: string;
+  name: string;
+  allocatable: boolean;
+}
 
 interface AdminMatchControlsProps {
   serverId?: string;
@@ -79,6 +86,9 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
     inputType: 'text',
   });
   const [inputValue, setInputValue] = useState<string | number>('');
+  const [reallocationServers, setReallocationServers] = useState<ReallocationServer[]>([]);
+  const [reallocationServerId, setReallocationServerId] = useState('');
+  const [loadingReallocationServers, setLoadingReallocationServers] = useState(false);
 
   const showError = (message: string) => {
     if (onError) {
@@ -125,8 +135,12 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
       }
 
       const requestBody =
-        action === 'restartMatch' || action === 'forceCancel' || action === 'reallocateServer'
+        action === 'restartMatch' || action === 'forceCancel'
           ? {}
+          : action === 'reallocateServer'
+          ? reallocationServerId
+            ? { serverId: reallocationServerId }
+            : {}
           : { serverId, ...params };
       const response = await api.post(endpoint, requestBody);
 
@@ -178,6 +192,35 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
       description,
       color,
     });
+  };
+
+  const handleReallocateClick = () => {
+    setReallocationServerId('');
+    setReallocationServers([]);
+    setLoadingReallocationServers(true);
+    setConfirmDialog({
+      open: true,
+      action: 'reallocateServer',
+      title: 'Reallocate Server',
+      description:
+        'The match will move to another available server. If multiple alternatives are available, you can choose one. This is not allowed during a live match.',
+      color: 'warning',
+    });
+
+    void api
+      .get<{
+        success: boolean;
+        servers?: ReallocationServer[];
+      }>('/api/tournament/server-availability')
+      .then((response) => {
+        setReallocationServers(
+          (response.servers || []).filter((candidate) => candidate.id !== serverId)
+        );
+      })
+      .catch((error) => {
+        console.error('Failed to load servers for reallocation', error);
+      })
+      .finally(() => setLoadingReallocationServers(false));
   };
 
   const handleInputActionClick = (
@@ -440,14 +483,7 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
                         variant="contained"
                         color="warning"
                         startIcon={<SwapHorizIcon />}
-                        onClick={() =>
-                          handleActionClick(
-                            'reallocateServer',
-                            'Reallocate Server',
-                            'This will move the match to a different idle server and reload it. Use this if the current server is out of date or players cannot connect. This is not allowed during a live match.',
-                            'warning'
-                          )
-                        }
+                        onClick={handleReallocateClick}
                         disabled={
                           executing || !(matchStatus === 'ready' || matchStatus === 'loaded')
                         }
@@ -589,6 +625,44 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
         </DialogTitle>
         <DialogContent>
           <Typography>{confirmDialog.description}</Typography>
+          {confirmDialog.action === 'reallocateServer' && reallocationServers.length > 1 && (
+            <Autocomplete
+              sx={{ mt: 2 }}
+              options={reallocationServers}
+              value={
+                reallocationServers.find((candidate) => candidate.id === reallocationServerId) ||
+                null
+              }
+              onChange={(_event, newValue) => setReallocationServerId(newValue?.id || '')}
+              getOptionLabel={(option) => `${option.name} (${option.id})`}
+              getOptionDisabled={(option) => !option.allocatable}
+              filterOptions={(options, state) => {
+                const query = state.inputValue.toLowerCase();
+                if (!query) return options;
+                return options.filter((option) =>
+                  `${option.name} ${option.id}`.toLowerCase().includes(query)
+                );
+              }}
+              renderOption={(props, option) => (
+                <Box component="li" {...props}>
+                  <Typography variant="body2">
+                    {`${option.name} (${option.id})${option.allocatable ? '' : ' — unavailable'}`}
+                  </Typography>
+                </Box>
+              )}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Target server"
+                  placeholder="Optional — search by name or ID…"
+                  helperText="Leave empty for automatic server selection."
+                />
+              )}
+              noOptionsText={loadingReallocationServers ? 'Loading servers…' : 'No servers found'}
+              loading={loadingReallocationServers}
+              fullWidth
+            />
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmDialog({ ...confirmDialog, open: false })}>Cancel</Button>
