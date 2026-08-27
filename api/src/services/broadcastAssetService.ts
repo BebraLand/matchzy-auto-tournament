@@ -69,5 +69,5 @@ export function saveBroadcastAsset(params: {
     if (fs.existsSync(stale)) fs.unlinkSync(stale);
   }
 
-  return `/broadcast-assets/${kind}/${filename}`;
+  return `/broadcast-assets/${kind}/${filename}?v=${Date.now()}`;
 }

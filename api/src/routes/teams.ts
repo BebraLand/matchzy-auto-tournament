@@ -3,6 +3,7 @@ import { teamService } from '../services/teamService';
 import { CreateTeamInput, UpdateTeamInput } from '../types/team.types';
 import { requireAuth } from '../middleware/auth';
 import { saveBroadcastAsset } from '../services/broadcastAssetService';
+import { emitHudProjectionInvalidated } from '../services/socketService';
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.post('/:id/logo', async (req: Request, res: Response) => {
 
     const logoUrl = saveBroadcastAsset({ kind: 'teams', entityId: id, imageData });
     const team = await teamService.updateTeam(id, { logoUrl });
+    emitHudProjectionInvalidated('team-logo-updated');
     return res.json({ success: true, logoUrl, team });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -139,6 +141,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const input = req.body as UpdateTeamInput;
 
     const team = await teamService.updateTeam(id, input);
+    emitHudProjectionInvalidated('team-updated');
 
     return res.json({
       success: true,
