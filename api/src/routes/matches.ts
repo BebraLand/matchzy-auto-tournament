@@ -417,6 +417,9 @@ router.get('/:slug.json', async (req: Request, res: Response) => {
         storedConfig = {};
       }
 
+      const matchzyConfig = { ...storedConfig };
+      delete matchzyConfig.__preferredServerId;
+
       const normalizePlayers = (value: unknown): MatchPlayer => {
         if (!value) return {};
 
@@ -453,7 +456,7 @@ router.get('/:slug.json', async (req: Request, res: Response) => {
 
       // Ensure required fields for MatchZy are present.
       const safeConfig: MatchConfig = {
-        ...storedConfig,
+        ...matchzyConfig,
         matchid: match.id,
         players_per_team:
           typeof storedConfig.players_per_team === 'number' && storedConfig.players_per_team > 0
@@ -1375,33 +1378,28 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
     const webhookBaseUrl = await getWebhookBaseUrl(req);
     const match = await matchService.createMatch(input, baseUrl);
 
-    // When no serverId is provided, attempt to auto-allocate a server for
-    // this match using the same allocator used for tournament matches. This
-    // is primarily used for manual matches so the admin does not need to pick
-    // a specific server; they just say "play this match" and the API finds a
-    // suitable host.
-    if (!input.serverId) {
-      // Fire-and-forget auto-allocation so match creation returns quickly and
-      // the UI doesn't block on potentially slow RCON / connectivity checks.
-      setImmediate(async () => {
-        try {
-          const allocation = await matchAllocationService.allocateSingleMatch(
+    // Fire-and-forget allocation so match creation returns quickly. A selected
+    // server is treated as a preference and is never silently replaced.
+    setImmediate(async () => {
+      try {
+        const allocation = await matchAllocationService.allocateSingleMatch(
+          match.slug,
+          webhookBaseUrl,
+          input.serverId ? { preferredServerId: input.serverId } : undefined
+        );
+        if (!allocation.success) {
+          log.warn(`Allocation failed for manual match ${match.slug}: ${allocation.error}`);
+          matchAllocationService.startPollingForServer(
             match.slug,
-            webhookBaseUrl
-          );
-          if (!allocation.success) {
-            log.warn(
-              `Auto-allocation failed for manual match ${match.slug}: ${allocation.error}`
-            );
-          }
-        } catch (allocError) {
-          log.warn(
-            `Auto-allocation threw for manual match ${match.slug}`,
-            allocError as Error
+            webhookBaseUrl,
+            input.serverId
           );
         }
-      });
-    }
+      } catch (allocError) {
+        log.warn(`Allocation threw for manual match ${match.slug}`, allocError as Error);
+        matchAllocationService.startPollingForServer(match.slug, webhookBaseUrl, input.serverId);
+      }
+    });
 
     return res.status(201).json({
       success: true,

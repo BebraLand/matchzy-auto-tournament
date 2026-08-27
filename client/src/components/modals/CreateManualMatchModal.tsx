@@ -50,6 +50,10 @@ export const CreateManualMatchModal: React.FC<CreateManualMatchModalProps> = ({
     state: {
       teams,
       loadingTeams,
+      servers,
+      serverId,
+      loadingServers,
+      serverAllocation,
       saving,
       slug,
       team1Id,
@@ -96,6 +100,7 @@ export const CreateManualMatchModal: React.FC<CreateManualMatchModalProps> = ({
       // setSlug,
       setTeam1Id,
       setTeam2Id,
+      setServerId,
       setMaps,
       // setSelectedMapPool,
       setPlayersPerTeam,
@@ -239,6 +244,11 @@ export const CreateManualMatchModal: React.FC<CreateManualMatchModalProps> = ({
                 onTeam1Change={setTeam1Id}
                 onTeam2Change={setTeam2Id}
                 loadingTeams={loadingTeams}
+                servers={servers}
+                serverId={serverId}
+                onServerChange={setServerId}
+                loadingServers={loadingServers}
+                serverAllocation={serverAllocation}
                 team1Mode={team1Mode}
                 team2Mode={team2Mode}
                 onTeam1ModeChange={setTeam1Mode}

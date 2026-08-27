@@ -1024,6 +1024,18 @@ export class MatchAllocationService {
         return { success: false, error: 'Match not found' };
       }
 
+      let preferredServerId = options.preferredServerId;
+      if (!preferredServerId && match.round === 0 && match.config) {
+        try {
+          const storedConfig = JSON.parse(match.config) as { __preferredServerId?: unknown };
+          if (typeof storedConfig.__preferredServerId === 'string') {
+            preferredServerId = storedConfig.__preferredServerId;
+          }
+        } catch {
+          // The stored match config is validated when it is served to MatchZy.
+        }
+      }
+
       if (match.server_id) {
         return { success: false, error: 'Match already has a server allocated' };
       }
@@ -1091,8 +1103,8 @@ export class MatchAllocationService {
       }
 
       let server: ServerResponse | null = null;
-      const candidates = options.preferredServerId
-        ? availableServers.filter((candidate) => candidate.id === options.preferredServerId)
+      const candidates = preferredServerId
+        ? availableServers.filter((candidate) => candidate.id === preferredServerId)
         : availableServers;
       for (const candidate of candidates) {
         // Skip servers that are already in the process of being allocated by
@@ -1139,7 +1151,7 @@ export class MatchAllocationService {
         // or already have an active match attached in the DB.
         return {
           success: false,
-          error: options.preferredServerId
+          error: preferredServerId
             ? 'Selected server is not available'
             : 'No available servers',
         };
@@ -1931,7 +1943,7 @@ export class MatchAllocationService {
    * Start polling for available servers for a specific match
    * Checks every 10 seconds and stops when server is allocated or match is no longer ready
    */
-  startPollingForServer(matchSlug: string, baseUrl: string): void {
+  startPollingForServer(matchSlug: string, baseUrl: string, preferredServerId?: string): void {
     // Don't start duplicate polling for the same match
     if (this.pollingIntervals.has(matchSlug)) {
       log.debug(`Already polling for match ${matchSlug}, skipping duplicate`);
@@ -1979,7 +1991,11 @@ export class MatchAllocationService {
 
         // Try to allocate server
         log.debug(`[Polling] Attempting to allocate server for match ${matchSlug}...`);
-        const result = await this.allocateSingleMatch(matchSlug, baseUrl);
+        const result = await this.allocateSingleMatch(
+          matchSlug,
+          baseUrl,
+          preferredServerId ? { preferredServerId } : undefined
+        );
 
         if (result.success) {
           log.success(

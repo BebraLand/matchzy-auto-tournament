@@ -1,6 +1,6 @@
 import React from 'react';
 import { Autocomplete, Box, TextField, Typography } from '@mui/material';
-import type { Team } from '../../types';
+import type { Server, Team } from '../../types';
 import { PlayerAvatar } from '../player/PlayerAvatar';
 import type { PlayerDetail } from '../../types/api.types';
 
@@ -12,6 +12,11 @@ interface ManualMatchBasicsStepProps {
   onTeam1Change: (teamId: string) => void;
   onTeam2Change: (teamId: string) => void;
   loadingTeams: boolean;
+  servers: Server[];
+  serverId: string;
+  onServerChange: (serverId: string) => void;
+  loadingServers: boolean;
+  serverAllocation?: Map<string, { allocatable: boolean }>;
   team1Mode: 'existing' | 'new';
   team2Mode: 'existing' | 'new';
   onTeam1ModeChange: (mode: 'existing' | 'new') => void;
@@ -38,6 +43,11 @@ export const ManualMatchBasicsStep: React.FC<ManualMatchBasicsStepProps> = ({
   onTeam1Change,
   onTeam2Change,
   loadingTeams,
+  servers,
+  serverId,
+  onServerChange,
+  loadingServers,
+  serverAllocation,
   team1Mode,
   team2Mode,
   onTeam1ModeChange,
@@ -57,6 +67,8 @@ export const ManualMatchBasicsStep: React.FC<ManualMatchBasicsStepProps> = ({
 
   const findPlayerById = (id: string): PlayerDetail | null =>
     players.find((p) => p.id === id) || null;
+
+  const selectedServer = servers.find((server) => server.id === serverId) || null;
 
   const renderTeamSelector = (
     label: string,
@@ -226,6 +238,40 @@ export const ManualMatchBasicsStep: React.FC<ManualMatchBasicsStepProps> = ({
 
   return (
     <>
+      {servers.length > 1 && (
+        <Autocomplete
+          options={servers}
+          value={selectedServer}
+          onChange={(_event, newValue) => onServerChange(newValue?.id ?? '')}
+          isOptionEqualToValue={(option, value) => option.id === value.id}
+          getOptionLabel={(option) => `${option.name} (${option.id})`}
+          getOptionDisabled={(option) => serverAllocation?.get(option.id)?.allocatable === false}
+          filterOptions={(serverOptions, state) => {
+            const query = state.inputValue.toLowerCase();
+            if (!query) return serverOptions;
+            return serverOptions.filter((server) =>
+              `${server.name} ${server.id}`.toLowerCase().includes(query)
+            );
+          }}
+          renderOption={(props, option) => (
+            <Box component="li" {...props}>
+              <Typography variant="body2">{`${option.name} (${option.id})`}</Typography>
+            </Box>
+          )}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Server"
+              placeholder="Optional – select a server or search by name…"
+              helperText="Leave empty to use any free server."
+            />
+          )}
+          noOptionsText="No servers found"
+          loading={loadingServers}
+          fullWidth
+        />
+      )}
+
       {/* Team 1 */}
       {renderTeamSelector(
         'Team 1',

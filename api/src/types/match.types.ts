@@ -15,6 +15,8 @@ export interface MatchTeam {
 }
 
 export interface MatchConfig {
+  /** Internal allocator hint; removed before serving the config to MatchZy. */
+  __preferredServerId?: string;
   // MatchZy expects matchid to be an integer (DB match ID).
   // We enforce number here so config builders must supply a numeric ID.
   matchid: number;

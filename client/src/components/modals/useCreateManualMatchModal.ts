@@ -735,26 +735,6 @@ export function useCreateManualMatchModal({
   }, [open, loadServers, loadTeams, loadMaps, loadPlayers, loadBusyPlayers, loadServerAllocation]);
 
   useEffect(() => {
-    if (!open || serverId || servers.length === 0) {
-      return;
-    }
-
-    const allocatable = servers.filter((s) => serverAllocation.get(s.id)?.allocatable === true);
-    if (allocatable.length > 0) {
-      setServerId(allocatable[0].id);
-      return;
-    }
-
-    const online = servers.filter((s) => serverStatuses.get(s.id)?.status === 'online');
-    if (online.length > 0) {
-      setServerId(online[0].id);
-      return;
-    }
-
-    setServerId(servers[0].id);
-  }, [open, serverId, servers, serverAllocation, serverStatuses]);
-
-  useEffect(() => {
     if (open) {
       setSlug((current) => current || generateRandomMatchSlug());
     }
@@ -843,8 +823,7 @@ export function useCreateManualMatchModal({
       });
       const response = await api.post<MatchResponse>('/api/matches', {
         slug: trimmedSlug,
-        // Server selection is fully automatic; the backend allocator will pick
-        // a free server and attach server_id when ready.
+        ...(serverId ? { serverId } : {}),
         config,
       });
 
