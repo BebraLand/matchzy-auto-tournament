@@ -17,6 +17,7 @@ import { getMatchZyServerConfigCommands } from '../utils/matchzyRconCommands';
 
 export interface MatchLoadOptions {
   skipWebhook?: boolean; // Deprecated: Webhooks are now persistent, this param is ignored
+  resetBeforeLoad?: boolean;
   baseUrl: string;
 }
 
@@ -79,6 +80,26 @@ export async function loadMatchOnServer(
 
     // Helper to add small delay between RCON commands to avoid overwhelming the server
     const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    if (options.resetBeforeLoad) {
+      log.info(`[MATCH LOADING] Resetting server ${serverId} before loading match ${matchSlug}`);
+      const resetResult = await rconService.sendCommand(serverId, 'css_restart');
+      results.push({
+        success: resetResult.success,
+        command: 'css_restart',
+        error: resetResult.error,
+      });
+
+      if (!resetResult.success) {
+        return {
+          success: false,
+          error: `Failed to reset server before loading match: ${resetResult.error}`,
+          rconResponses: results,
+        };
+      }
+
+      await delay(3000);
+    }
 
     // Never expose tokens in logs or API responses.
     const redactSensitiveCommand = (command: string): string => {
@@ -276,6 +297,7 @@ export async function loadMatchOnServer(
     const responseText = (loadResult.response || '').toLowerCase();
     const pluginReportedFailure = responseText.includes('match load failed');
     const gotvInactive = responseText.includes('gotv[0] not active');
+    const matchAlreadySetup = responseText.includes('already setup');
 
     const handlePluginFailure = (message: string) => {
       log.warn(message, {
@@ -285,9 +307,11 @@ export async function loadMatchOnServer(
       });
     };
 
-    if (pluginReportedFailure || gotvInactive) {
+    if (pluginReportedFailure || gotvInactive || matchAlreadySetup) {
       const errorMessage = gotvInactive
         ? 'MatchZy refused to load because GOTV is disabled. Enable GOTV (tv_enable 1) and retry.'
+        : matchAlreadySetup
+        ? 'MatchZy refused to load because another match is still active on the server. Reset the server and retry.'
         : 'MatchZy plugin reported that it failed to load the match. Check the server console for the detailed error.';
 
       handlePluginFailure(errorMessage);

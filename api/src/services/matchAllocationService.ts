@@ -687,7 +687,10 @@ export class MatchAllocationService {
       }
 
       // Load match on server and let MatchZy validate the config
-      const loadResult = await loadMatchOnServer(match.slug, server.id, { baseUrl });
+      const loadResult = await loadMatchOnServer(match.slug, server.id, {
+        baseUrl,
+        resetBeforeLoad: true,
+      });
 
       if (loadResult.success) {
         log.matchAllocated(match.slug, server.id, server.name);
@@ -1159,7 +1162,10 @@ export class MatchAllocationService {
       }
 
       // Load match on server
-      const loadResult = await loadMatchOnServer(matchSlug, server.id, { baseUrl });
+      const loadResult = await loadMatchOnServer(matchSlug, server.id, {
+        baseUrl,
+        resetBeforeLoad: true,
+      });
 
       if (loadResult.success) {
         log.matchAllocated(matchSlug, server.id, server.name);

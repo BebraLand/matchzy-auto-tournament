@@ -3,6 +3,7 @@ import { Match, MatchConfig, CreateMatchInput, MatchResponse } from '../types/ma
 import { log } from '../utils/logger';
 import { settingsService } from './settingsService';
 import { emitMatchUpdate } from './socketService';
+import { rconService } from './rconService';
 import { matchzyConfigService } from './matchzyConfigService';
 import { matchAllocationService } from './matchAllocationService';
 import { serverAllocationTracker } from './serverAllocationTracker';
@@ -232,6 +233,27 @@ class MatchService {
     }
 
     const serverId = match.server_id;
+
+    // Removing a match from the database does not reset MatchZy's in-memory
+    // match state. Clean the server first so a later allocation cannot be
+    // rejected as "another match is still setup".
+    if (serverId) {
+      try {
+        const resetResult = await rconService.sendCommand(serverId, 'css_restart');
+        if (resetResult.success) {
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+        } else {
+          log.warn(`Failed to reset server ${serverId} while deleting match ${slug}`, {
+            error: resetResult.error,
+          });
+        }
+      } catch (error) {
+        log.warn(`Failed to reset server ${serverId} while deleting match ${slug}`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     await db.deleteAsync('matches', 'slug = ?', [slug]);
     log.success(`Match deleted: ${slug}`);
 

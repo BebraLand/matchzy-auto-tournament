@@ -1491,6 +1491,7 @@ router.post('/:slug/load', requireAuth, async (req: Request, res: Response) => {
     const result = await loadMatchOnServer(slug, serverIdToUse, {
       skipWebhook,
       baseUrl,
+      resetBeforeLoad: true,
     });
 
     if (result.success) {
@@ -1646,7 +1647,10 @@ router.post('/:slug/reallocate', requireAuth, async (req: Request, res: Response
     );
 
     // Load on the new server.
-    const load = await loadMatchOnServer(slug, fallback.id, { baseUrl });
+    const load = await loadMatchOnServer(slug, fallback.id, {
+      baseUrl,
+      resetBeforeLoad: true,
+    });
 
     if (!load.success) {
       // Roll back the tracker reservation. In operator-controlled modes, return
