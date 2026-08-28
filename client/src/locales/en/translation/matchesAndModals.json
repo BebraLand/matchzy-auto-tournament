@@ -10,6 +10,7 @@
     "header": {
       "createMatch": "Create Match"
     },
+    "subtitle": "Live and upcoming matches, plus results from the last 7 days.",
     "bulkSelect": {
       "select": "Select",
       "done": "Done Selecting",
@@ -25,7 +26,29 @@
     "sections": {
       "live": "Live Matches ({{count}})",
       "upcoming": "Upcoming Matches ({{count}})",
-      "history": "Match History ({{count}})"
+      "history": "Match History ({{count}})",
+      "recentResults": "Recent Results · Last 7 days ({{count}})"
+    },
+    "filters": {
+      "helper": "Live and upcoming matches are shown first. Completed and cancelled results cover the last 7 days.",
+      "searchLabel": "Search matches",
+      "searchPlaceholder": "Team, player, map or match slug",
+      "teamLabel": "Team",
+      "playerLabel": "Player",
+      "allTeams": "All teams",
+      "allPlayers": "All players",
+      "statusLabel": "Status",
+      "allStatuses": "All statuses",
+      "live": "Live",
+      "upcoming": "Upcoming",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "fromDate": "From date",
+      "toDate": "To date",
+      "results": "Showing {{visible}} of {{total}} matches",
+      "reset": "Reset filters",
+      "noResultsTitle": "No matches found",
+      "noResultsDescription": "Try changing your search or filters."
     },
     "manualMatchLabel": "Manual match",
     "create": {
