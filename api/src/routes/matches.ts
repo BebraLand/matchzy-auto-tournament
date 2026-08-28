@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import express, { Router, Request, Response } from 'express';
 import { matchService } from '../services/matchService';
 import { matchAllocationService } from '../services/matchAllocationService';
 import { loadMatchOnServer } from '../services/matchLoadingService';
@@ -24,8 +24,14 @@ import { applyAdminMatchAccess } from '../services/matchConfigAccessService';
 import { hudProjectionService } from '../services/hudProjectionService';
 import { matchRulingService } from '../services/matchRulingService';
 import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
+import { rconService } from '../services/rconService';
+import { validateServerToken } from '../middleware/serverAuth';
 
 const router = Router();
+
+// Live reallocation uses a short-lived in-memory checkpoint. The payload is
+// downloaded by the target MatchZy server immediately after it is captured.
+const liveReallocationStates = new Map<string, { payload: Buffer; receivedAt: number }>();
 
 /**
  * Helper: build a rich MatchListItem (teams, maps, results, players) for a single match row.
@@ -1699,6 +1705,185 @@ router.post('/:slug/reallocate', requireAuth, async (req: Request, res: Response
       });
     }
   });
+});
+
+/**
+ * POST /api/matches/:slug/live-reallocate
+ * Capture the current MatchZy round checkpoint and move the live match.
+ */
+router.post('/:slug/live-reallocate', requireAuth, async (req: Request, res: Response) => {
+  const { slug } = req.params;
+  return matchExecutionLockService.runExclusive(slug, async () => {
+    let oldServerId: string | undefined;
+    let targetServerId: string | undefined;
+    let migrationCommitted = false;
+    try {
+      const baseUrl = await getWebhookBaseUrl(req);
+      const serverToken = process.env.SERVER_TOKEN || '';
+      if (!serverToken) {
+        return res.status(500).json({ success: false, error: 'SERVER_TOKEN is not configured' });
+      }
+
+      const match = await db.queryOneAsync<DbMatchRow>('SELECT * FROM matches WHERE slug = ?', [slug]);
+      if (!match) {
+        return res.status(404).json({ success: false, error: `Match '${slug}' not found` });
+      }
+      if (match.status !== 'live') {
+        return res.status(400).json({
+          success: false,
+          error: `Match is in '${match.status}' status. Live reallocation is available only during live play.`,
+        });
+      }
+      oldServerId = match.server_id;
+      if (!oldServerId) {
+        return res.status(409).json({ success: false, error: 'Live match has no source server assigned.' });
+      }
+
+      const requestedServerId =
+        typeof req.body?.serverId === 'string' && req.body.serverId !== oldServerId
+          ? req.body.serverId
+          : undefined;
+      const availableServers = await matchAllocationService.getAvailableServers();
+      const target = requestedServerId
+        ? availableServers.find((server) => server.id === requestedServerId)
+        : availableServers.find((server) => server.id !== oldServerId);
+      if (!target) {
+        return res.status(409).json({
+          success: false,
+          error: requestedServerId
+            ? 'Selected server is not available for live reallocation.'
+            : 'No alternative idle servers are available for live reallocation.',
+        });
+      }
+      targetServerId = target.id;
+      serverAllocationTracker.markAllocated(targetServerId, slug);
+      liveReallocationStates.delete(slug);
+
+      const captureUrl = `${baseUrl}/api/matches/${encodeURIComponent(slug)}/live-reallocation-state`;
+      const captureCommand =
+        `matchzy_live_reallocate_capture "${captureUrl}" "X-MatchZy-Token" "${serverToken}"`;
+      const capture = await rconService.sendCommand(oldServerId, captureCommand);
+      if (!capture.success) {
+        serverAllocationTracker.markIdle(targetServerId);
+        return res.status(400).json({ success: false, error: capture.error || 'Failed to capture live match state.' });
+      }
+
+      const deadline = Date.now() + 20000;
+      while (Date.now() < deadline && !liveReallocationStates.has(slug)) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      if (!liveReallocationStates.has(slug)) {
+        serverAllocationTracker.markIdle(targetServerId);
+        return res.status(504).json({
+          success: false,
+          error: 'Source server did not upload a live match checkpoint in time. The source match remains paused.',
+        });
+      }
+
+      await db.updateAsync(
+        'matches',
+        { server_id: targetServerId, status: 'ready', loaded_at: null },
+        'slug = ?',
+        [slug]
+      );
+      const load = await loadMatchOnServer(slug, targetServerId, {
+        baseUrl,
+        resetBeforeLoad: true,
+      });
+      if (!load.success) {
+        await db.updateAsync('matches', { server_id: oldServerId, status: 'live' }, 'slug = ?', [slug]);
+        await rconService.sendCommand(targetServerId, 'css_restart');
+        serverAllocationTracker.markIdle(targetServerId);
+        liveReallocationStates.delete(slug);
+        return res.status(400).json({ success: false, error: load.error || 'Failed to prepare target server.' });
+      }
+
+      const stateUrl = `${baseUrl}/api/matches/${encodeURIComponent(slug)}/live-reallocation-state`;
+      const restore = await rconService.sendCommand(
+        targetServerId,
+        `matchzy_loadbackup_url "${stateUrl}" "X-MatchZy-Token" "${serverToken}"`
+      );
+      if (!restore.success) {
+        await db.updateAsync('matches', { server_id: oldServerId, status: 'live' }, 'slug = ?', [slug]);
+        await rconService.sendCommand(targetServerId, 'css_restart');
+        serverAllocationTracker.markIdle(targetServerId);
+        liveReallocationStates.delete(slug);
+        return res.status(400).json({ success: false, error: restore.error || 'Target server rejected the live checkpoint.' });
+      }
+
+      const targetAddress = `${target.host}:${target.port}`;
+      const redirect = await rconService.sendCommand(
+        oldServerId,
+        `matchzy_live_reallocate_redirect "${targetAddress}"`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const reset = await rconService.sendCommand(oldServerId, 'css_restart');
+      serverAllocationTracker.markIdle(oldServerId);
+      liveReallocationStates.delete(slug);
+      migrationCommitted = true;
+
+      const updatedMatch = await matchService.getMatchBySlug(slug, baseUrl);
+      if (updatedMatch) {
+        emitMatchUpdate(updatedMatch);
+        emitBracketUpdate({ action: 'match_live_reallocated', matchSlug: slug, serverId: targetServerId });
+      }
+      return res.json({
+        success: true,
+        message: `Live match moved from ${oldServerId} to ${targetServerId}`,
+        match: updatedMatch,
+        playerRedirected: redirect.success,
+        sourceReset: reset.success,
+      });
+    } catch (error) {
+      if (!migrationCommitted && oldServerId && targetServerId) {
+        try {
+          await db.updateAsync('matches', { server_id: oldServerId, status: 'live' }, 'slug = ?', [slug]);
+          await rconService.sendCommand(targetServerId, 'css_restart');
+        } catch (rollbackError) {
+          log.error(`Error rolling back live reallocation`, rollbackError);
+        }
+      }
+      if (targetServerId) serverAllocationTracker.markIdle(targetServerId);
+      liveReallocationStates.delete(slug);
+      log.error(`Error live-reallocating match`, error);
+      return res.status(500).json({ success: false, error: 'Failed to live-reallocate match' });
+    }
+  });
+});
+
+/** MatchZy source upload endpoint for the temporary live checkpoint. */
+router.post(
+  '/:slug/live-reallocation-state',
+  validateServerToken,
+  express.raw({ type: 'application/octet-stream', limit: '10mb' }),
+  async (req: Request, res: Response) => {
+    const { slug } = req.params;
+    const match = await db.queryOneAsync<{ id: number }>('SELECT id FROM matches WHERE slug = ?', [slug]);
+    if (!match) return res.status(404).json({ success: false, error: 'Match not found' });
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ success: false, error: 'Expected a non-empty binary checkpoint' });
+    }
+    try {
+      const parsed = JSON.parse(req.body.toString('utf8')) as { matchid?: number | string };
+      if (String(parsed.matchid) !== String(match.id)) {
+        return res.status(400).json({ success: false, error: 'Checkpoint does not belong to this match' });
+      }
+    } catch {
+      return res.status(400).json({ success: false, error: 'Checkpoint is not valid JSON' });
+    }
+    liveReallocationStates.set(slug, { payload: req.body, receivedAt: Date.now() });
+    return res.status(200).json({ success: true, bytes: req.body.length });
+  }
+);
+
+/** MatchZy target download endpoint for the temporary live checkpoint. */
+router.get('/:slug/live-reallocation-state', validateServerToken, (req: Request, res: Response) => {
+  const state = liveReallocationStates.get(req.params.slug);
+  if (!state || Date.now() - state.receivedAt > 60000) {
+    liveReallocationStates.delete(req.params.slug);
+    return res.status(404).json({ success: false, error: 'Live checkpoint is no longer available' });
+  }
+  return res.type('application/json').send(state.payload);
 });
 
 /**

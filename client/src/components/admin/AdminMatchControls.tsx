@@ -104,7 +104,13 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
 
   const executeAction = async (action: string, params?: Record<string, unknown>) => {
     // Force cancel doesn't require a server - it works even when server is offline
-    if (!serverId && action !== 'forceCancel' && action !== 'restartMatch' && action !== 'reallocateServer') {
+    if (
+      !serverId &&
+      action !== 'forceCancel' &&
+      action !== 'restartMatch' &&
+      action !== 'reallocateServer' &&
+      action !== 'liveReallocateServer'
+    ) {
       showError('No server assigned to this match');
       return;
     }
@@ -126,6 +132,7 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
         broadcast: '/api/rcon/say',
         restartMatch: matchSlug ? `/api/matches/${matchSlug}/restart` : '',
         reallocateServer: matchSlug ? `/api/matches/${matchSlug}/reallocate` : '',
+        liveReallocateServer: matchSlug ? `/api/matches/${matchSlug}/live-reallocate` : '',
         forceCancel: matchSlug ? `/api/matches/${matchSlug}/force-cancel` : '',
       };
 
@@ -137,7 +144,7 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
       const requestBody =
         action === 'restartMatch' || action === 'forceCancel'
           ? {}
-          : action === 'reallocateServer'
+          : action === 'reallocateServer' || action === 'liveReallocateServer'
           ? reallocationServerId
             ? { serverId: reallocationServerId }
             : {}
@@ -158,6 +165,7 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
         broadcast: 'Message sent to server',
         restartMatch: 'Match restarted (ended and reloaded)',
         reallocateServer: 'Match reallocated to a different server',
+        liveReallocateServer: 'Live match moved and round state restored on the new server',
         forceCancel: 'Match cancelled successfully',
       };
 
@@ -219,6 +227,32 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
       })
       .catch((error) => {
         console.error('Failed to load servers for reallocation', error);
+      })
+      .finally(() => setLoadingReallocationServers(false));
+  };
+
+  const handleLiveReallocateClick = () => {
+    setReallocationServerId('');
+    setReallocationServers([]);
+    setLoadingReallocationServers(true);
+    setConfirmDialog({
+      open: true,
+      action: 'liveReallocateServer',
+      title: 'Live Reallocate',
+      description:
+        'The current round checkpoint, score, economy, map and team state will be restored on another server. Players will be redirected there. The transfer restores the beginning of the current round, not an exact mid-tick game state.',
+      color: 'warning',
+    });
+
+    void api
+      .get<{ success: boolean; servers?: ReallocationServer[] }>('/api/tournament/server-availability')
+      .then((response) => {
+        setReallocationServers(
+          (response.servers || []).filter((candidate) => candidate.id !== serverId)
+        );
+      })
+      .catch((error) => {
+        console.error('Failed to load servers for live reallocation', error);
       })
       .finally(() => setLoadingReallocationServers(false));
   };
@@ -471,6 +505,31 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
                 <Grid size={{ xs: 6, sm: 4 }}>
                   <Tooltip
                     title={
+                      matchStatus === 'live'
+                        ? 'Move a live match with its latest round checkpoint, score and economy'
+                        : 'Only available while the match is live'
+                    }
+                    arrow
+                  >
+                    <span>
+                      <Button
+                        fullWidth
+                        variant="contained"
+                        color="warning"
+                        startIcon={<SwapHorizIcon />}
+                        onClick={handleLiveReallocateClick}
+                        disabled={executing || matchStatus !== 'live'}
+                      >
+                        Live Reallocate
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </Grid>
+              )}
+              {matchSlug && (
+                <Grid size={{ xs: 6, sm: 4 }}>
+                  <Tooltip
+                    title={
                       matchStatus === 'ready' || matchStatus === 'loaded'
                         ? 'Move match to a different server (pre-live recovery)'
                         : 'Only available for ready/loaded matches (not during live play)'
@@ -625,7 +684,9 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
         </DialogTitle>
         <DialogContent>
           <Typography>{confirmDialog.description}</Typography>
-          {confirmDialog.action === 'reallocateServer' && reallocationServers.length > 1 && (
+          {(confirmDialog.action === 'reallocateServer' ||
+            confirmDialog.action === 'liveReallocateServer') &&
+            reallocationServers.length > 1 && (
             <Autocomplete
               sx={{ mt: 2 }}
               options={reallocationServers}
