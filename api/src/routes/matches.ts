@@ -1812,15 +1812,23 @@ router.post('/:slug/live-reallocate', requireAuth, async (req: Request, res: Res
       }
 
       const targetAddress = `${target.host}:${target.port}`;
-      const redirect = await rconService.sendCommand(
+      const announce = await rconService.sendCommand(
         oldServerId,
         `matchzy_live_reallocate_redirect "${targetAddress}"`
       );
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      const reset = await rconService.sendCommand(oldServerId, 'css_restart');
-      serverAllocationTracker.markIdle(oldServerId);
-      liveReallocationStates.delete(slug);
+      if (!announce.success) {
+        await db.updateAsync('matches', { server_id: oldServerId, status: 'live' }, 'slug = ?', [slug]);
+        await rconService.sendCommand(targetServerId, 'css_restart');
+        serverAllocationTracker.markIdle(targetServerId);
+        liveReallocationStates.delete(slug);
+        return res.status(502).json({
+          success: false,
+          error: announce.error || 'Source server could not announce the replacement server.',
+        });
+      }
+
       migrationCommitted = true;
+      liveReallocationStates.delete(slug);
 
       const updatedMatch = await matchService.getMatchBySlug(slug, baseUrl);
       if (updatedMatch) {
@@ -1829,10 +1837,11 @@ router.post('/:slug/live-reallocate', requireAuth, async (req: Request, res: Res
       }
       return res.json({
         success: true,
-        message: `Live match moved from ${oldServerId} to ${targetServerId}`,
+        message: `Live match prepared on ${targetServerId}. Players remain on ${oldServerId} until they manually connect.`,
         match: updatedMatch,
-        playerRedirected: redirect.success,
-        sourceReset: reset.success,
+        playerRedirected: false,
+        sourceReset: false,
+        manualConnectAddress: targetAddress,
       });
     } catch (error) {
       if (!migrationCommitted && oldServerId && targetServerId) {
