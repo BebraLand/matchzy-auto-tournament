@@ -1,6 +1,8 @@
-import React from 'react';
-import { Box, Card, CardContent, Typography, Chip, Stack, Tooltip } from '@mui/material';
+import React, { useState } from 'react';
+import { Box, Card, CardContent, Typography, Chip, Stack, Tooltip, IconButton } from '@mui/material';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
 import { getStatusColor, getStatusLabel, getRoundLabel } from '../../utils/matchUtils';
 import { isManualMatch, isShuffleMatch, isVetoDisabledForMatch } from '../../utils/matchFlags';
 import type { Match } from '../../types';
@@ -38,6 +40,25 @@ export const MatchCard: React.FC<MatchCardProps> = ({
   queuePosition,
   hasAvailableServers,
 }) => {
+  const [serverAddressCopied, setServerAddressCopied] = useState(false);
+
+  const serverAddress =
+    match.serverHost && match.serverPort ? `${match.serverHost}:${match.serverPort}` : null;
+  const serverConnectCommand = serverAddress ? `connect ${serverAddress}` : null;
+
+  const handleCopyServerAddress = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!serverConnectCommand) return;
+
+    try {
+      await navigator.clipboard.writeText(serverConnectCommand);
+      setServerAddressCopied(true);
+      window.setTimeout(() => setServerAddressCopied(false), 2000);
+    } catch {
+      // The modal still provides the address for manual copying if the browser blocks clipboard access.
+    }
+  };
+
   const getBorderColor = () => {
     // Bracket view / generic match card server status accents:
     // - allocated (serverId set, not yet loaded/live/completed) => yellow
@@ -204,10 +225,34 @@ export const MatchCard: React.FC<MatchCardProps> = ({
               <Typography variant="caption" color="text.secondary">
                 {roundLabel || getRoundLabel(match.round)}
               </Typography>
-              {match.serverName && (
-                <Typography variant="caption" color="text.secondary" display="block">
-                  Server: {match.serverName}
-                </Typography>
+              {(match.serverName || serverAddress) && (
+                <Box display="flex" alignItems="center" gap={0.5}>
+                  <Box minWidth={0}>
+                    {match.serverName && (
+                      <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                        Server: {match.serverName}
+                      </Typography>
+                    )}
+                    {serverConnectCommand && (
+                      <Typography variant="caption" color="text.secondary" display="block" fontFamily="monospace" noWrap>
+                        Connect: {serverConnectCommand}
+                      </Typography>
+                    )}
+                  </Box>
+                  {serverConnectCommand && (
+                    <Tooltip title={serverAddressCopied ? 'Copied!' : 'Copy connect command'}>
+                      <IconButton
+                        size="small"
+                        color={serverAddressCopied ? 'success' : 'primary'}
+                        aria-label="Copy connect command"
+                        onClick={handleCopyServerAddress}
+                        sx={{ p: 0.25 }}
+                      >
+                        {serverAddressCopied ? <CheckIcon fontSize="inherit" /> : <ContentCopyIcon fontSize="inherit" />}
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Box>
               )}
               {!match.serverId && queuePosition !== undefined && queuePosition !== null && (
                 <Typography

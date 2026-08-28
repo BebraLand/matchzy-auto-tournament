@@ -47,6 +47,8 @@ async function getMatchDetailsBySlug(slug: string): Promise<MatchListItem | null
       winner_tag?: string;
       demo_file_path?: string;
       server_name?: string | null;
+      server_host?: string | null;
+      server_port?: number | null;
     }
   >(
     `
@@ -55,7 +57,9 @@ async function getMatchDetailsBySlug(slug: string): Promise<MatchListItem | null
         t1.id as team1_id, t1.name as team1_name, t1.tag as team1_tag,
         t2.id as team2_id, t2.name as team2_name, t2.tag as team2_tag,
         w.id as winner_id, w.name as winner_name, w.tag as winner_tag,
-        s.name as server_name
+        s.name as server_name,
+        s.host as server_host,
+        s.port as server_port
       FROM matches m
       LEFT JOIN teams t1 ON m.team1_id = t1.id
       LEFT JOIN teams t2 ON m.team2_id = t2.id
@@ -270,6 +274,8 @@ async function getMatchDetailsBySlug(slug: string): Promise<MatchListItem | null
     status: row.status,
     serverId: row.server_id,
     serverName: row.server_name || undefined,
+    serverHost: row.server_host || undefined,
+    serverPort: row.server_port || undefined,
     config: transformedConfig,
     demoFilePath: row.demo_file_path,
     createdAt: row.created_at ?? 0,
@@ -722,7 +728,9 @@ router.get('/', async (req: Request, res: Response) => {
         t1.id as team1_id, t1.name as team1_name, t1.tag as team1_tag,
         t2.id as team2_id, t2.name as team2_name, t2.tag as team2_tag,
         w.id as winner_id, w.name as winner_name, w.tag as winner_tag,
-        s.name as server_name
+        s.name as server_name,
+        s.host as server_host,
+        s.port as server_port
       FROM matches m
       LEFT JOIN teams t1 ON m.team1_id = t1.id
       LEFT JOIN teams t2 ON m.team2_id = t2.id
@@ -749,6 +757,8 @@ router.get('/', async (req: Request, res: Response) => {
         winner_tag?: string;
         demo_file_path?: string;
         server_name?: string | null;
+        server_host?: string | null;
+        server_port?: number | null;
       }
     >(query, params);
 
@@ -922,6 +932,8 @@ router.get('/', async (req: Request, res: Response) => {
           status: row.status,
           serverId: row.server_id,
           serverName: row.server_name || undefined,
+          serverHost: row.server_host || undefined,
+          serverPort: row.server_port || undefined,
           config: transformedConfig,
           demoFilePath: row.demo_file_path,
           createdAt: row.created_at ?? 0,
