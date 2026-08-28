@@ -122,6 +122,7 @@
     },
     "buttons": {
       "delete": "Slett",
+      "deletePhoto": "Slett spillerbilde",
       "cancel": "Avbryt",
       "saving": "Lagrer...",
       "save": "Lagre",

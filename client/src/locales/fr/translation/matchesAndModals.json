@@ -227,6 +227,7 @@
     },
     "buttons": {
       "delete": "Supprimer",
+      "deletePhoto": "Supprimer la photo du joueur",
       "cancel": "Annuler",
       "saving": "Enregistrement…",
       "save": "Enregistrer",

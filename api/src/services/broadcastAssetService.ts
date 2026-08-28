@@ -71,3 +71,18 @@ export function saveBroadcastAsset(params: {
 
   return `/broadcast-assets/${kind}/${filename}?v=${Date.now()}`;
 }
+
+export function deleteBroadcastAsset(params: {
+  kind: BroadcastAssetKind;
+  entityId: string;
+}): void {
+  const { kind, entityId } = params;
+  if (!/^[A-Za-z0-9_-]+$/.test(entityId)) {
+    throw new Error('Invalid asset owner ID');
+  }
+
+  const directory = getBroadcastAssetDirectory(kind);
+  for (const extension of EXTENSIONS) {
+    fs.rmSync(path.join(directory, `${entityId}.${extension}`), { force: true });
+  }
+}

@@ -227,6 +227,7 @@
     },
     "buttons": {
       "delete": "Verwijderen",
+      "deletePhoto": "Spelerfoto verwijderen",
       "cancel": "Annuleren",
       "saving": "Opslaan...",
       "save": "Opslaan",
