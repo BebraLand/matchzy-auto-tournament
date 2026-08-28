@@ -1,4 +1,3 @@
-import React from 'react';
 import { Box, Button, Stack, Typography, Divider } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import type { MatchMapResult } from '../../types';
@@ -18,7 +17,6 @@ export function MapDemoDownloads({
   const handleDownloadDemo = (mapNumber: number) => {
     const link = document.createElement('a');
     link.href = `/api/demos/${matchSlug}/download/${mapNumber}`;
-    link.download = '';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

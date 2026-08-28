@@ -12,8 +12,31 @@ import type { DbMatchRow } from '../types/database.types';
 
 const router = Router();
 
-// Directory for storing demos (same as database) - under api/data
-const DEMOS_DIR = path.join(__dirname, '..', '..', 'data', 'demos');
+// Keep demos in the mounted application data directory in both source and bundled builds.
+const DEMOS_DIR = path.resolve(process.env.DEMOS_DIR || path.join(process.cwd(), 'data', 'demos'));
+const DEMOS_ROOT = path.resolve(DEMOS_DIR);
+
+function resolveDemoFilePath(matchSlug: string, storedPath: string): string | null {
+  const normalizedPath = storedPath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const candidates = normalizedPath.includes('/')
+    ? [normalizedPath]
+    : [normalizedPath, `${matchSlug}/${normalizedPath}`];
+
+  for (const candidate of candidates) {
+    const filepath = path.resolve(DEMOS_ROOT, candidate);
+    if (
+      filepath === DEMOS_ROOT ||
+      !filepath.startsWith(`${DEMOS_ROOT}${path.sep}`) ||
+      !fs.existsSync(filepath) ||
+      !fs.statSync(filepath).isFile()
+    ) {
+      continue;
+    }
+    return filepath;
+  }
+
+  return null;
+}
 
 // Ensure demos directory exists
 if (!fs.existsSync(DEMOS_DIR)) {
@@ -164,7 +187,7 @@ router.post(
       // Use MatchZy's filename (sanitize to prevent path traversal)
       const sanitizeFilename = (filename: string): string => {
         // Remove any path separators and resolve to just the filename
-        return path.basename(filename);
+        return path.posix.basename(filename.replace(/\\/g, '/'));
       };
       const filename = sanitizeFilename(matchzyFilename); // Validated above
       const filepath = path.join(matchFolder, filename);
@@ -182,7 +205,7 @@ router.post(
       const fileSizeMB = (fileSize / 1024 / 1024).toFixed(2);
 
       // Update match with demo file path (store relative path)
-      const relativePath = path.join(matchSlug, filename);
+      const relativePath = `${matchSlug}/${filename}`;
 
       // Store demo path in match record (for backward compatibility)
       await db.updateAsync('matches', { demo_file_path: relativePath }, 'slug = ?', [matchSlug]);
@@ -381,16 +404,9 @@ router.get(
         });
       }
 
-      // Handle both old flat structure and new folder structure
-      let filepath = path.join(DEMOS_DIR, demoFilePath);
-
-      // If file doesn't exist and path doesn't include folder, try legacy flat path
-      if (!fs.existsSync(filepath) && !demoFilePath.includes(path.sep)) {
-        filepath = path.join(DEMOS_DIR, matchSlug, demoFilePath);
-      }
-
-      if (!fs.existsSync(filepath)) {
-        log.warn(`Demo file not found on disk: ${filepath}`, { matchSlug, mapNumber });
+      const filepath = resolveDemoFilePath(matchSlug, demoFilePath);
+      if (!filepath) {
+        log.warn(`Demo file not found on disk: ${demoFilePath}`, { matchSlug, mapNumber });
         return res.status(404).json({
           success: false,
           error: 'Demo file not found on disk',
@@ -400,9 +416,10 @@ router.get(
       log.debug(`Serving demo file: ${demoFilePath}`, { matchSlug, mapNumber });
 
       // Extract just filename for download
-      const downloadFilename = path.basename(demoFilePath);
+      const downloadFilename = path.posix.basename(demoFilePath.replace(/\\/g, '/'));
 
       // Send file for download
+      res.type('application/octet-stream');
       res.download(filepath, downloadFilename, (err) => {
         if (err) {
           log.error('Error sending demo file', err);
@@ -463,11 +480,8 @@ router.get('/:matchSlug/status', requireAuth, async (req: Request, res: Response
     let demoExists = false;
     let demoFileSize = 0;
     if (match.demo_file_path) {
-      let filepath = path.join(DEMOS_DIR, match.demo_file_path);
-      if (!fs.existsSync(filepath) && !match.demo_file_path.includes(path.sep)) {
-        filepath = path.join(DEMOS_DIR, matchSlug, match.demo_file_path);
-      }
-      if (fs.existsSync(filepath)) {
+      const filepath = resolveDemoFilePath(matchSlug, match.demo_file_path);
+      if (filepath) {
         demoExists = true;
         const stats = fs.statSync(filepath);
         demoFileSize = stats.size;
@@ -529,15 +543,8 @@ router.get('/:matchSlug/info', requireAuth, async (req: Request, res: Response) 
       });
     }
 
-    // Handle both old flat structure and new folder structure
-    let filepath = path.join(DEMOS_DIR, match.demo_file_path);
-
-    // If file doesn't exist and path doesn't include folder, try legacy flat path
-    if (!fs.existsSync(filepath) && !match.demo_file_path.includes(path.sep)) {
-      filepath = path.join(DEMOS_DIR, matchSlug, match.demo_file_path);
-    }
-
-    const exists = fs.existsSync(filepath);
+    const filepath = resolveDemoFilePath(matchSlug, match.demo_file_path);
+    const exists = filepath !== null;
     let fileSize = 0;
 
     if (exists) {
@@ -548,7 +555,7 @@ router.get('/:matchSlug/info', requireAuth, async (req: Request, res: Response) 
     res.json({
       success: true,
       hasDemo: exists,
-      filename: path.basename(match.demo_file_path),
+      filename: path.posix.basename(match.demo_file_path.replace(/\\/g, '/')),
       size: fileSize,
       sizeFormatted: `${(fileSize / 1024 / 1024).toFixed(2)} MB`,
     });
