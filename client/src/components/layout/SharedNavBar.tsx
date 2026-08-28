@@ -227,6 +227,9 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
           <Button color="inherit" component={RouterLink} to="/player" size="small">
             {t('nav.players')}
           </Button>
+          <Button color="inherit" component={RouterLink} to="/matches" size="small">
+            {t('nav.matches')}
+          </Button>
           <Button
             color="inherit"
             component={RouterLink}

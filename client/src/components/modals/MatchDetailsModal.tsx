@@ -71,6 +71,7 @@ interface MatchDetailsModalProps {
   roundLabel: string;
   onClose: () => void;
   onDeleted?: (slug: string) => void;
+  readOnly?: boolean;
 }
 
 const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
@@ -79,6 +80,7 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
   roundLabel,
   onClose,
   onDeleted,
+  readOnly,
 }) => {
   const { t } = useTranslation();
   const [matchTimer, setMatchTimer] = useState<number>(0);
@@ -94,6 +96,8 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
   const serverAddress =
     match?.serverHost && match?.serverPort ? `${match.serverHost}:${match.serverPort}` : null;
   const serverConnectCommand = serverAddress ? `connect ${serverAddress}` : null;
+  const showServerInfo =
+    !readOnly || match?.status === 'live' || match?.status === 'loaded';
 
   const handleCopyServerAddress = async () => {
     if (!serverConnectCommand) return;
@@ -595,7 +599,7 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
             )}
 
             {/* Server Info */}
-            {(match.serverName || serverAddress) && (
+            {showServerInfo && (match.serverName || serverAddress) && (
               <Box
                 sx={{
                   display: 'flex',
@@ -1175,7 +1179,7 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
               </AccordionDetails>
             </Accordion>
 
-            {match.serverId && (match.status === 'live' || match.status === 'loaded') && (
+            {!readOnly && match.serverId && (match.status === 'live' || match.status === 'loaded') && (
               <Accordion sx={{ mt: 2 }}>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                   <Typography variant="subtitle1" fontWeight={600}>
@@ -1223,15 +1227,17 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
               Match slug: <strong>{match.slug}</strong>
             </Typography>
             <Box display="flex" gap={1}>
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<CodeIcon />}
-                onClick={handleOpenConfigModal}
-              >
-                View Match Config JSON
-              </Button>
-              {isManualMatch && (
+              {!readOnly && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<CodeIcon />}
+                  onClick={handleOpenConfigModal}
+                >
+                  View Match Config JSON
+                </Button>
+              )}
+              {!readOnly && isManualMatch && (
                 <Button
                   variant="outlined"
                   size="small"
@@ -1344,7 +1350,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = (props) => {
   if (!props.match) {
     return null;
   }
-  const { match, matchNumber, roundLabel, onClose, onDeleted } = props;
+  const { match, matchNumber, roundLabel, onClose, onDeleted, readOnly } = props;
   return (
     <InnerMatchDetailsModal
       match={match}
@@ -1352,6 +1358,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = (props) => {
       roundLabel={roundLabel}
       onClose={onClose}
       onDeleted={onDeleted}
+      readOnly={readOnly}
     />
   );
 };

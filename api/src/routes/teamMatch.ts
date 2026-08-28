@@ -9,6 +9,10 @@ import { matchLiveStatsService, type MatchLiveStats } from '../services/matchLiv
 import type { DbMatchRow } from '../types/database.types';
 import { getMapResults } from '../services/matchMapResultService';
 import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
+import {
+  canViewMatchServerConfig,
+  getMatchServerAccess,
+} from '../services/matchConfigAccessService';
 
 const router = Router();
 
@@ -193,6 +197,7 @@ router.get('/:teamId/match', async (req: Request, res: Response) => {
 
     // Get match config for map pool
     const config = match.config ? JSON.parse(match.config) : {};
+    const serverAccess = await getMatchServerAccess(req);
 
     // Get veto state to determine actual picked maps
     let pickedMaps: string[] = [];
@@ -396,7 +401,7 @@ router.get('/:teamId/match', async (req: Request, res: Response) => {
             }
           : null,
         server:
-          match.server_id && viewerIsTeamMember
+          match.server_id && canViewMatchServerConfig(config, serverAccess)
             ? {
                 id: match.server_id,
                 name: match.server_name,

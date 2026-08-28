@@ -129,7 +129,7 @@ const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== 'open' 
   ],
 }));
 
-export default function Layout() {
+export default function Layout({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -910,7 +910,7 @@ export default function Layout() {
                 {headerActions && <Box>{headerActions}</Box>}
               </Box>
             )}
-            <Outlet />
+            {children ?? <Outlet />}
           </Box>
         </Box>
       </Box>

@@ -23,6 +23,7 @@ interface MatchCardProps {
   allocationETA?: number | null; // Estimated seconds until server allocation (null if already allocated)
   queuePosition?: number | null; // Position in allocation queue (1 = first in queue)
   hasAvailableServers?: boolean; // Whether there are servers available right now
+  showServerInfo?: boolean;
 }
 
 export const MatchCard: React.FC<MatchCardProps> = ({
@@ -39,6 +40,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
   allocationETA,
   queuePosition,
   hasAvailableServers,
+  showServerInfo = true,
 }) => {
   const [serverAddressCopied, setServerAddressCopied] = useState(false);
 
@@ -225,7 +227,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
               <Typography variant="caption" color="text.secondary">
                 {roundLabel || getRoundLabel(match.round)}
               </Typography>
-              {(match.serverName || serverAddress) && (
+              {showServerInfo && (match.serverName || serverAddress) && (
                 <Box display="flex" alignItems="center" gap={0.5}>
                   <Box minWidth={0}>
                     {match.serverName && (

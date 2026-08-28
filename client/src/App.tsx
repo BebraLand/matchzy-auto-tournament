@@ -12,6 +12,7 @@ import Servers from './pages/Servers';
 import Tournament from './pages/Tournament';
 import Bracket from './pages/Bracket';
 import Matches from './pages/Matches';
+import PublicMatches from './pages/PublicMatches';
 import AdminTools from './pages/AdminTools';
 import Settings from './pages/Settings';
 import Development from './pages/Development';
@@ -148,6 +149,22 @@ function AppRoutes() {
         }
       />
 
+      {/* Admins keep the operator view; everyone else gets the read-only view. */}
+      <Route
+        path="/matches"
+        element={
+          isAuthenticated ? (
+            <ProtectedRoute>
+              <Layout><Matches /></Layout>
+            </ProtectedRoute>
+          ) : (
+            <ProtectedRoute adminOnly={false}>
+              <PublicMatches />
+            </ProtectedRoute>
+          )
+        }
+      />
+
       {/* Viewer & player-facing pages – require a signed-in identity (admin or player) */}
       <Route
         path="/team/:teamId"
@@ -195,7 +212,6 @@ function AppRoutes() {
         <Route path="servers" element={<Servers />} />
         <Route path="tournament" element={<Tournament />} />
         <Route path="bracket" element={<Bracket />} />
-        <Route path="matches" element={<Matches />} />
         <Route path="admin" element={<AdminTools />} />
         <Route path="settings" element={<Settings />} />
         <Route path="maps" element={<Maps />} />

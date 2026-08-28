@@ -1,9 +1,12 @@
 import { db } from '../config/database';
 import type { MatchConfig, MatchPlayer } from '../types/match.types';
+import type { Request } from 'express';
+import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
 
 function getRosterSteamIds(players: unknown): string[] {
   if (Array.isArray(players)) {
     return players.flatMap((player) => {
+      if (typeof player === 'string') return [player];
       if (!player || typeof player !== 'object') return [];
       const steamId = (player as { steamid?: unknown; steamId?: unknown }).steamid
         ?? (player as { steamid?: unknown; steamId?: unknown }).steamId;
@@ -16,6 +19,58 @@ function getRosterSteamIds(players: unknown): string[] {
   }
 
   return [];
+}
+
+export interface MatchServerAccess {
+  steamId: string | null;
+  isAdmin: boolean;
+}
+
+export async function getMatchServerAccess(req: Request): Promise<MatchServerAccess> {
+  const anyReq = req as Request & {
+    user?: { steamId?: string };
+    isAuthenticated?: () => boolean;
+  };
+  const sessionSteamId =
+    anyReq.isAuthenticated?.() && anyReq.user?.steamId ? anyReq.user.steamId : null;
+  const steamId = sessionSteamId || getVerifiedPlayerSteamId(req.headers.cookie);
+
+  if (!steamId) {
+    return { steamId: null, isAdmin: false };
+  }
+
+  const player = await db.queryOneAsync<{ is_admin?: number | boolean }>(
+    'SELECT is_admin FROM players WHERE id = ?',
+    [steamId]
+  );
+
+  return {
+    steamId,
+    isAdmin: player?.is_admin === 1 || player?.is_admin === true,
+  };
+}
+
+export function canViewMatchServerConfig(
+  config: unknown,
+  access: MatchServerAccess
+): boolean {
+  if (access.isAdmin) return true;
+  if (!access.steamId || !config || typeof config !== 'object') return false;
+
+  const matchConfig = config as Record<string, unknown>;
+  const team1 = matchConfig.team1 as { players?: unknown } | undefined;
+  const team2 = matchConfig.team2 as { players?: unknown } | undefined;
+  const spectators = matchConfig.spectators as { players?: unknown } | undefined;
+  const allowedSteamIds = [
+    ...getRosterSteamIds(team1?.players),
+    ...getRosterSteamIds(team2?.players),
+    ...getRosterSteamIds(spectators?.players),
+    ...getRosterSteamIds(matchConfig.admins),
+  ];
+
+  return allowedSteamIds.some(
+    (steamId) => steamId.trim().toLowerCase() === access.steamId!.trim().toLowerCase()
+  );
 }
 
 /**

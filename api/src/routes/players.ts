@@ -28,6 +28,10 @@ import { generateAvatarSvg } from '../generation/avatar';
 import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
 import { saveBroadcastAsset } from '../services/broadcastAssetService';
 import { operatorControlService } from '../services/operatorControlService';
+import {
+  canViewMatchServerConfig,
+  getMatchServerAccess,
+} from '../services/matchConfigAccessService';
 
 const router = Router();
 
@@ -859,6 +863,8 @@ router.get('/:playerId/current-match', async (req: Request, res: Response) => {
       [match.tournament_id]
     );
 
+    const serverAccess = await getMatchServerAccess(req);
+
     // Note: We're NOT exposing RCON password to players
     const serverPassword = null;
 
@@ -1008,7 +1014,7 @@ router.get('/:playerId/current-match', async (req: Request, res: Response) => {
               tag: opponent.tag,
             }
           : null,
-        server: match.server_id
+        server: match.server_id && canViewMatchServerConfig(cfg, serverAccess)
           ? {
               id: match.server_id,
               name: match.server_name,

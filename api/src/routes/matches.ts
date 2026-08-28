@@ -20,7 +20,11 @@ import { getMapResults } from '../services/matchMapResultService';
 import { serverAllocationTracker } from '../services/serverAllocationTracker';
 import { operatorControlService } from '../services/operatorControlService';
 import { matchExecutionLockService } from '../services/matchExecutionLockService';
-import { applyAdminMatchAccess } from '../services/matchConfigAccessService';
+import {
+  applyAdminMatchAccess,
+  canViewMatchServerConfig,
+  getMatchServerAccess,
+} from '../services/matchConfigAccessService';
 import { hudProjectionService } from '../services/hudProjectionService';
 import { matchRulingService } from '../services/matchRulingService';
 import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
@@ -32,6 +36,23 @@ const router = Router();
 // Live reallocation uses a short-lived in-memory checkpoint. The payload is
 // downloaded by the target MatchZy server immediately after it is captured.
 const liveReallocationStates = new Map<string, { payload: Buffer; receivedAt: number }>();
+
+function stripMatchServerAccess(match: MatchListItem): MatchListItem {
+  const safeMatch = { ...match };
+  delete safeMatch.serverId;
+  delete safeMatch.serverName;
+  delete safeMatch.serverHost;
+  delete safeMatch.serverPort;
+
+  if (safeMatch.config) {
+    const config = { ...safeMatch.config };
+    delete config.admins;
+    delete config.__preferredServerId;
+    safeMatch.config = config;
+  }
+
+  return safeMatch;
+}
 
 /**
  * Helper: build a rich MatchListItem (teams, maps, results, players) for a single match row.
@@ -720,13 +741,14 @@ router.post('/bulk-delete', requireAuth, async (req: Request, res: Response) => 
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
+    const serverAccess = await getMatchServerAccess(req);
+    const publicView = req.query.public === 'true' || !serverAccess.isAdmin;
     const controlMode = await operatorControlService.getControlMode();
     if (controlMode !== 'automatic') {
       await operatorControlService.ensureQueuePositions();
     }
 
     const serverId = req.query.serverId as string | undefined;
-
     // Fetch matches with tournament and server information
     let query = `
       SELECT 
@@ -745,9 +767,21 @@ router.get('/', async (req: Request, res: Response) => {
     `;
 
     const params: unknown[] = [];
+    const filters: string[] = [];
     if (serverId) {
-      query += ' WHERE m.server_id = ?';
+      filters.push('m.server_id = ?');
       params.push(serverId);
+    }
+
+    // Public match pages intentionally expose only a rolling seven-day window.
+    // Use completion time for finished matches and creation time for active ones.
+    if (publicView) {
+      filters.push('COALESCE(m.completed_at, m.created_at) >= ?');
+      params.push(Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60);
+    }
+
+    if (filters.length > 0) {
+      query += ` WHERE ${filters.join(' AND ')}`;
     }
 
     query += ' ORDER BY m.created_at DESC';
@@ -1107,12 +1141,18 @@ router.get('/', async (req: Request, res: Response) => {
       'SELECT status FROM tournament WHERE id = 1'
     );
 
+    const responseMatches = matches.map((match) =>
+      canViewMatchServerConfig(match.config, serverAccess)
+        ? match
+        : stripMatchServerAccess(match)
+    );
+
     return res.json({
       success: true,
-      count: matches.length,
+      count: responseMatches.length,
       tournamentStatus: tournamentStatus?.status || 'setup',
       controlMode,
-      matches,
+      matches: responseMatches,
     });
   } catch (error) {
     console.error('Error fetching matches:', error);
@@ -1356,9 +1396,13 @@ router.get('/:slug', async (req: Request, res: Response) => {
       });
     }
 
+    const serverAccess = await getMatchServerAccess(req);
+
     return res.json({
       success: true,
-      match,
+      match: canViewMatchServerConfig(match.config, serverAccess)
+        ? match
+        : stripMatchServerAccess(match),
     });
   } catch (error) {
     console.error('Error fetching match:', error);
