@@ -187,6 +187,9 @@ export interface MatchListItem {
   };
   status: string;
   serverId?: string;
+  serverName?: string;
+  serverHost?: string;
+  serverPort?: number;
   config?: Record<string, unknown>;
   demoFilePath?: string;
   createdAt: number;

@@ -6,6 +6,7 @@
 import { db } from '../config/database';
 import { log } from '../utils/logger';
 import { eloToOpenSkill } from './ratingService';
+import { deleteBroadcastAsset } from './broadcastAssetService';
 
 export interface PlayerRecord {
   id: string; // Steam ID
@@ -14,7 +15,7 @@ export interface PlayerRecord {
   first_name?: string;
   last_name?: string;
   country_code?: string;
-  photo_url?: string;
+  photo_url?: string | null;
   current_elo: number;
   starting_elo: number;
   openskill_mu: number;
@@ -31,7 +32,7 @@ export interface CreatePlayerInput {
   firstName?: string;
   lastName?: string;
   countryCode?: string;
-  photoUrl?: string;
+  photoUrl?: string | null;
   elo?: number; // Optional - defaults to 1500 Skill Rating (OpenSkill baseline)
   isAdmin?: boolean;
   isSpectator?: boolean;
@@ -43,7 +44,7 @@ export interface UpdatePlayerInput {
   firstName?: string;
   lastName?: string;
   countryCode?: string;
-  photoUrl?: string;
+  photoUrl?: string | null;
   elo?: number;
   isAdmin?: boolean;
   isSpectator?: boolean;
@@ -67,7 +68,7 @@ export interface PlayerResponse {
 }
 
 class PlayerService {
-  private normalizeOptionalText(value: string | undefined): string | undefined {
+  private normalizeOptionalText(value: string | null | undefined): string | undefined {
     const trimmed = value?.trim();
     return trimmed || undefined;
   }
@@ -232,6 +233,7 @@ class PlayerService {
     const updates: Partial<PlayerRecord> & { is_admin?: number; is_spectator?: number } = {
       updated_at: Math.floor(Date.now() / 1000),
     };
+    let shouldDeletePhotoAsset = false;
 
     if (input.name !== undefined) {
       updates.name = input.name;
@@ -254,7 +256,9 @@ class PlayerService {
     }
 
     if (input.photoUrl !== undefined) {
-      updates.photo_url = this.normalizeOptionalText(input.photoUrl);
+      const photoUrl = this.normalizeOptionalText(input.photoUrl);
+      updates.photo_url = photoUrl;
+      shouldDeletePhotoAsset = Boolean(existing.photo_url && existing.photo_url !== photoUrl);
     }
 
     if (input.elo !== undefined) {
@@ -273,6 +277,10 @@ class PlayerService {
     }
 
     await db.updateAsync('players', updates, 'id = ?', [playerId]);
+
+    if (shouldDeletePhotoAsset) {
+      deleteBroadcastAsset({ kind: 'players', entityId: playerId });
+    }
 
     return await this.getPlayerById(playerId);
   }

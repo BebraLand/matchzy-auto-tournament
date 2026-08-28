@@ -19,6 +19,7 @@ import {
   AccordionDetails,
   Chip,
   Button,
+  Tooltip,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
@@ -27,6 +28,8 @@ import MapIcon from '@mui/icons-material/Map';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CodeIcon from '@mui/icons-material/Code';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   formatDate,
@@ -86,6 +89,24 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
   const [configLoading, setConfigLoading] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [playerEloIndex, setPlayerEloIndex] = useState<Record<string, number> | null>(null);
+  const [serverAddressCopied, setServerAddressCopied] = useState(false);
+
+  const serverAddress =
+    match?.serverHost && match?.serverPort ? `${match.serverHost}:${match.serverPort}` : null;
+  const serverConnectCommand = serverAddress ? `connect ${serverAddress}` : null;
+
+  const handleCopyServerAddress = async () => {
+    if (!serverConnectCommand) return;
+
+    try {
+      await navigator.clipboard.writeText(serverConnectCommand);
+      setServerAddressCopied(true);
+      setSuccess('Server address copied');
+      window.setTimeout(() => setServerAddressCopied(false), 2000);
+    } catch {
+      setError(`Could not copy automatically. Command: ${serverConnectCommand}`);
+    }
+  };
 
   // Player connection status
   const { status: connectionStatus } = usePlayerConnections(match?.slug || null);
@@ -574,11 +595,46 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
             )}
 
             {/* Server Info */}
-            {match.serverName && (
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Server:</strong> {match.serverName}
-                </Typography>
+            {(match.serverName || serverAddress) && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 1,
+                  bgcolor: 'action.hover',
+                  borderRadius: 1.5,
+                  px: 1.5,
+                  py: 1,
+                }}
+              >
+                <Box minWidth={0}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Server
+                  </Typography>
+                  {match.serverName && (
+                    <Typography variant="body2" fontWeight={600} noWrap>
+                      {match.serverName}
+                    </Typography>
+                  )}
+                  {serverConnectCommand && (
+                    <Typography variant="body2" color="text.secondary" fontFamily="monospace" noWrap>
+                      <strong>Connect:</strong> {serverConnectCommand}
+                    </Typography>
+                  )}
+                </Box>
+                {serverConnectCommand && (
+                  <Tooltip title={serverAddressCopied ? 'Copied!' : 'Copy connect command'}>
+                    <IconButton
+                      size="small"
+                      color={serverAddressCopied ? 'success' : 'primary'}
+                      aria-label="Copy connect command"
+                      onClick={() => void handleCopyServerAddress()}
+                    >
+                      {serverAddressCopied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
+                    </IconButton>
+                  </Tooltip>
+                )}
               </Box>
             )}
 

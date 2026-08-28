@@ -228,6 +228,7 @@
     },
     "buttons": {
       "delete": "Delete",
+      "deletePhoto": "Delete player photo",
       "cancel": "Cancel",
       "saving": "Saving...",
       "save": "Save",

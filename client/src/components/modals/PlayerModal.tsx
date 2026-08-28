@@ -208,7 +208,7 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
         firstName: firstName.trim() || undefined,
         lastName: lastName.trim() || undefined,
         countryCode: countryCode.trim().toUpperCase() || undefined,
-        photoUrl: photoUrl.trim() || undefined,
+        photoUrl: photoUrl.trim() || null,
         elo: elo !== '' ? Number(elo) : undefined,
         isAdmin,
         isSpectator,
@@ -403,6 +403,20 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
                   onChange={(event) => handlePhotoFile(event.target.files?.[0])}
                 />
               </Button>
+              {(pendingPhotoData || photoUrl) && (
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => {
+                    setPendingPhotoData(null);
+                    setPhotoUrl('');
+                  }}
+                  data-testid="player-photo-remove-button"
+                >
+                  {t('playerModal.buttons.deletePhoto')}
+                </Button>
+              )}
             </Box>
 
             <TextField

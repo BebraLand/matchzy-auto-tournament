@@ -227,6 +227,7 @@
     },
     "buttons": {
       "delete": "Elimina",
+      "deletePhoto": "Elimina foto giocatore",
       "cancel": "Annulla",
       "saving": "Salvataggio...",
       "save": "Salva",

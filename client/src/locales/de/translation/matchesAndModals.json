@@ -227,6 +227,7 @@
     },
     "buttons": {
       "delete": "Löschen",
+      "deletePhoto": "Spielerfoto löschen",
       "cancel": "Abbrechen",
       "saving": "Der Speichervorgang läuft...",
       "save": "Speichern",

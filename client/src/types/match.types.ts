@@ -17,6 +17,8 @@ export interface Match {
   winner?: Team;
   serverId?: string;
   serverName?: string;
+  serverHost?: string;
+  serverPort?: number;
   createdAt?: number;
   loadedAt?: number;
   completedAt?: number;
