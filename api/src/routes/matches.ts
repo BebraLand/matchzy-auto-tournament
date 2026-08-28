@@ -1827,6 +1827,19 @@ router.post('/:slug/live-reallocate', requireAuth, async (req: Request, res: Res
         });
       }
 
+      // Give players time to read the replacement address, then reset the
+      // source server so it cannot keep the migrated match live.
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const sourceReset = await rconService.sendCommand(oldServerId, 'css_restart');
+      if (!sourceReset.success) {
+        log.warn(`Live reallocation completed but source server reset failed`, {
+          matchSlug: slug,
+          serverId: oldServerId,
+          error: sourceReset.error,
+        });
+      }
+      serverAllocationTracker.markIdle(oldServerId);
+
       migrationCommitted = true;
       liveReallocationStates.delete(slug);
 
@@ -1837,10 +1850,10 @@ router.post('/:slug/live-reallocate', requireAuth, async (req: Request, res: Res
       }
       return res.json({
         success: true,
-        message: `Live match prepared on ${targetServerId}. Players remain on ${oldServerId} until they manually connect.`,
+        message: `Live match moved from ${oldServerId} to ${targetServerId}`,
         match: updatedMatch,
-        playerRedirected: false,
-        sourceReset: false,
+        playerRedirected: announce.success,
+        sourceReset: sourceReset.success,
         manualConnectAddress: targetAddress,
       });
     } catch (error) {
