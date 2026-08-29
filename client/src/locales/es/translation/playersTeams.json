@@ -2,6 +2,8 @@
   "matchStats": {
     "title": "Marcador de jugadores",
     "allMaps": "Todos los mapas",
+    "showAdvanced": "Mostrar estadisticas avanzadas",
+    "hideAdvanced": "Ocultar estadisticas avanzadas",
     "unavailable": "Las estadísticas de jugadores no están disponibles para este mapa."
   },
   "findPlayer": {

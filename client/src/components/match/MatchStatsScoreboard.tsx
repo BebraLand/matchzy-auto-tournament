@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   Box,
+  Button,
   Chip,
   Paper,
   Stack,
@@ -48,6 +49,7 @@ function normalizePlayer(player: PlayerStats | MatchPlayerStatsLine): StatsPlaye
     deaths: source.deaths ?? 0,
     assists: source.assists ?? 0,
     flashAssists: source.flashAssists ?? 0,
+    enemiesFlashed: source.enemiesFlashed ?? 0,
     headshotKills: source.headshotKills ?? source.headshots ?? 0,
     damage: source.damage ?? 0,
     utilityDamage: source.utilityDamage ?? 0,
@@ -66,6 +68,7 @@ function emptyPlayer(player: PlayerStats | MatchPlayerStatsLine): StatsPlayer {
     deaths: 0,
     assists: 0,
     flashAssists: 0,
+    enemiesFlashed: 0,
     headshotKills: 0,
     damage: 0,
     utilityDamage: 0,
@@ -92,6 +95,7 @@ function aggregatePlayers(
       current.deaths += player.deaths;
       current.assists += player.assists;
       current.flashAssists += player.flashAssists;
+      current.enemiesFlashed += player.enemiesFlashed;
       current.headshotKills += player.headshotKills;
       current.damage += player.damage;
       current.utilityDamage += player.utilityDamage;
@@ -113,6 +117,7 @@ function aggregatePlayers(
     current.deaths += player.deaths;
     current.assists += player.assists;
     current.flashAssists += player.flashAssists;
+    current.enemiesFlashed += player.enemiesFlashed;
     current.headshotKills += player.headshotKills;
     current.damage += player.damage;
     current.utilityDamage += player.utilityDamage;
@@ -132,7 +137,21 @@ function formatAdr(player: StatsPlayer): string {
   return player.roundsPlayed > 0 ? (player.damage / player.roundsPlayed).toFixed(1) : '—';
 }
 
-function renderRows(players: StatsPlayer[], accent: 'primary' | 'error', highlightPlayerId?: string) {
+function formatRatio(numerator: number, denominator: number): string {
+  if (denominator > 0) return (numerator / denominator).toFixed(2);
+  return numerator > 0 ? '∞' : '—';
+}
+
+function formatHeadshotPercent(player: StatsPlayer): string {
+  return player.kills > 0 ? `${((player.headshotKills / player.kills) * 100).toFixed(1)}%` : '—';
+}
+
+function renderRows(
+  players: StatsPlayer[],
+  accent: 'primary' | 'error',
+  highlightPlayerId?: string,
+  showAdvancedStats = false
+) {
   return [...players]
     .sort((a, b) => b.score - a.score || b.kills - a.kills)
     .map((player) => (
@@ -166,10 +185,18 @@ function renderRows(players: StatsPlayer[], accent: 'primary' | 'error', highlig
         <TableCell align="right">{player.kills}</TableCell>
         <TableCell align="right">{player.deaths}</TableCell>
         <TableCell align="right">{player.assists}</TableCell>
+        {showAdvancedStats && (
+          <>
+            <TableCell align="right">{formatRatio(player.kills, player.deaths)}</TableCell>
+            <TableCell align="right">{formatRatio(player.kills + player.assists, player.deaths)}</TableCell>
+            <TableCell align="right">{player.enemiesFlashed}</TableCell>
+          </>
+        )}
         <TableCell align="right">{player.kills - player.deaths}</TableCell>
         <TableCell align="right">{formatAdr(player)}</TableCell>
         <TableCell align="right">{player.kast > 0 ? `${player.kast.toFixed(1)}%` : '—'}</TableCell>
         <TableCell align="right">{player.headshotKills}</TableCell>
+        {showAdvancedStats && <TableCell align="right">{formatHeadshotPercent(player)}</TableCell>}
         <TableCell align="right">{player.damage}</TableCell>
         <TableCell align="right">{player.utilityDamage}</TableCell>
         <TableCell align="right">{player.mvps}</TableCell>
@@ -192,6 +219,7 @@ export function MatchStatsScoreboard({
 }: MatchStatsScoreboardProps) {
   const { t } = useTranslation();
   const [selectedMap, setSelectedMap] = useState<number | null>(null);
+  const [showAdvancedStats, setShowAdvancedStats] = useState(false);
 
   const selectedResult = selectedMap === null
     ? null
@@ -231,9 +259,18 @@ export function MatchStatsScoreboard({
 
   return (
     <Box>
-      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-        {t('matchStats.title')}
-      </Typography>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+        <Typography variant="subtitle1" fontWeight={600}>
+          {t('matchStats.title')}
+        </Typography>
+        <Button
+          size="small"
+          variant={showAdvancedStats ? 'contained' : 'outlined'}
+          onClick={() => setShowAdvancedStats((visible) => !visible)}
+        >
+          {t(showAdvancedStats ? 'matchStats.hideAdvanced' : 'matchStats.showAdvanced')}
+        </Button>
+      </Stack>
 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={2}>
         <Chip
@@ -266,8 +303,20 @@ export function MatchStatsScoreboard({
         </Typography>
       ) : (
         <Stack spacing={2}>
-          <ScoreboardTable title={team1Name} players={displayTeam1} accent="primary" highlightPlayerId={highlightPlayerId} />
-          <ScoreboardTable title={team2Name} players={displayTeam2} accent="error" highlightPlayerId={highlightPlayerId} />
+          <ScoreboardTable
+            title={team1Name}
+            players={displayTeam1}
+            accent="primary"
+            highlightPlayerId={highlightPlayerId}
+            showAdvancedStats={showAdvancedStats}
+          />
+          <ScoreboardTable
+            title={team2Name}
+            players={displayTeam2}
+            accent="error"
+            highlightPlayerId={highlightPlayerId}
+            showAdvancedStats={showAdvancedStats}
+          />
         </Stack>
       )}
     </Box>
@@ -279,11 +328,13 @@ function ScoreboardTable({
   players,
   accent,
   highlightPlayerId,
+  showAdvancedStats,
 }: {
   title: string;
   players: StatsPlayer[];
   accent: 'primary' | 'error';
   highlightPlayerId?: string;
+  showAdvancedStats: boolean;
 }) {
   return (
     <Box>
@@ -291,15 +342,18 @@ function ScoreboardTable({
         {title}
       </Typography>
       <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
-        <Table size="small" sx={{ minWidth: 820 }}>
+        <Table size="small" sx={{ minWidth: showAdvancedStats ? 980 : 820 }}>
           <TableHead>
             <TableRow>
-              {['Player', 'K', 'D', 'A', '+/-', 'ADR', 'KAST', 'HS', 'DMG', 'UD', 'MVP', 'Score'].map((label) => (
+              {(showAdvancedStats
+                ? ['Player', 'K', 'D', 'A', 'KDR', 'KDA', 'EF', '+/-', 'ADR', 'KAST', 'HS', 'HS%', 'DMG', 'UD', 'MVP', 'Score']
+                : ['Player', 'K', 'D', 'A', '+/-', 'ADR', 'KAST', 'HS', 'DMG', 'UD', 'MVP', 'Score']
+              ).map((label) => (
                 <TableCell key={label} align={label === 'Player' ? 'left' : 'right'}>{label}</TableCell>
               ))}
             </TableRow>
           </TableHead>
-          <TableBody>{renderRows(players, accent, highlightPlayerId)}</TableBody>
+          <TableBody>{renderRows(players, accent, highlightPlayerId, showAdvancedStats)}</TableBody>
         </Table>
       </TableContainer>
     </Box>

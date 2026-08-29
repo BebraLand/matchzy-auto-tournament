@@ -2,6 +2,8 @@
   "matchStats": {
     "title": "Tableau des joueurs",
     "allMaps": "Toutes les cartes",
+    "showAdvanced": "Afficher les statistiques avancees",
+    "hideAdvanced": "Masquer les statistiques avancees",
     "unavailable": "Les statistiques des joueurs ne sont pas disponibles pour cette carte."
   },
   "findPlayer": {

@@ -386,12 +386,7 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
 
   const normalizedTeam1Players = livePlayerStats?.team1?.length
     ? livePlayerStats.team1.map((player) => ({
-        name: player.name,
-        steamId: player.steamId,
-        kills: player.kills,
-        deaths: player.deaths,
-        assists: player.assists,
-        damage: player.damage,
+        ...player,
         headshots: player.headshotKills,
       }))
     : (match.team1Players || []).map((player) => ({
@@ -400,12 +395,7 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
       }));
   const normalizedTeam2Players = livePlayerStats?.team2?.length
     ? livePlayerStats.team2.map((player) => ({
-        name: player.name,
-        steamId: player.steamId,
-        kills: player.kills,
-        deaths: player.deaths,
-        assists: player.assists,
-        damage: player.damage,
+        ...player,
         headshots: player.headshotKills,
       }))
     : (match.team2Players || []).map((player) => ({

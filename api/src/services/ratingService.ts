@@ -169,6 +169,7 @@ export async function updatePlayerRatings(
           deaths: stat.deaths || 0,
           assists: stat.assists || 0,
           flashAssists: stat.flash_assists || 0,
+          enemiesFlashed: 0,
           headshotKills: stat.headshots || 0,
           damage: stat.total_damage || 0,
           utilityDamage: stat.utility_damage || 0,

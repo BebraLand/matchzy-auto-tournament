@@ -2,6 +2,8 @@
   "matchStats": {
     "title": "玩家记分板",
     "allMaps": "所有地图",
+    "showAdvanced": "显示高级统计",
+    "hideAdvanced": "隐藏高级统计",
     "unavailable": "此地图暂无玩家统计数据。"
   },
   "findPlayer": {

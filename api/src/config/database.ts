@@ -154,6 +154,7 @@ class DatabaseManager {
         { table: 'player_rating_history', column: 'stat_adjustment', type: 'INTEGER' },
         { table: 'player_rating_history', column: 'template_id', type: 'TEXT' },
         { table: 'player_match_stats', column: 'flash_assists', type: 'INTEGER' },
+        { table: 'player_match_stats', column: 'enemies_flashed', type: 'INTEGER' },
         { table: 'player_match_stats', column: 'utility_damage', type: 'INTEGER' },
         { table: 'player_match_stats', column: 'kast', type: 'REAL' },
         { table: 'player_match_stats', column: 'mvps', type: 'INTEGER' },

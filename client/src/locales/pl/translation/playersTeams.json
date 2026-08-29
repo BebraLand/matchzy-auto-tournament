@@ -2,6 +2,8 @@
   "matchStats": {
     "title": "Tablica wyników graczy",
     "allMaps": "Wszystkie mapy",
+    "showAdvanced": "Pokaz statystyki zaawansowane",
+    "hideAdvanced": "Ukryj statystyki zaawansowane",
     "unavailable": "Statystyki graczy nie są dostępne dla tej mapy."
   },
   "findPlayer": {

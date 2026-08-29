@@ -2,6 +2,8 @@
   "matchStats": {
     "title": "Spelersscorebord",
     "allMaps": "Alle maps",
+    "showAdvanced": "Geavanceerde statistieken tonen",
+    "hideAdvanced": "Geavanceerde statistieken verbergen",
     "unavailable": "Spelerstatistieken zijn niet beschikbaar voor deze map."
   },
   "findPlayer": {

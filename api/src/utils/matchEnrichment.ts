@@ -47,6 +47,7 @@ export async function enrichMatchWithPlayerStats(
       total_damage: number | null;
       headshots: number | null;
       flash_assists: number | null;
+      enemies_flashed: number | null;
       utility_damage: number | null;
       kast: number | null;
       mvps: number | null;
@@ -54,7 +55,7 @@ export async function enrichMatchWithPlayerStats(
       rounds_played: number | null;
     }>(
       `SELECT player_id, team, kills, deaths, assists, total_damage, headshots,
-              flash_assists, utility_damage, kast, mvps, score, rounds_played
+              flash_assists, enemies_flashed, utility_damage, kast, mvps, score, rounds_played
        FROM player_match_stats
        WHERE match_slug = ?
        ORDER BY created_at DESC`,
@@ -92,6 +93,7 @@ export async function enrichMatchWithPlayerStats(
         damage: row.total_damage ?? 0,
         headshots: row.headshots ?? 0,
         flashAssists: row.flash_assists ?? 0,
+        enemiesFlashed: row.enemies_flashed ?? 0,
         utilityDamage: row.utility_damage ?? 0,
         kast: row.kast ?? 0,
         mvps: row.mvps ?? 0,

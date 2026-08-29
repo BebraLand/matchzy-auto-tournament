@@ -359,6 +359,7 @@ export function getSchemaSQL(): string {
       assists INTEGER,
       headshots INTEGER,
       flash_assists INTEGER,
+      enemies_flashed INTEGER,
       utility_damage INTEGER,
       kast REAL, -- KAST percentage (0-100)
       mvps INTEGER,

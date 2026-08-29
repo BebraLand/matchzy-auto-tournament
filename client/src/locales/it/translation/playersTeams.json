@@ -2,6 +2,8 @@
   "matchStats": {
     "title": "Tabellone giocatori",
     "allMaps": "Tutte le mappe",
+    "showAdvanced": "Mostra statistiche avanzate",
+    "hideAdvanced": "Nascondi statistiche avanzate",
     "unavailable": "Le statistiche dei giocatori non sono disponibili per questa mappa."
   },
   "findPlayer": {

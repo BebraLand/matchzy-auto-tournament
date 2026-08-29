@@ -2,6 +2,8 @@
   "matchStats": {
     "title": "Spillerresultattavle",
     "allMaps": "Alle kart",
+    "showAdvanced": "Vis avansert statistikk",
+    "hideAdvanced": "Skjul avansert statistikk",
     "unavailable": "Spillerstatistikk er ikke tilgjengelig for dette kartet."
   },
   "findPlayer": {

@@ -2,7 +2,9 @@
   "matchStats": {
     "title": "Player scoreboard",
     "allMaps": "All Maps",
-    "unavailable": "Player stats are not available for this map."
+    "unavailable": "Player stats are not available for this map.",
+    "showAdvanced": "Show advanced stats",
+    "hideAdvanced": "Hide advanced stats"
   },
   "findPlayer": {
     "title": "Find Player",

@@ -2,7 +2,9 @@
   "matchStats": {
     "title": "Spieler-Scoreboard",
     "allMaps": "Alle Maps",
-    "unavailable": "Spielerstatistiken sind für diese Map nicht verfügbar."
+    "unavailable": "Spielerstatistiken sind für diese Map nicht verfügbar.",
+    "showAdvanced": "Erweiterte Statistiken anzeigen",
+    "hideAdvanced": "Erweiterte Statistiken ausblenden"
   },
   "findPlayer": {
     "title": "Spieler suchen",

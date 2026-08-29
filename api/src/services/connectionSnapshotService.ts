@@ -76,6 +76,8 @@ type MatchReportPlayerStats = {
   assists?: number;
   flash_assists?: number;
   flashAssists?: number;
+  enemies_flashed?: number;
+  enemiesFlashed?: number;
   headshot_kills?: number;
   headshotKills?: number;
   damage?: number;
@@ -411,6 +413,7 @@ function extractPlayerStats(report: MatchReport): MatchPlayerStatsSnapshot | nul
           deaths: pickStat(stats, ['deaths']),
           assists: pickStat(stats, ['assists']),
           flashAssists: pickStat(stats, ['flash_assists', 'flashAssists']),
+          enemiesFlashed: pickStat(stats, ['enemies_flashed', 'enemiesFlashed']),
           headshotKills: pickStat(stats, ['headshot_kills', 'headshotKills']),
           damage: pickStat(stats, ['damage']),
           utilityDamage: pickStat(stats, ['utility_damage', 'utilityDamage']),

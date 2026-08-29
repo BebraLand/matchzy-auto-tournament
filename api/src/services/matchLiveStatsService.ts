@@ -9,6 +9,7 @@ export interface PlayerStatLine {
   deaths: number;
   assists: number;
   flashAssists: number;
+  enemiesFlashed: number;
   headshotKills: number;
   damage: number;
   utilityDamage: number;

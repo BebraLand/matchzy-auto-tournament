@@ -35,6 +35,7 @@ export interface MatchZyStatsPlayer {
     deaths?: number;
     assists?: number;
     flash_assists?: number;
+    enemies_flashed?: number;
     headshot_kills?: number;
     damage?: number;
     utility_damage?: number;

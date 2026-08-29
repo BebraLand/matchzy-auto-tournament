@@ -509,6 +509,7 @@ function extractPlayerStatsFromEvent(
           deaths: pick(['deaths']),
           assists: pick(['assists']),
           flashAssists: pick(['flash_assists', 'flashAssists']),
+          enemiesFlashed: pick(['enemies_flashed', 'enemiesFlashed']),
           headshotKills: pick(['headshot_kills', 'headshotKills']),
           damage: pick(['damage']),
           utilityDamage: pick(['utility_damage', 'utilityDamage']),
@@ -550,6 +551,7 @@ function aggregateMapPlayerStats(
         assists: number;
         headshot_kills: number;
         flash_assists: number;
+        enemies_flashed: number;
         damage: number;
         utility_damage: number;
         mvps: number;
@@ -569,6 +571,7 @@ function aggregateMapPlayerStats(
           assists: 0,
           headshot_kills: 0,
           flash_assists: 0,
+          enemies_flashed: 0,
           damage: 0,
           utility_damage: 0,
           mvps: 0,
@@ -582,6 +585,7 @@ function aggregateMapPlayerStats(
         current.assists += player.assists || 0;
         current.headshot_kills += player.headshotKills || 0;
         current.flash_assists += player.flashAssists || 0;
+        current.enemies_flashed += player.enemiesFlashed || 0;
         current.damage += player.damage || 0;
         current.utility_damage += player.utilityDamage || 0;
         current.mvps += player.mvps || 0;
@@ -601,6 +605,7 @@ function aggregateMapPlayerStats(
         assists: stats.assists,
         headshot_kills: stats.headshot_kills,
         flash_assists: stats.flash_assists,
+        enemies_flashed: stats.enemies_flashed,
         damage: stats.damage,
         utility_damage: stats.utility_damage,
         mvps: stats.mvps,
@@ -1294,6 +1299,7 @@ async function persistPlayerMatchStats(options: {
           assists: line.assists,
           headshot_kills: line.headshotKills,
           flash_assists: line.flashAssists,
+          enemies_flashed: line.enemiesFlashed,
           utility_damage: line.utilityDamage,
           kast: line.kast,
           mvps: line.mvps,
@@ -1368,6 +1374,7 @@ async function persistPlayerMatchStats(options: {
                   assists: line.assists,
                   headshot_kills: line.headshotKills,
                   flash_assists: line.flashAssists,
+                  enemies_flashed: line.enemiesFlashed,
                   utility_damage: line.utilityDamage,
                   kast: line.kast,
                   mvps: line.mvps,
@@ -1406,6 +1413,8 @@ async function persistPlayerMatchStats(options: {
       headshotKills?: number;
       flash_assists?: number;
       flashAssists?: number;
+      enemies_flashed?: number;
+      enemiesFlashed?: number;
       utility_damage?: number;
       utilityDamage?: number;
       kast?: number;
@@ -1428,6 +1437,7 @@ async function persistPlayerMatchStats(options: {
       assists: stats.assists || 0,
       headshots: stats.headshot_kills || stats.headshotKills || 0,
       flash_assists: stats.flash_assists || stats.flashAssists || 0,
+      enemies_flashed: stats.enemies_flashed || stats.enemiesFlashed || 0,
       utility_damage: stats.utility_damage || stats.utilityDamage || 0,
       kast: stats.kast || 0,
       mvps: stats.mvp || stats.mvps || 0,
@@ -1450,6 +1460,8 @@ async function persistPlayerMatchStats(options: {
       headshotKills?: number;
       flash_assists?: number;
       flashAssists?: number;
+      enemies_flashed?: number;
+      enemiesFlashed?: number;
       utility_damage?: number;
       utilityDamage?: number;
       kast?: number;
@@ -1472,6 +1484,7 @@ async function persistPlayerMatchStats(options: {
       assists: stats.assists || 0,
       headshots: stats.headshot_kills || stats.headshotKills || 0,
       flash_assists: stats.flash_assists || stats.flashAssists || 0,
+      enemies_flashed: stats.enemies_flashed || stats.enemiesFlashed || 0,
       utility_damage: stats.utility_damage || stats.utilityDamage || 0,
       kast: stats.kast || 0,
       mvps: stats.mvp || stats.mvps || 0,

@@ -150,6 +150,7 @@ export interface PlayerStats {
   damage: number;
   headshots: number;
   flashAssists?: number;
+  enemiesFlashed?: number;
   utilityDamage?: number;
   kast?: number;
   mvps?: number;
