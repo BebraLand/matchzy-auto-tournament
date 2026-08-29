@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { formatDate } from '../../utils/matchUtils';
 import { MapAccordion } from './MapAccordion';
 import type { Match, TeamMatchHistory } from '../../types';
+import { normalizeConfigPlayers } from '../../utils/playerUtils';
 import { MatchStatsScoreboard } from '../match/MatchStatsScoreboard';
 
 interface TeamMatchHistoryModalProps {
@@ -108,6 +109,18 @@ export function TeamMatchHistoryModal({
       team2Score = isTeam1 ? calculatedSeriesScore.team2 : calculatedSeriesScore.team1;
     }
   }
+
+  const configPlayers = match
+    ? [
+        ...normalizeConfigPlayers(match.config?.team1?.players),
+        ...normalizeConfigPlayers(match.config?.team2?.players),
+      ]
+    : [];
+  const teamPlayers = match ? [...(match.team1?.players ?? []), ...(match.team2?.players ?? [])] : [];
+  const playerAvatars = Object.fromEntries([
+    ...teamPlayers.map((player) => [player.steamId.toLowerCase(), player.avatar] as const),
+    ...configPlayers.map((player) => [player.steamid.toLowerCase(), player.avatar] as const),
+  ]);
 
   return (
     <Dialog open={!!matchHistory} onClose={onClose} maxWidth="md" fullWidth>
@@ -258,12 +271,7 @@ export function TeamMatchHistoryModal({
                   team2Players={match.team2Players ?? []}
                   maps={match.maps ?? []}
                   mapResults={match.mapResults ?? []}
-                  playerAvatars={Object.fromEntries(
-                    [...(match.team1.players ?? []), ...(match.team2.players ?? [])].map((player) => [
-                      player.steamId.toLowerCase(),
-                      player.avatar,
-                    ])
-                  )}
+                  playerAvatars={playerAvatars}
                 />
               </Box>
             )}
