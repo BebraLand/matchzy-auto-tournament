@@ -189,6 +189,210 @@ router.get('/public-selection', async (_req: Request, res: Response) => {
   }
 });
 
+function parseStatsDate(value: unknown, endOfDay = false): number | undefined {
+  if (value === undefined || value === '') return undefined;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error('Dates must use YYYY-MM-DD format');
+  }
+
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new Error('Invalid date');
+  }
+  if (endOfDay) date.setUTCDate(date.getUTCDate() + 1);
+
+  return Math.floor(date.getTime() / 1000);
+}
+
+/**
+ * GET /api/players/stats
+ * Aggregate completed-series statistics for the public player leaderboard.
+ */
+router.get('/stats', async (req: Request, res: Response) => {
+  try {
+    const from = parseStatsDate(req.query.from);
+    const to = parseStatsDate(req.query.to, true);
+    const tournamentId = req.query.tournamentId;
+    const teamId = req.query.teamId;
+    const playerId = req.query.playerId;
+
+    if (from !== undefined && to !== undefined && from >= to) {
+      return res.status(400).json({ success: false, error: 'From date must be before To date' });
+    }
+    if (tournamentId !== undefined && (typeof tournamentId !== 'string' || !/^\d+$/.test(tournamentId))) {
+      return res.status(400).json({ success: false, error: 'Invalid tournamentId' });
+    }
+    if (teamId !== undefined && typeof teamId !== 'string') {
+      return res.status(400).json({ success: false, error: 'Invalid teamId' });
+    }
+    if (playerId !== undefined && typeof playerId !== 'string') {
+      return res.status(400).json({ success: false, error: 'Invalid playerId' });
+    }
+
+    const filters = ["m.status = 'completed'", 'm.completed_at IS NOT NULL'];
+    const params: unknown[] = [];
+
+    if (from !== undefined) {
+      filters.push('m.completed_at >= ?');
+      params.push(from);
+    }
+    if (to !== undefined) {
+      filters.push('m.completed_at < ?');
+      params.push(to);
+    }
+    if (tournamentId !== undefined) {
+      filters.push('m.tournament_id = ?');
+      params.push(Number(tournamentId));
+    }
+    if (teamId !== undefined) {
+      filters.push("((pms.team = 'team1' AND m.team1_id = ?) OR (pms.team = 'team2' AND m.team2_id = ?))");
+      params.push(teamId, teamId);
+    }
+    if (playerId !== undefined) {
+      filters.push('LOWER(pms.player_id) = LOWER(?)');
+      params.push(playerId);
+    }
+
+    const rows = await db.queryAsync<{
+      player_id: string;
+      name: string;
+      avatar_url?: string | null;
+      current_elo?: number | null;
+      matches_played: number | string;
+      wins: number | string;
+      kills: number | string;
+      deaths: number | string;
+      assists: number | string;
+      headshots: number | string;
+      flash_assists: number | string;
+      enemies_flashed: number | string;
+      utility_damage: number | string;
+      mvps: number | string;
+      score: number | string;
+      total_damage: number | string;
+      rounds_played: number | string;
+      kast_rounds: number | string;
+    }>(
+      `WITH deduped AS (
+        SELECT pms.*,
+               ROW_NUMBER() OVER (
+                 PARTITION BY LOWER(pms.player_id), pms.match_slug
+                 ORDER BY pms.created_at DESC, pms.id DESC
+               ) AS row_number
+        FROM player_match_stats pms
+        JOIN matches m ON m.slug = pms.match_slug
+        WHERE ${filters.join(' AND ')}
+      )
+      SELECT
+        d.player_id,
+        p.name,
+        p.avatar_url,
+        p.current_elo,
+        COUNT(*)::int AS matches_played,
+        SUM(CASE WHEN d.won_match THEN 1 ELSE 0 END)::int AS wins,
+        COALESCE(SUM(d.kills), 0)::int AS kills,
+        COALESCE(SUM(d.deaths), 0)::int AS deaths,
+        COALESCE(SUM(d.assists), 0)::int AS assists,
+        COALESCE(SUM(d.headshots), 0)::int AS headshots,
+        COALESCE(SUM(d.flash_assists), 0)::int AS flash_assists,
+        COALESCE(SUM(d.enemies_flashed), 0)::int AS enemies_flashed,
+        COALESCE(SUM(d.utility_damage), 0)::int AS utility_damage,
+        COALESCE(SUM(d.mvps), 0)::int AS mvps,
+        COALESCE(SUM(d.score), 0)::int AS score,
+        COALESCE(SUM(d.total_damage), 0)::int AS total_damage,
+        COALESCE(SUM(d.rounds_played), 0)::int AS rounds_played,
+        COALESCE(SUM(COALESCE(d.kast, 0) * COALESCE(d.rounds_played, 0)), 0)::real AS kast_rounds
+      FROM deduped d
+      JOIN players p ON LOWER(p.id) = LOWER(d.player_id)
+      WHERE d.row_number = 1
+      GROUP BY d.player_id, p.name, p.avatar_url, p.current_elo
+      ORDER BY kills DESC, deaths ASC, p.name ASC`,
+      params
+    );
+
+    const stats = rows.map((row) => {
+      const matchesPlayed = Number(row.matches_played);
+      const wins = Number(row.wins);
+      const kills = Number(row.kills);
+      const deaths = Number(row.deaths);
+      const assists = Number(row.assists);
+      const roundsPlayed = Number(row.rounds_played);
+      const totalDamage = Number(row.total_damage);
+      const headshots = Number(row.headshots);
+
+      return {
+        id: row.player_id,
+        name: row.name,
+        avatar: row.avatar_url || `/api/players/${row.player_id}/avatar.svg`,
+        currentElo: row.current_elo == null ? undefined : Number(row.current_elo),
+        matchesPlayed,
+        wins,
+        losses: matchesPlayed - wins,
+        winRate: matchesPlayed > 0 ? wins / matchesPlayed : 0,
+        kills,
+        deaths,
+        assists,
+        kdRatio: deaths > 0 ? kills / deaths : kills > 0 ? null : 0,
+        kdaRatio: deaths > 0 ? (kills + assists) / deaths : kills + assists > 0 ? null : 0,
+        plusMinus: kills - deaths,
+        adr: roundsPlayed > 0 ? totalDamage / roundsPlayed : 0,
+        kast: roundsPlayed > 0 ? Number(row.kast_rounds) / roundsPlayed : 0,
+        headshots,
+        headshotPercent: kills > 0 ? (headshots / kills) * 100 : 0,
+        flashAssists: Number(row.flash_assists),
+        enemiesFlashed: Number(row.enemies_flashed),
+        utilityDamage: Number(row.utility_damage),
+        mvps: Number(row.mvps),
+        score: Number(row.score),
+        totalDamage,
+        roundsPlayed,
+      };
+    });
+
+    const teamFilters = ["m.status = 'completed'", 'm.completed_at IS NOT NULL'];
+    const teamParams: unknown[] = [];
+    if (from !== undefined) {
+      teamFilters.push('m.completed_at >= ?');
+      teamParams.push(from);
+    }
+    if (to !== undefined) {
+      teamFilters.push('m.completed_at < ?');
+      teamParams.push(to);
+    }
+    if (tournamentId !== undefined) {
+      teamFilters.push('m.tournament_id = ?');
+      teamParams.push(Number(tournamentId));
+    }
+
+    const teamRows = await db.queryAsync<{ id: string; name: string }>(
+      `SELECT DISTINCT t.id, t.name
+       FROM player_match_stats pms
+       JOIN matches m ON m.slug = pms.match_slug
+       JOIN teams t ON (pms.team = 'team1' AND t.id = m.team1_id)
+                    OR (pms.team = 'team2' AND t.id = m.team2_id)
+       WHERE ${teamFilters.join(' AND ')}
+       ORDER BY t.name ASC`,
+      teamParams
+    );
+
+    return res.json({
+      success: true,
+      stats,
+      teams: teamRows,
+      count: stats.length,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    log.error('Error fetching player stats', { error });
+    return res.status(400).json({ success: false, error: message });
+  }
+});
+
 /**
  * GET /api/players/selection
  * Get players for selection modal (with team membership status)

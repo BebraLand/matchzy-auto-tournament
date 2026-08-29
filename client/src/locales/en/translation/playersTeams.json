@@ -222,6 +222,52 @@
     "matchesCount_one": "{{count}} match",
     "matchesCount_other": "{{count}} matches"
   },
+  "playerStatsPage": {
+    "subtitle": "Aggregated player performance from completed matches.",
+    "filters": {
+      "searchLabel": "Search players",
+      "searchPlaceholder": "Player name or Steam ID",
+      "teamLabel": "Team",
+      "playerLabel": "Player",
+      "allTeams": "All teams",
+      "allPlayers": "All players",
+      "fromDate": "From date",
+      "toDate": "To date",
+      "results": "Showing {{visible}} of {{total}} players",
+      "reset": "Reset filters"
+    },
+    "columns": {
+      "player": "Player",
+      "matches": "Matches",
+      "wins": "W",
+      "losses": "L",
+      "winRate": "Win %",
+      "kills": "K",
+      "deaths": "D",
+      "assists": "A",
+      "kd": "K/D",
+      "kda": "KDA",
+      "plusMinus": "+/-",
+      "adr": "ADR",
+      "kast": "KAST",
+      "headshots": "HS",
+      "headshotPercent": "HS %",
+      "damage": "DMG",
+      "utilityDamage": "UD",
+      "flashAssists": "FA",
+      "enemiesFlashed": "EF",
+      "mvps": "MVP",
+      "score": "Score"
+    },
+    "empty": {
+      "title": "No player statistics yet",
+      "filteredTitle": "No players match these filters",
+      "description": "Complete a match to start building the player leaderboard."
+    },
+    "errors": {
+      "load": "Failed to load player statistics"
+    }
+  },
   "vetoInterface": {
     "vetoNotAvailable": "Veto not available for this match",
     "vetoUnavailable": "Veto details are unavailable for this account. Sign in as a player on one of the two teams to continue the veto.",

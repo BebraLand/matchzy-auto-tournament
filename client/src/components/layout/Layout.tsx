@@ -25,6 +25,7 @@ import {
   Home as HomeIcon,
   Dashboard as DashboardIcon,
   BugReport as BugReportIcon,
+  Leaderboard as LeaderboardIcon,
 } from '@mui/icons-material';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
@@ -165,6 +166,7 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
       '/tournament': { title: t('layout.pageTitle.tournament'), icon: EmojiEventsIcon },
       '/bracket': { title: t('layout.pageTitle.bracket'), icon: AccountTreeIcon },
       '/matches': { title: t('layout.pageTitle.matches'), icon: SportsEsportsIcon },
+      '/stats': { title: t('layout.pageTitle.playerStats'), icon: LeaderboardIcon },
       '/teams': { title: t('layout.pageTitle.teams'), icon: GroupsIcon },
       '/players': { title: t('layout.pageTitle.players'), icon: PersonIcon },
       '/servers': { title: t('layout.pageTitle.servers'), icon: StorageIcon },

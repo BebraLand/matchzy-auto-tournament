@@ -12,6 +12,7 @@ import Servers from './pages/Servers';
 import Tournament from './pages/Tournament';
 import Bracket from './pages/Bracket';
 import Matches from './pages/Matches';
+import PlayerStats from './pages/PlayerStats';
 import PublicMatches from './pages/PublicMatches';
 import AdminTools from './pages/AdminTools';
 import Settings from './pages/Settings';
@@ -160,6 +161,21 @@ function AppRoutes() {
           ) : (
             <ProtectedRoute adminOnly={false}>
               <PublicMatches />
+            </ProtectedRoute>
+          )
+        }
+      />
+
+      <Route
+        path="/stats"
+        element={
+          isAuthenticated ? (
+            <ProtectedRoute>
+              <Layout><PlayerStats /></Layout>
+            </ProtectedRoute>
+          ) : (
+            <ProtectedRoute adminOnly={false}>
+              <PlayerStats publicPage />
             </ProtectedRoute>
           )
         }

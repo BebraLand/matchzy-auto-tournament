@@ -91,6 +91,23 @@ test.describe.serial('Public Pages UI', () => {
 
   // Consolidated player page test - verifies player page loads and displays basic info
   test(
+    'should display the public player stats leaderboard',
+    {
+      tag: ['@ui', '@public', '@players', '@stats'],
+    },
+    async ({ page }) => {
+      await page.goto('/stats', { waitUntil: 'domcontentloaded' });
+
+      await expect(page.getByTestId('player-stats-page')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByTestId('player-stats-search-input')).toBeVisible();
+      await expect(page.getByLabel('Team')).toBeVisible();
+      await expect(page.getByLabel('Player')).toBeVisible();
+      await expect(page.getByLabel('From date')).toBeVisible();
+      await expect(page.getByLabel('To date')).toBeVisible();
+    }
+  );
+
+  test(
     'should display player page with basic information',
     {
       tag: ['@ui', '@public', '@players'],
