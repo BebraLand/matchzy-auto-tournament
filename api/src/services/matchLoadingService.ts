@@ -149,6 +149,7 @@ export async function loadMatchOnServer(
     try {
       const matchzyCore = await settingsService.getMatchzyCoreDefaults();
       const controlMode = await operatorControlService.getControlMode();
+      const playerReadyEnabled = await operatorControlService.isPlayerReadyEnabled();
       const operatorControlsEnabled = controlMode !== 'automatic';
       const cmds = getMatchZyServerConfigCommands({
         autostartMode: matchzyCore.autostartMode,
@@ -165,7 +166,7 @@ export async function loadMatchOnServer(
         seriesEndKickDelayNoDemo: matchzyCore.seriesEndKickDelayNoDemo,
         seriesEndKickDelayDemoNoUpload: matchzyCore.seriesEndKickDelayDemoNoUpload,
         seriesEndKickDelayDemoUpload: matchzyCore.seriesEndKickDelayDemoUpload,
-        operatorReadyGate: operatorControlsEnabled,
+        operatorReadyGate: !playerReadyEnabled,
         operatorManualNextMap: operatorControlsEnabled,
       });
       for (const cmd of cmds) {

@@ -60,6 +60,7 @@ export default function Matches() {
   const [selectedMatchSlugs, setSelectedMatchSlugs] = useState<Set<string>>(() => new Set());
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [controlMode, setControlMode] = useState<TournamentControlMode>('automatic');
+  const [playerReadyEnabled, setPlayerReadyEnabled] = useState(true);
   const [operatorBusyKey, setOperatorBusyKey] = useState<string | null>(null);
   const [connectionStatuses, setConnectionStatuses] = useState<Map<string, { totalConnected: number }>>(
     () => new Map()
@@ -85,6 +86,7 @@ export default function Matches() {
         const matches = data.matches || [];
         setTournamentStatus(data.tournamentStatus || 'setup');
         setControlMode(data.controlMode || 'automatic');
+        setPlayerReadyEnabled(data.playerReadyEnabled ?? true);
 
         const hasTeams = (m: Match) => {
           // Manual matches (round = 0) don't have bracket-seeded teams; rely on
@@ -595,6 +597,20 @@ export default function Matches() {
     }
   };
 
+  const handlePlayerReadyEnabledChange = async (enabled: boolean) => {
+    setOperatorBusyKey('ready');
+    try {
+      await api.put('/api/tournament', { settings: { playerReadyEnabled: enabled } });
+      setPlayerReadyEnabled(enabled);
+      showSuccess(`Player .ready ${enabled ? 'enabled' : 'disabled'}`);
+      await fetchMatches();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to change player .ready setting');
+    } finally {
+      setOperatorBusyKey(null);
+    }
+  };
+
   const handleOperatorAction = async (match: Match, action: OperatorAction) => {
     setOperatorBusyKey(match.slug);
     try {
@@ -750,9 +766,11 @@ export default function Matches() {
         <OperatorControlRoom
           matches={[...upcomingMatches, ...liveMatches]}
           controlMode={controlMode}
+          playerReadyEnabled={playerReadyEnabled}
           busyKey={operatorBusyKey}
           connectionStatuses={connectionStatuses}
           onModeChange={handleControlModeChange}
+          onPlayerReadyEnabledChange={handlePlayerReadyEnabledChange}
           onAction={handleOperatorAction}
           onRuling={handleMatchRuling}
           onReorder={handleQueueReorder}

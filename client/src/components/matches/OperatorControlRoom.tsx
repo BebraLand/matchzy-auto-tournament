@@ -15,6 +15,8 @@ import {
   MenuItem,
   Select,
   Stack,
+  FormControlLabel,
+  Switch,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -49,9 +51,11 @@ export type MatchRuling =
 interface OperatorControlRoomProps {
   matches: Match[];
   controlMode: TournamentControlMode;
+  playerReadyEnabled: boolean;
   busyKey: string | null;
   connectionStatuses: Map<string, { totalConnected: number }>;
   onModeChange: (mode: TournamentControlMode) => Promise<void>;
+  onPlayerReadyEnabledChange: (enabled: boolean) => Promise<void>;
   onAction: (match: Match, action: OperatorAction) => Promise<void>;
   onRuling: (match: Match, ruling: MatchRuling) => Promise<void>;
   onReorder: (slugs: string[]) => Promise<void>;
@@ -89,9 +93,11 @@ function operatorColor(match: Match): 'error' | 'info' | 'warning' | 'success' |
 export function OperatorControlRoom({
   matches,
   controlMode,
+  playerReadyEnabled,
   busyKey,
   connectionStatuses,
   onModeChange,
+  onPlayerReadyEnabledChange,
   onAction,
   onRuling,
   onReorder,
@@ -108,7 +114,8 @@ export function OperatorControlRoom({
   const parked = matches.filter(
     (match) => match.operatorState === 'postponed' || match.operatorState === 'held'
   );
-  const visible = [...active, ...queued, ...parked];
+  const visible = controlMode === 'automatic' ? active : [...active, ...queued, ...parked];
+  const showOperatorActions = controlMode !== 'automatic' || !playerReadyEnabled;
 
   const move = async (index: number, delta: -1 | 1) => {
     const target = index + delta;
@@ -156,11 +163,27 @@ export function OperatorControlRoom({
                 <MenuItem value="manual">Full Manual</MenuItem>
               </Select>
             </FormControl>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={playerReadyEnabled}
+                  disabled={busyKey === 'ready'}
+                  onChange={(event) => void onPlayerReadyEnabledChange(event.target.checked)}
+                />
+              }
+              label="Player .ready"
+              sx={{ ml: 0.5 }}
+            />
           </Box>
 
           <Alert severity={controlMode === 'automatic' ? 'warning' : 'info'}>{MODE_COPY[controlMode]}</Alert>
+          <Alert severity={playerReadyEnabled ? 'success' : 'warning'}>
+            {playerReadyEnabled
+              ? 'Players can use .ready and .unready during warmup.'
+              : 'Player .ready is disabled. A tournament operator must start each prepared match.'}
+          </Alert>
 
-          {controlMode !== 'automatic' && (
+          {showOperatorActions && (
             <Stack spacing={1} data-testid="operator-queue">
             {visible.map((match) => {
               const queuedIndex = queued.findIndex((candidate) => candidate.slug === match.slug);

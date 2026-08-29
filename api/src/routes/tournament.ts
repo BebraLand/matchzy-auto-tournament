@@ -110,6 +110,26 @@ async function bootstrapServerWebhooksForTournamentStart(): Promise<void> {
   }
 }
 
+async function applyPlayerReadySettingToActiveServers(enabled: boolean): Promise<void> {
+  const activeMatches = await db.queryAsync<{ server_id: string }>(
+    `SELECT DISTINCT server_id
+     FROM matches
+     WHERE server_id IS NOT NULL
+       AND status IN ('ready', 'loaded', 'live')`,
+    []
+  );
+
+  for (const { server_id: serverId } of activeMatches) {
+    const result = await rconService.sendCommand(
+      serverId,
+      `matchzy_operator_ready_gate ${enabled ? '0' : '1'}`
+    );
+    if (!result.success) {
+      log.warn(`Failed to apply player .ready setting to server ${serverId}: ${result.error}`);
+    }
+  }
+}
+
 async function preflightServersUpToDateForTournamentStart(): Promise<
   | { ok: true }
   | {
@@ -516,7 +536,17 @@ router.put('/', async (req: Request, res: Response) => {
   return matchExecutionLockService.runControlTransitionExclusive(async () => {
     try {
       const input: UpdateTournamentInput = req.body;
+      if (
+        input.settings?.playerReadyEnabled !== undefined &&
+        typeof input.settings.playerReadyEnabled !== 'boolean'
+      ) {
+        throw new Error('playerReadyEnabled must be a boolean');
+      }
       const tournament = await tournamentService.updateTournament(input);
+
+      if (typeof input.settings?.playerReadyEnabled === 'boolean') {
+        await applyPlayerReadySettingToActiveServers(input.settings.playerReadyEnabled);
+      }
 
       if (input.settings?.controlMode === 'automatic') {
         // Automatic mode hides the Operator Control Room. Resume every parked

@@ -166,6 +166,7 @@ export interface MatchesResponse extends ApiResponse {
   count?: number;
   tournamentStatus?: string;
   controlMode?: 'automatic' | 'assisted' | 'manual';
+  playerReadyEnabled?: boolean;
 }
 
 export interface MatchResponse extends ApiResponse {

@@ -35,6 +35,22 @@ class OperatorControlService {
     return (await this.getControlMode()) !== 'automatic';
   }
 
+  async isPlayerReadyEnabled(): Promise<boolean> {
+    const tournament = await db.queryOneAsync<Pick<DbTournamentRow, 'settings'>>(
+      'SELECT settings FROM tournament WHERE id = ?',
+      [1]
+    );
+
+    if (!tournament?.settings) return true;
+
+    try {
+      const settings = JSON.parse(tournament.settings) as { playerReadyEnabled?: unknown };
+      return settings.playerReadyEnabled !== false;
+    } catch {
+      return true;
+    }
+  }
+
   async isVetoOpen(match: DbMatchRow): Promise<boolean> {
     // Parking a match freezes its execution surface without destroying veto
     // progress. Direct veto URLs and player-facing polling must remain closed

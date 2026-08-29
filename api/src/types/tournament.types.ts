@@ -34,6 +34,8 @@ export interface TournamentSettings {
    * - manual: require operator approval for every veto/allocation transition
    */
   controlMode?: TournamentControlMode;
+  /** Whether players can use .ready to satisfy MatchZy's ready-up flow. */
+  playerReadyEnabled?: boolean;
   /** Explicitly marks a tournament as an operator-only bot simulation. */
   simulation?: boolean;
   simulationTimescale?: number;
