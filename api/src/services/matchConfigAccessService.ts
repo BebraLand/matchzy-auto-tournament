@@ -52,9 +52,12 @@ export async function getMatchServerAccess(req: Request): Promise<MatchServerAcc
 
 export function canViewMatchServerConfig(
   config: unknown,
-  access: MatchServerAccess
+  access: MatchServerAccess,
+  matchStatus?: string
 ): boolean {
-  if (access.isAdmin) return true;
+  // A server address is only useful before/during a match. Never expose it
+  // from completed or cancelled match responses, even to administrators.
+  if (matchStatus === 'completed' || matchStatus === 'cancelled') return false;
   if (!access.steamId || !config || typeof config !== 'object') return false;
 
   const matchConfig = config as Record<string, unknown>;

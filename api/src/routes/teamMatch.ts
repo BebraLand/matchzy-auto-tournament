@@ -406,7 +406,7 @@ router.get('/:teamId/match', async (req: Request, res: Response) => {
             }
           : null,
         server:
-          match.server_id && canViewMatchServerConfig(config, serverAccess)
+          match.server_id && canViewMatchServerConfig(config, serverAccess, match.status)
             ? {
                 id: match.server_id,
                 name: match.server_name,

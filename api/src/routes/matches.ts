@@ -1150,7 +1150,7 @@ router.get('/', async (req: Request, res: Response) => {
     );
 
     const responseMatches = matches.map((match) =>
-      canViewMatchServerConfig(match.config, serverAccess)
+      canViewMatchServerConfig(match.config, serverAccess, match.status)
         ? match
         : stripMatchServerAccess(match)
     );
@@ -1424,7 +1424,7 @@ router.get('/:slug', async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      match: canViewMatchServerConfig(match.config, serverAccess)
+      match: canViewMatchServerConfig(match.config, serverAccess, match.status)
         ? match
         : stripMatchServerAccess(match),
     });

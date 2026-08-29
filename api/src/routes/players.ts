@@ -1014,7 +1014,7 @@ router.get('/:playerId/current-match', async (req: Request, res: Response) => {
               tag: opponent.tag,
             }
           : null,
-        server: match.server_id && canViewMatchServerConfig(cfg, serverAccess)
+        server: match.server_id && canViewMatchServerConfig(cfg, serverAccess, match.status)
           ? {
               id: match.server_id,
               name: match.server_name,
