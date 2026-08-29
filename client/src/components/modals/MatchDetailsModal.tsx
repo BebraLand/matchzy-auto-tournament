@@ -844,11 +844,13 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
                           (match.config?.team1 as { name?: string } | undefined)?.name ||
                           'Team 1'
                         }
+                        team1Id={match.team1?.id || match.config?.team1?.id}
                         team2Name={
                           match.team2?.name ||
                           (match.config?.team2 as { name?: string } | undefined)?.name ||
                           'Team 2'
                         }
+                        team2Id={match.team2?.id || match.config?.team2?.id}
                         team1Players={match.config?.team1?.players || []}
                         team2Players={match.config?.team2?.players || []}
                         connectedPlayers={connectionStatus?.connectedPlayers || []}

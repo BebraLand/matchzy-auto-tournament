@@ -4,6 +4,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CircleIcon from '@mui/icons-material/Circle';
 import PersonOffIcon from '@mui/icons-material/PersonOff';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { Link as RouterLink } from 'react-router-dom';
 import type { ConnectedPlayer } from '../../hooks/usePlayerConnections';
 import { normalizeConfigPlayers, type NormalizedPlayer } from '../../utils/playerUtils';
 import { getPlayerPageUrl } from '../../utils/playerLinks';
@@ -13,6 +14,8 @@ import { PlayerName } from '../player/PlayerName';
 interface PlayerRosterProps {
   team1Name: string;
   team2Name: string;
+  team1Id?: string;
+  team2Id?: string;
   team1Players: unknown;
   team2Players: unknown;
   connectedPlayers: ConnectedPlayer[];
@@ -22,6 +25,8 @@ interface PlayerRosterProps {
 export const PlayerRoster: React.FC<PlayerRosterProps> = ({
   team1Name,
   team2Name,
+  team1Id,
+  team2Id,
   team1Players: team1PlayersRaw,
   team2Players: team2PlayersRaw,
   connectedPlayers,
@@ -42,12 +47,23 @@ export const PlayerRoster: React.FC<PlayerRosterProps> = ({
     teamName: string,
     players: NormalizedPlayer[],
     teamColor: 'primary' | 'error',
-    isYourTeam?: boolean
+    isYourTeam?: boolean,
+    teamId?: string
   ) => {
     return (
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-          <Typography variant="h6" fontWeight={600}>
+          <Typography
+            variant="h6"
+            fontWeight={600}
+            component={teamId ? RouterLink : 'span'}
+            to={teamId ? `/team/${teamId}` : undefined}
+            sx={{
+              textDecoration: 'none',
+              color: 'inherit',
+              '&:hover': { textDecoration: teamId ? 'underline' : 'none' },
+            }}
+          >
             {teamName}
           </Typography>
           {isYourTeam && <Chip label="Your Team" color="primary" size="small" />}
@@ -175,10 +191,10 @@ export const PlayerRoster: React.FC<PlayerRosterProps> = ({
     <Box>
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
-          {renderPlayerList(team1Name, team1Players, 'primary', isTeam1 === true)}
+          {renderPlayerList(team1Name, team1Players, 'primary', isTeam1 === true, team1Id)}
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          {renderPlayerList(team2Name, team2Players, 'error', isTeam1 === false)}
+          {renderPlayerList(team2Name, team2Players, 'error', isTeam1 === false, team2Id)}
         </Grid>
       </Grid>
     </Box>
