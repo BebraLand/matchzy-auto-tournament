@@ -61,6 +61,7 @@ export default function Matches() {
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [controlMode, setControlMode] = useState<TournamentControlMode>('automatic');
   const [playerReadyEnabled, setPlayerReadyEnabled] = useState(true);
+  const [autoPrepareNextMatch, setAutoPrepareNextMatch] = useState(true);
   const [operatorBusyKey, setOperatorBusyKey] = useState<string | null>(null);
   const [connectionStatuses, setConnectionStatuses] = useState<Map<string, { totalConnected: number }>>(
     () => new Map()
@@ -87,6 +88,7 @@ export default function Matches() {
         setTournamentStatus(data.tournamentStatus || 'setup');
         setControlMode(data.controlMode || 'automatic');
         setPlayerReadyEnabled(data.playerReadyEnabled ?? true);
+        setAutoPrepareNextMatch(data.autoPrepareNextMatch ?? true);
 
         const hasTeams = (m: Match) => {
           // Manual matches (round = 0) don't have bracket-seeded teams; rely on
@@ -611,6 +613,20 @@ export default function Matches() {
     }
   };
 
+  const handleAutoPrepareNextMatchChange = async (enabled: boolean) => {
+    setOperatorBusyKey('auto-prepare');
+    try {
+      await api.put('/api/tournament', { settings: { autoPrepareNextMatch: enabled } });
+      setAutoPrepareNextMatch(enabled);
+      showSuccess(`Auto-prepare ${enabled ? 'enabled' : 'disabled'}`);
+      await fetchMatches();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to change auto-prepare setting');
+    } finally {
+      setOperatorBusyKey(null);
+    }
+  };
+
   const handleOperatorAction = async (match: Match, action: OperatorAction) => {
     setOperatorBusyKey(match.slug);
     try {
@@ -767,10 +783,12 @@ export default function Matches() {
           matches={[...upcomingMatches, ...liveMatches]}
           controlMode={controlMode}
           playerReadyEnabled={playerReadyEnabled}
+          autoPrepareNextMatch={autoPrepareNextMatch}
           busyKey={operatorBusyKey}
           connectionStatuses={connectionStatuses}
           onModeChange={handleControlModeChange}
           onPlayerReadyEnabledChange={handlePlayerReadyEnabledChange}
+          onAutoPrepareNextMatchChange={handleAutoPrepareNextMatchChange}
           onAction={handleOperatorAction}
           onRuling={handleMatchRuling}
           onReorder={handleQueueReorder}

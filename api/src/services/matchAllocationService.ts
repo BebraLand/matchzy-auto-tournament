@@ -1017,11 +1017,24 @@ export class MatchAllocationService {
     let allocatedServerId: string | null = null;
     try {
       // Check if match already has a server and is structurally valid
-      const match = await db.queryOneAsync<DbMatchRow>('SELECT * FROM matches WHERE slug = ?', [
+      let match = await db.queryOneAsync<DbMatchRow>('SELECT * FROM matches WHERE slug = ?', [
         matchSlug,
       ]);
       if (!match) {
         return { success: false, error: 'Match not found' };
+      }
+
+      const operatorControlled = await operatorControlService.usesOperatorQueue();
+      const autoPrepareNextMatch =
+        operatorControlled && (await operatorControlService.isAutoPrepareNextMatchEnabled());
+      if (autoPrepareNextMatch) {
+        await operatorControlService.ensureQueuePositions();
+        match = await db.queryOneAsync<DbMatchRow>('SELECT * FROM matches WHERE slug = ?', [
+          matchSlug,
+        ]);
+        if (!match) {
+          return { success: false, error: 'Match not found' };
+        }
       }
 
       let preferredServerId = options.preferredServerId;
@@ -1053,8 +1066,9 @@ export class MatchAllocationService {
 
       if (
         isBracketMatch &&
-        (await operatorControlService.usesOperatorQueue()) &&
-        !options.operatorApproved
+        operatorControlled &&
+        !options.operatorApproved &&
+        !(autoPrepareNextMatch && match.queue_position === 1)
       ) {
         return {
           success: false,
@@ -1064,7 +1078,7 @@ export class MatchAllocationService {
 
       if (
         isBracketMatch &&
-        (await operatorControlService.usesOperatorQueue()) &&
+        operatorControlled &&
         match.queue_position !== 1
       ) {
         return {
@@ -1938,6 +1952,8 @@ export class MatchAllocationService {
 
   // Track polling intervals to avoid duplicate polling
   private pollingIntervals = new Map<string, ReturnType<typeof setInterval>>();
+  private autoPrepareInterval: ReturnType<typeof setInterval> | null = null;
+  private autoPrepareInFlight = false;
 
   /**
    * Start polling for available servers for a specific match
@@ -1956,7 +1972,10 @@ export class MatchAllocationService {
 
     const pollInterval = setInterval(async () => {
       try {
-        if (await operatorControlService.usesOperatorQueue()) {
+        if (
+          (await operatorControlService.usesOperatorQueue()) &&
+          !(await operatorControlService.isAutoPrepareNextMatchEnabled())
+        ) {
           log.debug(`[POLLING] Operator-controlled mode enabled; stopping polling for ${matchSlug}`);
           this.stopPollingForServer(matchSlug);
           return;
@@ -2031,11 +2050,64 @@ export class MatchAllocationService {
    * Stop all polling intervals (cleanup on shutdown)
    */
   stopAllPolling(): void {
+    this.stopAutoPreparePolling();
     for (const [matchSlug, interval] of this.pollingIntervals.entries()) {
       clearInterval(interval);
       log.debug(`Stopped polling for match ${matchSlug} during cleanup`);
     }
     this.pollingIntervals.clear();
+  }
+
+  startAutoPreparePolling(): void {
+    if (this.autoPrepareInterval) return;
+
+    log.info('[AUTO-PREPARE] Started polling for the next queued match');
+    void this.tryAutoPrepareNextMatch();
+    this.autoPrepareInterval = setInterval(() => {
+      void this.tryAutoPrepareNextMatch();
+    }, 10_000);
+  }
+
+  stopAutoPreparePolling(): void {
+    if (!this.autoPrepareInterval) return;
+    clearInterval(this.autoPrepareInterval);
+    this.autoPrepareInterval = null;
+    log.info('[AUTO-PREPARE] Stopped polling for the next queued match');
+  }
+
+  async tryAutoPrepareNextMatch(): Promise<void> {
+    if (this.autoPrepareInFlight) return;
+    if (!(await operatorControlService.usesOperatorQueue())) return;
+    if (!(await operatorControlService.isAutoPrepareNextMatchEnabled())) return;
+
+    const webhookUrl = await settingsService.getWebhookUrl();
+    if (!webhookUrl) {
+      log.warn('[AUTO-PREPARE] Webhook URL is not configured; cannot prepare a match');
+      return;
+    }
+
+    this.autoPrepareInFlight = true;
+    try {
+      await operatorControlService.ensureQueuePositions();
+      const readyMatches = await this.getReadyMatches();
+      const nextMatch = readyMatches[0];
+      if (!nextMatch) return;
+
+      const result = await this.allocateSingleMatch(nextMatch.slug, webhookUrl);
+      if (result.success) {
+        log.success(
+          `[AUTO-PREPARE] Prepared ${nextMatch.slug} on server ${result.serverId}`
+        );
+        this.stopPollingForServer(nextMatch.slug);
+      } else {
+        log.debug(`[AUTO-PREPARE] Waiting to prepare ${nextMatch.slug}: ${result.error}`);
+        this.startPollingForServer(nextMatch.slug, webhookUrl);
+      }
+    } catch (error) {
+      log.error('[AUTO-PREPARE] Failed to prepare the next queued match', error);
+    } finally {
+      this.autoPrepareInFlight = false;
+    }
   }
 
   /**

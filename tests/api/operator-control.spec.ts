@@ -301,7 +301,11 @@ test.describe.serial('Operator-controlled execution queue', () => {
         format: 'bo1',
         maps: MAPS,
         teamIds,
-        settings: { controlMode: 'assisted', seedingMethod: 'random' },
+        settings: {
+          controlMode: 'assisted',
+          autoPrepareNextMatch: false,
+          seedingMethod: 'random',
+        },
       },
     });
     expect(createResponse.ok(), await createResponse.text()).toBeTruthy();

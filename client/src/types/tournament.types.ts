@@ -39,6 +39,7 @@ export interface TournamentSettings {
   seedingMethod: 'seeded' | 'random';
   controlMode?: 'automatic' | 'assisted' | 'manual';
   playerReadyEnabled?: boolean;
+  autoPrepareNextMatch?: boolean;
   grandFinalMode?: 'none' | 'simple' | 'double';
   // Optional global round/OT hints stored with templates
   maxRounds?: number;

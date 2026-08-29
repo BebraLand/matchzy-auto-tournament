@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS: TournamentSettings = {
   grandFinalMode: 'simple',
   controlMode: 'assisted',
   playerReadyEnabled: true,
+  autoPrepareNextMatch: true,
 };
 
 class TournamentService {

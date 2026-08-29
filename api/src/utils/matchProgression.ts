@@ -887,6 +887,12 @@ async function autoAllocateServerToMatch(matchSlug: string): Promise<void> {
       });
     } else {
       log.warn(`Could not auto-allocate match ${matchSlug}: ${result.error}`);
+      if (
+        (await operatorControlService.usesOperatorQueue()) &&
+        (await operatorControlService.isAutoPrepareNextMatchEnabled())
+      ) {
+        matchAllocationService.startPollingForServer(matchSlug, webhookUrl);
+      }
     }
   } catch (error) {
     log.error('Error in auto-allocate server', error, { matchSlug });

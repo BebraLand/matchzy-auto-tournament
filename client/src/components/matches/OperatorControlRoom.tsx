@@ -52,10 +52,12 @@ interface OperatorControlRoomProps {
   matches: Match[];
   controlMode: TournamentControlMode;
   playerReadyEnabled: boolean;
+  autoPrepareNextMatch: boolean;
   busyKey: string | null;
   connectionStatuses: Map<string, { totalConnected: number }>;
   onModeChange: (mode: TournamentControlMode) => Promise<void>;
   onPlayerReadyEnabledChange: (enabled: boolean) => Promise<void>;
+  onAutoPrepareNextMatchChange: (enabled: boolean) => Promise<void>;
   onAction: (match: Match, action: OperatorAction) => Promise<void>;
   onRuling: (match: Match, ruling: MatchRuling) => Promise<void>;
   onReorder: (slugs: string[]) => Promise<void>;
@@ -63,7 +65,7 @@ interface OperatorControlRoomProps {
 
 const MODE_COPY: Record<TournamentControlMode, string> = {
   automatic: 'Upstream behaviour: veto and server allocation continue automatically.',
-  assisted: 'MAT builds the bracket and recommends the next match. Veto and server preparation wait for you.',
+  assisted: 'MAT builds the bracket and recommends the next match. Veto waits for you; server preparation follows the Auto-prepare setting.',
   manual: 'Every execution step waits for the operator. Bracket logic and results still remain automated.',
 };
 
@@ -94,10 +96,12 @@ export function OperatorControlRoom({
   matches,
   controlMode,
   playerReadyEnabled,
+  autoPrepareNextMatch,
   busyKey,
   connectionStatuses,
   onModeChange,
   onPlayerReadyEnabledChange,
+  onAutoPrepareNextMatchChange,
   onAction,
   onRuling,
   onReorder,
@@ -166,6 +170,17 @@ export function OperatorControlRoom({
             <FormControlLabel
               control={
                 <Switch
+                  checked={autoPrepareNextMatch}
+                  disabled={controlMode === 'automatic' || busyKey === 'auto-prepare'}
+                  onChange={(event) => void onAutoPrepareNextMatchChange(event.target.checked)}
+                />
+              }
+              label="Auto-prepare next match"
+              sx={{ ml: 0.5 }}
+            />
+            <FormControlLabel
+              control={
+                <Switch
                   checked={playerReadyEnabled}
                   disabled={busyKey === 'ready'}
                   onChange={(event) => void onPlayerReadyEnabledChange(event.target.checked)}
@@ -181,6 +196,13 @@ export function OperatorControlRoom({
             {playerReadyEnabled
               ? 'Players can use .ready and .unready during warmup.'
               : 'Player .ready is disabled. A tournament operator must start each prepared match.'}
+          </Alert>
+          <Alert severity={controlMode === 'automatic' ? 'info' : autoPrepareNextMatch ? 'success' : 'warning'}>
+            {controlMode === 'automatic'
+              ? 'Automatic mode controls server preparation.'
+              : autoPrepareNextMatch
+                ? 'The next queued match will be prepared automatically.'
+                : 'The operator must prepare each match manually.'}
           </Alert>
 
           {showOperatorActions && (

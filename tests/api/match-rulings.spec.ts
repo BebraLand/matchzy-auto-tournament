@@ -36,7 +36,11 @@ test.describe('Tournament match rulings', () => {
           format: 'bo1',
           maps: ['de_cache'],
           teamIds,
-          settings: { controlMode: 'assisted', seedingMethod: 'random' },
+          settings: {
+            controlMode: 'assisted',
+            autoPrepareNextMatch: false,
+            seedingMethod: 'random',
+          },
         },
       });
       expect(createTournament.ok(), await createTournament.text()).toBeTruthy();

@@ -542,6 +542,12 @@ router.put('/', async (req: Request, res: Response) => {
       ) {
         throw new Error('playerReadyEnabled must be a boolean');
       }
+      if (
+        input.settings?.autoPrepareNextMatch !== undefined &&
+        typeof input.settings.autoPrepareNextMatch !== 'boolean'
+      ) {
+        throw new Error('autoPrepareNextMatch must be a boolean');
+      }
       const tournament = await tournamentService.updateTournament(input);
 
       if (typeof input.settings?.playerReadyEnabled === 'boolean') {
@@ -549,6 +555,7 @@ router.put('/', async (req: Request, res: Response) => {
       }
 
       if (input.settings?.controlMode === 'automatic') {
+        matchAllocationService.stopAutoPreparePolling();
         // Automatic mode hides the Operator Control Room. Resume every parked
         // unstarted match first so none become permanently invisible/unrunnable.
         await operatorControlService.resumeAllParked();
@@ -561,6 +568,18 @@ router.put('/', async (req: Request, res: Response) => {
       ) {
         matchAllocationService.stopAllPolling();
         await operatorControlService.ensureQueuePositions();
+        if (await operatorControlService.isAutoPrepareNextMatchEnabled()) {
+          matchAllocationService.startAutoPreparePolling();
+        }
+      } else if (typeof input.settings?.autoPrepareNextMatch === 'boolean') {
+        if (
+          (await operatorControlService.usesOperatorQueue()) &&
+          input.settings.autoPrepareNextMatch
+        ) {
+          matchAllocationService.startAutoPreparePolling();
+        } else {
+          matchAllocationService.stopAllPolling();
+        }
       }
 
       // Emit updates to all clients
@@ -1019,6 +1038,13 @@ router.post('/start', requireAuth, async (req: Request, res: Response) => {
             action: 'tournament_started',
             status: 'in_progress',
           });
+
+          if (
+            (await operatorControlService.usesOperatorQueue()) &&
+            (await operatorControlService.isAutoPrepareNextMatchEnabled())
+          ) {
+            matchAllocationService.startAutoPreparePolling();
+          }
         } else {
           log.warn('Tournament start/allocation failed', {
             message: result.message,

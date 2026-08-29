@@ -745,6 +745,7 @@ router.get('/', async (req: Request, res: Response) => {
     const publicView = req.query.public === 'true' || !serverAccess.isAdmin;
     const controlMode = await operatorControlService.getControlMode();
     const playerReadyEnabled = await operatorControlService.isPlayerReadyEnabled();
+    const autoPrepareNextMatch = await operatorControlService.isAutoPrepareNextMatchEnabled();
     if (controlMode !== 'automatic') {
       await operatorControlService.ensureQueuePositions();
     }
@@ -1154,6 +1155,7 @@ router.get('/', async (req: Request, res: Response) => {
       tournamentStatus: tournamentStatus?.status || 'setup',
       controlMode,
       playerReadyEnabled,
+      autoPrepareNextMatch,
       matches: responseMatches,
     });
   } catch (error) {
