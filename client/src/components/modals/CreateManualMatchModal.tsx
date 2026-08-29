@@ -71,6 +71,7 @@ export const CreateManualMatchModal: React.FC<CreateManualMatchModalProps> = ({
       maxRounds,
       overtimeEnabled,
       overtimeMaxRounds,
+      playerReadyEnabled,
       mapSideSelections,
       error,
       submitAttempted,
@@ -111,6 +112,7 @@ export const CreateManualMatchModal: React.FC<CreateManualMatchModalProps> = ({
       setMaxRounds,
       setOvertimeEnabled,
       setOvertimeMaxRounds,
+      setPlayerReadyEnabled,
       setMapSideSelections,
       setSaveMapPoolModalOpen,
       setNewTemplateName,
@@ -263,6 +265,8 @@ export const CreateManualMatchModal: React.FC<CreateManualMatchModalProps> = ({
                 onTeam2NewPlayerIdsChange={setTeam2NewPlayerIds}
                 team1NewName={team1NewName}
                 team2NewName={team2NewName}
+                playerReadyEnabled={playerReadyEnabled}
+                onPlayerReadyEnabledChange={setPlayerReadyEnabled}
               />
             )}
 

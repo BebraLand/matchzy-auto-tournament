@@ -108,6 +108,16 @@ class MatchService {
           matchSlug: input.slug,
         });
       }
+
+      // Manual matches own their ready-up policy. Do not let the current
+      // tournament's Operator Control Room setting leak into them. Keep the
+      // legacy cvar path intact for API clients that already send it.
+      if (
+        config.player_ready_enabled === undefined &&
+        config.cvars?.matchzy_operator_ready_gate === undefined
+      ) {
+        config.player_ready_enabled = false;
+      }
     } catch (simError) {
       log.warn(
         'Failed to apply simulation / round-limit settings to manual match config',

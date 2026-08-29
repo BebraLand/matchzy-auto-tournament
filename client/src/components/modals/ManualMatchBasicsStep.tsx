@@ -1,5 +1,5 @@
 import React from 'react';
-import { Autocomplete, Box, TextField, Typography } from '@mui/material';
+import { Autocomplete, Box, FormControlLabel, Switch, TextField, Typography } from '@mui/material';
 import type { Server, Team } from '../../types';
 import { PlayerAvatar } from '../player/PlayerAvatar';
 import type { PlayerDetail } from '../../types/api.types';
@@ -33,6 +33,8 @@ interface ManualMatchBasicsStepProps {
   onTeam2NewPlayerIdsChange: (ids: string[]) => void;
   team1NewName?: string;
   team2NewName?: string;
+  playerReadyEnabled: boolean;
+  onPlayerReadyEnabledChange: (value: boolean) => void;
 }
 
 export const ManualMatchBasicsStep: React.FC<ManualMatchBasicsStepProps> = ({
@@ -62,6 +64,8 @@ export const ManualMatchBasicsStep: React.FC<ManualMatchBasicsStepProps> = ({
   onTeam2NewPlayerIdsChange,
   team1NewName,
   team2NewName,
+  playerReadyEnabled,
+  onPlayerReadyEnabledChange,
 }) => {
   const effectiveSlots = Number.isFinite(playersPerTeam) && playersPerTeam > 0 ? playersPerTeam : 5;
 
@@ -309,6 +313,30 @@ export const ManualMatchBasicsStep: React.FC<ManualMatchBasicsStepProps> = ({
           team1NewPlayerIds
         )
       )}
+
+      <Box sx={{ mt: 1 }}>
+        <Typography variant="subtitle2" gutterBottom>
+          Player ready
+        </Typography>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={playerReadyEnabled}
+              onChange={(e) => onPlayerReadyEnabledChange(e.target.checked)}
+              color="primary"
+            />
+          }
+          label={
+            playerReadyEnabled
+              ? 'Players can start the manual match with .ready'
+              : 'Only an operator can start the manual match'
+          }
+        />
+        <Typography variant="caption" color="text.secondary" display="block">
+          This setting applies only to this manual match and is independent of the tournament
+          Operator Control Room.
+        </Typography>
+      </Box>
     </>
   );
 };

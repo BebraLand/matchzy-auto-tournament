@@ -56,6 +56,8 @@ export interface MatchConfigTeam {
 export interface MatchConfig {
   maplist?: string[] | null; // null until veto completes
   num_maps?: number;
+  /** Whether players may start this match by using .ready. */
+  player_ready_enabled?: boolean;
   players_per_team?: number;
   /**
    * Per-map starting sides for MatchZy.

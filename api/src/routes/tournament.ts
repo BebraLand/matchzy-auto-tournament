@@ -115,6 +115,7 @@ async function applyPlayerReadySettingToActiveServers(enabled: boolean): Promise
     `SELECT DISTINCT server_id
      FROM matches
      WHERE server_id IS NOT NULL
+       AND tournament_id IS NOT NULL
        AND status IN ('ready', 'loaded', 'live')`,
     []
   );

@@ -21,6 +21,8 @@ export interface MatchConfig {
   // We enforce number here so config builders must supply a numeric ID.
   matchid: number;
   skip_veto: true;
+  /** Whether players may start this match by using .ready. */
+  player_ready_enabled?: boolean;
   min_players_to_ready?: number;
   players_per_team: number;
   team1: MatchTeam;
@@ -63,6 +65,7 @@ export interface MatchConfig {
    * - matchzy_ffw_enabled: 0 or 1
    * - matchzy_ffw_time: 1-999 (seconds)
    * - matchzy_demo_recording_enabled: 0 or 1
+   * - matchzy_operator_ready_gate: 0 or 1 (1 = only an operator can start)
    * 
    * These are automatically applied based on tournament type (see matchzyConfigService).
    */

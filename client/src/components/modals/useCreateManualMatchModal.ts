@@ -135,6 +135,7 @@ export function useCreateManualMatchModal({
   const [maxRounds, setMaxRounds] = useState<number>(24);
   const [overtimeEnabled, setOvertimeEnabled] = useState<boolean>(true);
   const [overtimeMaxRounds, setOvertimeMaxRounds] = useState<number | null>(null);
+  const [playerReadyEnabled, setPlayerReadyEnabled] = useState<boolean>(false);
   const [mapSideSelections, setMapSideSelections] = useState<
     Array<'knife' | 'team1_ct' | 'team2_ct'>
   >(['knife']);
@@ -173,6 +174,7 @@ export function useCreateManualMatchModal({
     setMaxRounds(24);
     setOvertimeEnabled(true);
     setOvertimeMaxRounds(null);
+    setPlayerReadyEnabled(false);
     setBestOf('bo1');
     setKnifeMode('default');
     setStartingSide('knife');
@@ -461,6 +463,15 @@ export function useCreateManualMatchModal({
         return buildAdHocPlayersFromIds(adHocIds);
       };
 
+      const team1Players =
+        team1Mode === 'existing'
+          ? toMatchConfigPlayers(existingTeam1, [])
+          : toMatchConfigPlayers(null, team1NewPlayerIds);
+      const team2Players =
+        team2Mode === 'existing'
+          ? toMatchConfigPlayers(existingTeam2, [])
+          : toMatchConfigPlayers(null, team2NewPlayerIds);
+
       const cvars: Record<string, string | number> = {};
       cvars.mp_maxrounds = safeMaxRounds;
       if (knifeMode === 'enabled') {
@@ -491,19 +502,17 @@ export function useCreateManualMatchModal({
         maplist: maplistForConfig,
         num_maps: requiredMaps,
         players_per_team: safePlayersPerTeam,
-        expected_players_total: safePlayersPerTeam * 2,
-        expected_players_team1: safePlayersPerTeam,
-        expected_players_team2: safePlayersPerTeam,
+        expected_players_total:
+          team1Players.length + team2Players.length || safePlayersPerTeam * 2,
+        expected_players_team1: team1Players.length || safePlayersPerTeam,
+        expected_players_team2: team2Players.length || safePlayersPerTeam,
         team1: {
           ...(team1Mode === 'existing' && existingTeam1 ? { id: existingTeam1.id } : {}),
           name: team1DisplayName,
           ...(team1Mode === 'existing' && existingTeam1 && existingTeam1.tag
             ? { tag: existingTeam1.tag }
             : {}),
-          players:
-            team1Mode === 'existing'
-              ? toMatchConfigPlayers(existingTeam1, [])
-              : toMatchConfigPlayers(null, team1NewPlayerIds),
+          players: team1Players,
         },
         team2: {
           ...(team2Mode === 'existing' && existingTeam2 ? { id: existingTeam2.id } : {}),
@@ -511,12 +520,10 @@ export function useCreateManualMatchModal({
           ...(team2Mode === 'existing' && existingTeam2 && existingTeam2.tag
             ? { tag: existingTeam2.tag }
             : {}),
-          players:
-            team2Mode === 'existing'
-              ? toMatchConfigPlayers(existingTeam2, [])
-              : toMatchConfigPlayers(null, team2NewPlayerIds),
+          players: team2Players,
         },
         ...(map_sides ? { map_sides } : {}),
+        player_ready_enabled: playerReadyEnabled,
         ...(Object.keys(cvars).length > 0 ? { cvars } : {}),
       };
     }
@@ -900,6 +907,7 @@ export function useCreateManualMatchModal({
       maxRounds,
       overtimeEnabled,
       overtimeMaxRounds,
+      playerReadyEnabled,
       mapSideSelections,
       error,
       submitAttempted,
@@ -939,6 +947,7 @@ export function useCreateManualMatchModal({
       setMaxRounds,
       setOvertimeEnabled,
       setOvertimeMaxRounds,
+      setPlayerReadyEnabled,
       setMapSideSelections,
       setSaveMapPoolModalOpen,
       setNewTemplateName,
