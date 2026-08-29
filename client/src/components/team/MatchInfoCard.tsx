@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Card, CardContent, Typography, Alert } from '@mui/material';
 import PeopleIcon from '@mui/icons-material/People';
 import {
@@ -16,7 +16,7 @@ import {
 } from '../../utils/matchFlags';
 import { calculateOvertimeNumber } from '../../utils/matchUtils';
 import { MatchScoreboard } from './MatchScoreboard';
-import { MatchPlayerPerformance } from './MatchPlayerPerformance';
+import { MatchStatsScoreboard } from '../match/MatchStatsScoreboard';
 import { MatchMapChips } from './MatchMapChips';
 import { MatchVetoHistory } from './MatchVetoHistory';
 import { MatchServerPanel } from './MatchServerPanel';
@@ -550,12 +550,16 @@ export function MatchInfoCard({
               </Typography>
             )}
 
-            {hasPlayerStats && playerStats && (
-              <MatchPlayerPerformance
-                playerStats={playerStats}
-                teamName={team?.name}
-                opponentName={match.opponent?.name}
-                yourTeamIsTeam1={match.isTeam1}
+            {(hasPlayerStats || (match.mapResults?.length ?? 0) > 0) && (
+              <MatchStatsScoreboard
+                team1Name={team?.name || 'Team 1'}
+                team2Name={match.opponent?.name || 'Team 2'}
+                team1Players={[]}
+                team2Players={[]}
+                maps={match.maps || []}
+                mapResults={match.mapResults || []}
+                liveMapNumber={mapNumber}
+                livePlayerStats={playerStats}
                 highlightPlayerId={highlightPlayerId}
               />
             )}

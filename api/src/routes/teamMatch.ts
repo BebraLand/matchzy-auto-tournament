@@ -316,6 +316,11 @@ router.get('/:teamId/match', async (req: Request, res: Response) => {
         ? 'team1'
         : result.winnerTeam,
       demoFilePath: result.demoFilePath,
+      playerStats: result.playerStats
+        ? isTeam1
+          ? result.playerStats
+          : { team1: result.playerStats.team2, team2: result.playerStats.team1 }
+        : null,
       completedAt: result.completedAt,
     }));
 

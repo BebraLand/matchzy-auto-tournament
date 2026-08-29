@@ -179,6 +179,7 @@ export function getSchemaSQL(): string {
       team2_score INTEGER NOT NULL DEFAULT 0,
       winner_team TEXT,
       demo_file_path TEXT,
+      player_stats TEXT,
       completed_at INTEGER NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::INTEGER,
       UNIQUE(match_slug, map_number),
       FOREIGN KEY (match_slug) REFERENCES matches(slug) ON DELETE CASCADE

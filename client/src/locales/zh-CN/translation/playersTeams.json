@@ -1,4 +1,9 @@
 {
+  "matchStats": {
+    "title": "玩家记分板",
+    "allMaps": "所有地图",
+    "unavailable": "此地图暂无玩家统计数据。"
+  },
   "findPlayer": {
     "title": "查找选手",
     "subtitle": "按姓名、Steam ID 或 Steam 个人资料链接搜索已注册选手。",

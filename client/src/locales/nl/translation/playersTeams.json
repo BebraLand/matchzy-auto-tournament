@@ -1,4 +1,9 @@
 {
+  "matchStats": {
+    "title": "Spelersscorebord",
+    "allMaps": "Alle maps",
+    "unavailable": "Spelerstatistieken zijn niet beschikbaar voor deze map."
+  },
   "findPlayer": {
     "title": "Speler zoeken",
     "subtitle": "Zoek geregistreerde spelers op naam, Steam ID of Steam-profiel-URL.",

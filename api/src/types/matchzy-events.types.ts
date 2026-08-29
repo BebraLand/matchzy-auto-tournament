@@ -27,13 +27,39 @@ export interface SeriesEndEvent extends MatchZyBaseEvent {
 }
 
 // Map Events
+export interface MatchZyStatsPlayer {
+  steamid: string;
+  name: string;
+  stats: {
+    kills?: number;
+    deaths?: number;
+    assists?: number;
+    flash_assists?: number;
+    headshot_kills?: number;
+    damage?: number;
+    utility_damage?: number;
+    kast?: number;
+    mvp?: number;
+    score?: number;
+    rounds_played?: number;
+  };
+}
+
+export interface MatchZyStatsTeam {
+  score?: number;
+  series_score?: number;
+  players?: MatchZyStatsPlayer[];
+}
+
 export interface MapResultEvent extends MatchZyBaseEvent {
   event: 'map_result';
   map_number: number;
   map_name: string;
   team1_score: number;
   team2_score: number;
-  winner: string;
+  winner: string | { team?: 'team1' | 'team2' | 'none'; name?: string };
+  team1?: MatchZyStatsTeam;
+  team2?: MatchZyStatsTeam;
 }
 
 export interface MapPickedEvent extends MatchZyBaseEvent {
@@ -67,6 +93,8 @@ export interface RoundEndEvent extends MatchZyBaseEvent {
   winner: 'team1' | 'team2';
   team1_score: number;
   team2_score: number;
+  team1?: MatchZyStatsTeam;
+  team2?: MatchZyStatsTeam;
 }
 
 export interface RoundMVPEvent extends MatchZyBaseEvent {

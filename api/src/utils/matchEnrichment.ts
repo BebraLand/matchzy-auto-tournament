@@ -35,6 +35,76 @@ export async function enrichMatchWithPlayerStats(
       // Ignore parse errors
     }
   }
+
+  const isCompleted = (match as { status?: string }).status === 'completed';
+  if (isCompleted || !(match.team1Players?.length || match.team2Players?.length)) {
+    const rows = await db.queryAsync<{
+      player_id: string;
+      team: 'team1' | 'team2';
+      kills: number | null;
+      deaths: number | null;
+      assists: number | null;
+      total_damage: number | null;
+      headshots: number | null;
+      flash_assists: number | null;
+      utility_damage: number | null;
+      kast: number | null;
+      mvps: number | null;
+      score: number | null;
+      rounds_played: number | null;
+    }>(
+      `SELECT player_id, team, kills, deaths, assists, total_damage, headshots,
+              flash_assists, utility_damage, kast, mvps, score, rounds_played
+       FROM player_match_stats
+       WHERE match_slug = ?
+       ORDER BY created_at DESC`,
+      [matchSlug]
+    );
+
+    if (isCompleted && rows.length > 0) {
+      delete match.team1Players;
+      delete match.team2Players;
+    }
+
+    const seen = new Set<string>();
+    const names = new Map<string, string>();
+    const config = (match as { config?: {
+      team1?: { players?: Array<{ steamid?: string; name?: string }> };
+      team2?: { players?: Array<{ steamid?: string; name?: string }> };
+    } }).config;
+    for (const player of [
+      ...(config?.team1?.players ?? []),
+      ...(config?.team2?.players ?? []),
+    ]) {
+      if (player.steamid) names.set(player.steamid.toLowerCase(), player.name ?? player.steamid);
+    }
+
+    for (const row of rows) {
+      const key = `${row.team}:${row.player_id.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const player = {
+        name: names.get(row.player_id.toLowerCase()) ?? row.player_id,
+        steamId: row.player_id,
+        kills: row.kills ?? 0,
+        deaths: row.deaths ?? 0,
+        assists: row.assists ?? 0,
+        damage: row.total_damage ?? 0,
+        headshots: row.headshots ?? 0,
+        flashAssists: row.flash_assists ?? 0,
+        utilityDamage: row.utility_damage ?? 0,
+        kast: row.kast ?? 0,
+        mvps: row.mvps ?? 0,
+        score: row.score ?? 0,
+        roundsPlayed: row.rounds_played ?? 0,
+      };
+      if (row.team === 'team1') {
+        (match.team1Players ??= []).push(player);
+      } else {
+        (match.team2Players ??= []).push(player);
+      }
+    }
+  }
 }
 
 /**
@@ -46,7 +116,7 @@ export async function enrichMatchWithScores(
 ): Promise<void> {
   const scoreEvent = await db.queryOneAsync<DbEventRow>(
     `SELECT event_data FROM match_events 
-     WHERE match_slug = ? AND event_type IN ('series_end', 'round_end', 'map_end') 
+     WHERE match_slug = ? AND event_type IN ('series_end', 'round_end', 'map_end', 'map_result')
      ORDER BY received_at DESC LIMIT 1`,
     [matchSlug]
   );
@@ -90,7 +160,13 @@ export async function enrichMatchWithScores(
   }
 
   // If we still don't have series scores, derive them from persisted map results.
-  if (match.team1Score === undefined && match.team2Score === undefined) {
+  if (
+    match.team1Score === undefined ||
+    match.team2Score === undefined ||
+    ((match as { status?: string }).status === 'completed' &&
+      match.team1Score === 0 &&
+      match.team2Score === 0)
+  ) {
     const rows = await db.queryAsync<{
       team1_score: number;
       team2_score: number;

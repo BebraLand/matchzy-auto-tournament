@@ -1,4 +1,9 @@
 {
+  "matchStats": {
+    "title": "Spillerresultattavle",
+    "allMaps": "Alle kart",
+    "unavailable": "Spillerstatistikk er ikke tilgjengelig for dette kartet."
+  },
   "findPlayer": {
     "title": "Finn spiller",
     "subtitle": "Søk etter registrerte spillere med navn, Steam-ID eller URL til Steam-profil.",

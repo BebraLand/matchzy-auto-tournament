@@ -1,0 +1,295 @@
+import { useMemo, useState } from 'react';
+import {
+  Box,
+  Chip,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@mui/material';
+import { useTranslation } from 'react-i18next';
+import { getMapDisplayName } from '../../constants/maps';
+import { getPlayerPageUrl } from '../../utils/playerLinks';
+import { PlayerAvatar } from '../player/PlayerAvatar';
+import type { MatchMapResult, MatchPlayerStatsLine, PlayerStats } from '../../types';
+
+type StatsPlayer = Omit<MatchPlayerStatsLine, 'headshotKills'> & {
+  headshotKills: number;
+  avatar?: string;
+};
+
+interface MatchStatsScoreboardProps {
+  team1Name: string;
+  team2Name: string;
+  team1Players: Array<PlayerStats | MatchPlayerStatsLine>;
+  team2Players: Array<PlayerStats | MatchPlayerStatsLine>;
+  maps?: string[];
+  mapResults?: MatchMapResult[];
+  liveMapNumber?: number | null;
+  livePlayerStats?: {
+    team1: MatchPlayerStatsLine[];
+    team2: MatchPlayerStatsLine[];
+  } | null;
+  highlightPlayerId?: string;
+}
+
+function normalizePlayer(player: PlayerStats | MatchPlayerStatsLine): StatsPlayer {
+  const source = player as PlayerStats & Partial<MatchPlayerStatsLine>;
+  return {
+    name: source.name,
+    steamId: source.steamId,
+    kills: source.kills ?? 0,
+    deaths: source.deaths ?? 0,
+    assists: source.assists ?? 0,
+    flashAssists: source.flashAssists ?? 0,
+    headshotKills: source.headshotKills ?? source.headshots ?? 0,
+    damage: source.damage ?? 0,
+    utilityDamage: source.utilityDamage ?? 0,
+    kast: source.kast ?? 0,
+    mvps: source.mvps ?? 0,
+    score: source.score ?? 0,
+    roundsPlayed: source.roundsPlayed ?? 0,
+    avatar: (source as PlayerStats & { avatar?: string }).avatar,
+  };
+}
+
+function emptyPlayer(player: PlayerStats | MatchPlayerStatsLine): StatsPlayer {
+  return {
+    ...normalizePlayer(player),
+    kills: 0,
+    deaths: 0,
+    assists: 0,
+    flashAssists: 0,
+    headshotKills: 0,
+    damage: 0,
+    utilityDamage: 0,
+    kast: 0,
+    mvps: 0,
+    score: 0,
+    roundsPlayed: 0,
+  };
+}
+
+function aggregatePlayers(
+  results: MatchMapResult[],
+  side: 'team1' | 'team2',
+  livePlayers: MatchPlayerStatsLine[] = []
+): StatsPlayer[] {
+  const totals = new Map<string, StatsPlayer>();
+
+  for (const result of results) {
+    for (const player of result.playerStats?.[side] ?? []) {
+      const current = totals.get(player.steamId.toLowerCase()) ?? emptyPlayer(player);
+      const previousRounds = current.roundsPlayed;
+      current.name = player.name || current.name;
+      current.kills += player.kills;
+      current.deaths += player.deaths;
+      current.assists += player.assists;
+      current.flashAssists += player.flashAssists;
+      current.headshotKills += player.headshotKills;
+      current.damage += player.damage;
+      current.utilityDamage += player.utilityDamage;
+      current.mvps += player.mvps;
+      current.score += player.score;
+      current.roundsPlayed += player.roundsPlayed;
+      current.kast = current.roundsPlayed > 0
+        ? (current.kast * previousRounds + player.kast * player.roundsPlayed) / current.roundsPlayed
+        : 0;
+      totals.set(player.steamId.toLowerCase(), current);
+    }
+  }
+
+  for (const player of livePlayers) {
+    const current = totals.get(player.steamId.toLowerCase()) ?? emptyPlayer(player);
+    const previousRounds = current.roundsPlayed;
+    current.name = player.name || current.name;
+    current.kills += player.kills;
+    current.deaths += player.deaths;
+    current.assists += player.assists;
+    current.flashAssists += player.flashAssists;
+    current.headshotKills += player.headshotKills;
+    current.damage += player.damage;
+    current.utilityDamage += player.utilityDamage;
+    current.mvps += player.mvps;
+    current.score += player.score;
+    current.roundsPlayed += player.roundsPlayed;
+    current.kast = current.roundsPlayed > 0
+      ? (current.kast * previousRounds + player.kast * player.roundsPlayed) / current.roundsPlayed
+      : 0;
+    totals.set(player.steamId.toLowerCase(), current);
+  }
+
+  return [...totals.values()];
+}
+
+function formatAdr(player: StatsPlayer): string {
+  return player.roundsPlayed > 0 ? (player.damage / player.roundsPlayed).toFixed(1) : '—';
+}
+
+function renderRows(players: StatsPlayer[], accent: 'primary' | 'error', highlightPlayerId?: string) {
+  return [...players]
+    .sort((a, b) => b.score - a.score || b.kills - a.kills)
+    .map((player) => (
+      <TableRow
+        key={player.steamId}
+        hover
+        selected={highlightPlayerId?.toLowerCase() === player.steamId.toLowerCase()}
+      >
+        <TableCell sx={{ minWidth: 150 }}>
+          <Box display="flex" alignItems="center" gap={1}>
+            <PlayerAvatar
+              id={player.steamId}
+              name={player.name}
+              avatarUrl={player.avatar}
+              size={26}
+            />
+            <Typography
+              component="a"
+              href={getPlayerPageUrl(player.steamId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="body2"
+              fontWeight={600}
+              color={`${accent}.main`}
+              sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+            >
+              {player.name}
+            </Typography>
+          </Box>
+        </TableCell>
+        <TableCell align="right">{player.kills}</TableCell>
+        <TableCell align="right">{player.deaths}</TableCell>
+        <TableCell align="right">{player.assists}</TableCell>
+        <TableCell align="right">{player.kills - player.deaths}</TableCell>
+        <TableCell align="right">{formatAdr(player)}</TableCell>
+        <TableCell align="right">{player.kast > 0 ? `${player.kast.toFixed(1)}%` : '—'}</TableCell>
+        <TableCell align="right">{player.headshotKills}</TableCell>
+        <TableCell align="right">{player.damage}</TableCell>
+        <TableCell align="right">{player.utilityDamage}</TableCell>
+        <TableCell align="right">{player.mvps}</TableCell>
+        <TableCell align="right">{player.score}</TableCell>
+      </TableRow>
+    ));
+}
+
+export function MatchStatsScoreboard({
+  team1Name,
+  team2Name,
+  team1Players,
+  team2Players,
+  maps = [],
+  mapResults = [],
+  liveMapNumber = null,
+  livePlayerStats = null,
+  highlightPlayerId,
+}: MatchStatsScoreboardProps) {
+  const { t } = useTranslation();
+  const [selectedMap, setSelectedMap] = useState<number | null>(null);
+
+  const selectedResult = selectedMap === null
+    ? null
+    : mapResults.find((result) => result.mapNumber === selectedMap);
+  const selectedLive = selectedMap !== null && selectedMap === liveMapNumber ? livePlayerStats : null;
+
+  const selectedTeam1 = selectedLive?.team1 ?? selectedResult?.playerStats?.team1;
+  const selectedTeam2 = selectedLive?.team2 ?? selectedResult?.playerStats?.team2;
+  const seriesTeam1 = useMemo(
+    () => (team1Players.length
+      ? team1Players.map(normalizePlayer)
+      : aggregatePlayers(mapResults.filter((result) => result.mapNumber !== liveMapNumber), 'team1', livePlayerStats?.team1)),
+    [team1Players, mapResults, liveMapNumber, livePlayerStats]
+  );
+  const seriesTeam2 = useMemo(
+    () => (team2Players.length
+      ? team2Players.map(normalizePlayer)
+      : aggregatePlayers(mapResults.filter((result) => result.mapNumber !== liveMapNumber), 'team2', livePlayerStats?.team2)),
+    [team2Players, mapResults, liveMapNumber, livePlayerStats]
+  );
+  const displayTeam1 = selectedTeam1?.map(normalizePlayer) ?? seriesTeam1;
+  const displayTeam2 = selectedTeam2?.map(normalizePlayer) ?? seriesTeam2;
+  const hasStats = displayTeam1.length > 0 || displayTeam2.length > 0;
+  const hasSelectedStats = (selectedTeam1?.length ?? 0) > 0 || (selectedTeam2?.length ?? 0) > 0;
+
+  if (!hasStats && !mapResults.length) return null;
+
+  return (
+    <Box>
+      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+        {t('matchStats.title')}
+      </Typography>
+
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={2}>
+        <Chip
+          label={t('matchStats.allMaps')}
+          color={selectedMap === null ? 'primary' : 'default'}
+          variant={selectedMap === null ? 'filled' : 'outlined'}
+          clickable
+          onClick={() => setSelectedMap(null)}
+        />
+        {maps.map((map, index) => {
+          const result = mapResults.find((item) => item.mapNumber === index);
+          const hasMapStats = Boolean(result?.playerStats) || index === liveMapNumber;
+          return (
+            <Chip
+              key={`${map}-${index}`}
+              label={`${index + 1}. ${getMapDisplayName(map) || map}`}
+              color={selectedMap === index ? 'primary' : 'default'}
+              variant={selectedMap === index ? 'filled' : 'outlined'}
+              clickable={hasMapStats}
+              disabled={!hasMapStats}
+              onClick={() => hasMapStats && setSelectedMap(index)}
+            />
+          );
+        })}
+      </Stack>
+
+      {selectedMap !== null && !hasSelectedStats ? (
+        <Typography color="text.secondary" variant="body2">
+          {t('matchStats.unavailable')}
+        </Typography>
+      ) : (
+        <Stack spacing={2}>
+          <ScoreboardTable title={team1Name} players={displayTeam1} accent="primary" highlightPlayerId={highlightPlayerId} />
+          <ScoreboardTable title={team2Name} players={displayTeam2} accent="error" highlightPlayerId={highlightPlayerId} />
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
+function ScoreboardTable({
+  title,
+  players,
+  accent,
+  highlightPlayerId,
+}: {
+  title: string;
+  players: StatsPlayer[];
+  accent: 'primary' | 'error';
+  highlightPlayerId?: string;
+}) {
+  return (
+    <Box>
+      <Typography variant="subtitle2" color={`${accent}.main`} fontWeight={700} mb={0.5}>
+        {title}
+      </Typography>
+      <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+        <Table size="small" sx={{ minWidth: 820 }}>
+          <TableHead>
+            <TableRow>
+              {['Player', 'K', 'D', 'A', '+/-', 'ADR', 'KAST', 'HS', 'DMG', 'UD', 'MVP', 'Score'].map((label) => (
+                <TableCell key={label} align={label === 'Player' ? 'left' : 'right'}>{label}</TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>{renderRows(players, accent, highlightPlayerId)}</TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+}

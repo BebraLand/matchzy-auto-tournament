@@ -149,6 +149,12 @@ export interface PlayerStats {
   assists: number;
   damage: number;
   headshots: number;
+  flashAssists?: number;
+  utilityDamage?: number;
+  kast?: number;
+  mvps?: number;
+  score?: number;
+  roundsPlayed?: number;
 }
 
 export interface MatchMapResult {
@@ -158,6 +164,10 @@ export interface MatchMapResult {
   team2Score: number;
   winnerTeam?: 'team1' | 'team2' | 'none' | null;
   demoFilePath?: string | null;
+  playerStats?: {
+    team1: PlayerStats[];
+    team2: PlayerStats[];
+  } | null;
   completedAt: number;
 }
 

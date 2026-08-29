@@ -102,6 +102,7 @@ export class PostgresAdapter implements DatabaseAdapter {
         { table: 'player_rating_history', column: 'base_elo_after', type: 'INTEGER' },
         { table: 'player_rating_history', column: 'stat_adjustment', type: 'INTEGER' },
         { table: 'player_rating_history', column: 'template_id', type: 'TEXT' },
+        { table: 'match_map_results', column: 'player_stats', type: 'TEXT' },
         { table: 'player_match_stats', column: 'flash_assists', type: 'INTEGER' },
         { table: 'player_match_stats', column: 'utility_damage', type: 'INTEGER' },
         { table: 'player_match_stats', column: 'kast', type: 'REAL' },

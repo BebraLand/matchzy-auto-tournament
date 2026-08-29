@@ -101,6 +101,12 @@ export interface PlayerStats {
   assists: number;
   damage: number;
   headshots: number;
+  flashAssists?: number;
+  utilityDamage?: number;
+  kast?: number;
+  mvps?: number;
+  score?: number;
+  roundsPlayed?: number;
 }
 
 export interface MatchEvent {

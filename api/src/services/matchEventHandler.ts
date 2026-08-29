@@ -79,7 +79,11 @@ export async function handleMatchEvent(event: MatchZyEvent): Promise<void> {
       {
         const match = await resolveMatch(event.matchid);
         if (match) {
-          updateLiveStats(match, parseScorePayload(eventData, 'postgame'));
+          const snapshot = extractPlayerStatsFromEvent(eventData);
+          updateLiveStats(match, {
+            ...parseScorePayload(eventData, 'postgame'),
+            ...(snapshot ? { playerStats: snapshot } : {}),
+          });
           await handleMapCompletion(match, event, eventData);
         }
       }
@@ -205,6 +209,17 @@ export async function handleMatchEvent(event: MatchZyEvent): Promise<void> {
         }
 
         const stats = matchLiveStatsService.update(match.slug, updates);
+        const eventMapNumber = parseNumber(eventData.map_number);
+        if (snapshot && eventMapNumber !== undefined) {
+          await recordMapResult({
+            matchSlug: match.slug,
+            mapNumber: eventMapNumber,
+            mapName: stats.mapName ?? match.current_map,
+            team1Score: stats.team1Score,
+            team2Score: stats.team2Score,
+            playerStats: snapshot,
+          });
+        }
         await db.updateAsync(
           'matches',
           {
@@ -451,8 +466,12 @@ function updateLiveStats(match: DbMatchRow, updates: Partial<MatchLiveStats>): v
 function extractPlayerStatsFromEvent(
   eventData: Record<string, unknown>
 ): MatchPlayerStatsSnapshot | null {
-  const team1 = eventData.team1 as { players?: unknown[] } | undefined;
-  const team2 = eventData.team2 as { players?: unknown[] } | undefined;
+  const team1 = (eventData.team1 ?? {
+    players: eventData.team1_players,
+  }) as { players?: unknown[] } | undefined;
+  const team2 = (eventData.team2 ?? {
+    players: eventData.team2_players,
+  }) as { players?: unknown[] } | undefined;
 
   const buildTeam = (team?: { players?: unknown[] }): PlayerStatLine[] => {
     if (!team?.players || !Array.isArray(team.players)) return [];
@@ -513,6 +532,117 @@ function extractPlayerStatsFromEvent(
     team1: team1Stats,
     team2: team2Stats,
   };
+}
+
+function aggregateMapPlayerStats(
+  mapResults: Array<{ playerStats?: MatchPlayerStatsSnapshot | null }>
+): {
+  team1: Record<string, Record<string, unknown>>;
+  team2: Record<string, Record<string, unknown>>;
+} | null {
+  const aggregateTeam = (side: 'team1' | 'team2') => {
+    const totals = new Map<
+      string,
+      {
+        name: string;
+        kills: number;
+        deaths: number;
+        assists: number;
+        headshot_kills: number;
+        flash_assists: number;
+        damage: number;
+        utility_damage: number;
+        mvps: number;
+        score: number;
+        rounds_played: number;
+        kast_rounds: number;
+      }
+    >();
+
+    for (const result of mapResults) {
+      for (const player of result.playerStats?.[side] ?? []) {
+        const key = player.steamId.toLowerCase();
+        const current = totals.get(key) ?? {
+          name: player.name,
+          kills: 0,
+          deaths: 0,
+          assists: 0,
+          headshot_kills: 0,
+          flash_assists: 0,
+          damage: 0,
+          utility_damage: 0,
+          mvps: 0,
+          score: 0,
+          rounds_played: 0,
+          kast_rounds: 0,
+        };
+        current.name = player.name || current.name;
+        current.kills += player.kills || 0;
+        current.deaths += player.deaths || 0;
+        current.assists += player.assists || 0;
+        current.headshot_kills += player.headshotKills || 0;
+        current.flash_assists += player.flashAssists || 0;
+        current.damage += player.damage || 0;
+        current.utility_damage += player.utilityDamage || 0;
+        current.mvps += player.mvps || 0;
+        current.score += player.score || 0;
+        current.rounds_played += player.roundsPlayed || 0;
+        current.kast_rounds += (player.kast || 0) * (player.roundsPlayed || 0);
+        totals.set(key, current);
+      }
+    }
+
+    const output: Record<string, Record<string, unknown>> = {};
+    for (const [steamId, stats] of totals) {
+      output[steamId] = {
+        name: stats.name,
+        kills: stats.kills,
+        deaths: stats.deaths,
+        assists: stats.assists,
+        headshot_kills: stats.headshot_kills,
+        flash_assists: stats.flash_assists,
+        damage: stats.damage,
+        utility_damage: stats.utility_damage,
+        mvps: stats.mvps,
+        score: stats.score,
+        rounds_played: stats.rounds_played,
+        kast: stats.rounds_played > 0 ? stats.kast_rounds / stats.rounds_played : 0,
+      };
+    }
+    return output;
+  };
+
+  const team1 = aggregateTeam('team1');
+  const team2 = aggregateTeam('team2');
+  return Object.keys(team1).length || Object.keys(team2).length ? { team1, team2 } : null;
+}
+
+async function getPersistedMapPlayerStats(
+  matchSlug: string
+): Promise<ReturnType<typeof aggregateMapPlayerStats>> {
+  const snapshots = new Map<number, MatchPlayerStatsSnapshot>();
+  for (const result of await getMapResults(matchSlug)) {
+    if (result.playerStats) snapshots.set(result.mapNumber, result.playerStats);
+  }
+
+  const events = await db.queryAsync<{ event_data: string }>(
+    `SELECT event_data FROM match_events
+     WHERE match_slug = ? AND event_type = 'round_end'
+     ORDER BY received_at ASC`,
+    [matchSlug]
+  );
+  for (const row of events) {
+    try {
+      const eventData = JSON.parse(row.event_data) as Record<string, unknown>;
+      const mapNumber = parseNumber(eventData.map_number);
+      const snapshot = extractPlayerStatsFromEvent(eventData);
+      if (mapNumber !== undefined && snapshot) snapshots.set(mapNumber, snapshot);
+    } catch {
+      // Ignore malformed historical event payloads.
+    }
+  }
+
+  return aggregateMapPlayerStats([...snapshots.values()].map((playerStats) => ({ playerStats })));
 }
 
 function parseScorePayload(
@@ -592,6 +722,9 @@ async function handleMapCompletion(
       ? 'team1'
       : 'team2');
 
+  const playerStats =
+    extractPlayerStatsFromEvent(eventData) ?? matchLiveStatsService.getStats(match.slug)?.playerStats;
+
   await recordMapResult({
     matchSlug: match.slug,
     mapNumber: completedMapNumber,
@@ -599,6 +732,7 @@ async function handleMapCompletion(
     team1Score: team1ScoreFinal,
     team2Score: team2ScoreFinal,
     winnerTeam,
+    playerStats,
   });
 
   const team1SeriesScore =
@@ -693,6 +827,7 @@ async function handleMapCompletion(
     status: 'warmup',
     mapNumber: completedMapNumber + 1,
     mapName: null,
+    playerStats: null,
   });
 
   const mapResults = await getMapResults(match.slug);
@@ -1139,12 +1274,15 @@ async function persistPlayerMatchStats(options: {
   let team1PlayerStats: Record<string, Record<string, unknown>> = {};
   let team2PlayerStats: Record<string, Record<string, unknown>> = {};
 
-  // Preferred source: final live stats snapshot built from round_end events.
-  // These include cumulative per-player damage and rounds_played, which we use
-  // to derive ADR. This avoids needing a separate "player_stats" event from
-  // the plugin.
+  const mapStats = await getPersistedMapPlayerStats(matchSlug);
+
+  // Preferred source: one final cumulative snapshot per map. This keeps BO3/
+  // BO5 totals correct and also works after the in-memory live cache is gone.
   const liveStats = matchLiveStatsService.getStats(matchSlug);
-  if (liveStats?.playerStats) {
+  if (mapStats) {
+    team1PlayerStats = mapStats.team1;
+    team2PlayerStats = mapStats.team2;
+  } else if (liveStats?.playerStats) {
     const toMap = (lines: PlayerStatLine[]): Record<string, Record<string, unknown>> => {
       const map: Record<string, Record<string, unknown>> = {};
       for (const line of lines) {
@@ -1251,9 +1389,13 @@ async function persistPlayerMatchStats(options: {
 
   const now = Math.floor(Date.now() / 1000);
 
+  // Reprocessing series_end must replace the previous aggregate, not append a
+  // second row for every player.
+  await db.runAsync('DELETE FROM player_match_stats WHERE match_slug = ?', [matchSlug]);
+
   // Store stats for team1 players
   for (const player of team1Players) {
-    const stats = (team1PlayerStats[player.steamId] || {}) as {
+    const stats = (team1PlayerStats[player.steamId] || team1PlayerStats[player.steamId.toLowerCase()] || {}) as {
       rounds_played?: number;
       roundsPlayed?: number;
       damage?: number;
@@ -1297,7 +1439,7 @@ async function persistPlayerMatchStats(options: {
 
   // Store stats for team2 players
   for (const player of team2Players) {
-    const stats = (team2PlayerStats[player.steamId] || {}) as {
+    const stats = (team2PlayerStats[player.steamId] || team2PlayerStats[player.steamId.toLowerCase()] || {}) as {
       rounds_played?: number;
       roundsPlayed?: number;
       damage?: number;

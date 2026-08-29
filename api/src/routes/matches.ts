@@ -1035,9 +1035,14 @@ router.get('/', async (req: Request, res: Response) => {
             ((match.team1Score as number) === 0 && (match.team2Score as number) === 0)) &&
           mapResults.length > 0
         ) {
-          const lastResult = mapResults[mapResults.length - 1];
-          match.team1Score = lastResult.team1Score;
-          match.team2Score = lastResult.team2Score;
+          match.team1Score = mapResults.reduce(
+            (wins, result) => wins + (result.team1Score > result.team2Score ? 1 : 0),
+            0
+          );
+          match.team2Score = mapResults.reduce(
+            (wins, result) => wins + (result.team2Score > result.team1Score ? 1 : 0),
+            0
+          );
         }
 
         // For matches that are still in progress, optionally overlay in‑memory

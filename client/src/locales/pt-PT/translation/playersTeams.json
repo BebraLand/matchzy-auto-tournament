@@ -1,4 +1,9 @@
 {
+  "matchStats": {
+    "title": "Tabela de jogadores",
+    "allMaps": "Todos os mapas",
+    "unavailable": "As estatísticas dos jogadores não estão disponíveis para este mapa."
+  },
   "findPlayer": {
     "title": "Procurar jogador",
     "subtitle": "Procura jogadores registados por nome, Steam ID ou URL de perfil Steam.",
