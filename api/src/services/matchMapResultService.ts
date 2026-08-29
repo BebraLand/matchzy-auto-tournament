@@ -1,6 +1,27 @@
 import { db } from '../config/database';
 import { log } from '../utils/logger';
 
+export interface MapPlayerStatsLine {
+  steamId: string;
+  name: string;
+  kills: number;
+  deaths: number;
+  assists: number;
+  flashAssists: number;
+  headshotKills: number;
+  damage: number;
+  utilityDamage: number;
+  kast: number;
+  mvps: number;
+  score: number;
+  roundsPlayed: number;
+}
+
+export interface MapPlayerStatsSnapshot {
+  team1: MapPlayerStatsLine[];
+  team2: MapPlayerStatsLine[];
+}
+
 export type WinnerTeam = 'team1' | 'team2' | 'none' | null;
 
 export interface MatchMapResultRecord {
@@ -11,6 +32,7 @@ export interface MatchMapResultRecord {
   team2Score: number;
   winnerTeam: WinnerTeam;
   demoFilePath?: string | null;
+  playerStats?: MapPlayerStatsSnapshot | null;
   completedAt: number;
 }
 
@@ -23,9 +45,10 @@ const UPSERT_SQL = `
     team2_score,
     winner_team,
     demo_file_path,
+    player_stats,
     completed_at
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(match_slug, map_number)
   DO UPDATE SET
     map_name = excluded.map_name,
@@ -33,6 +56,7 @@ const UPSERT_SQL = `
     team2_score = excluded.team2_score,
     winner_team = excluded.winner_team,
     demo_file_path = COALESCE(excluded.demo_file_path, match_map_results.demo_file_path),
+    player_stats = COALESCE(excluded.player_stats, match_map_results.player_stats),
     completed_at = excluded.completed_at
 `;
 
@@ -43,6 +67,7 @@ export async function recordMapResult(params: {
   team1Score?: number | null;
   team2Score?: number | null;
   winnerTeam?: WinnerTeam;
+  playerStats?: MapPlayerStatsSnapshot | null;
   completedAt?: number;
 }): Promise<void> {
   const { matchSlug, mapNumber } = params;
@@ -58,6 +83,7 @@ export async function recordMapResult(params: {
     team1Score: typeof params.team1Score === 'number' ? params.team1Score : 0,
     team2Score: typeof params.team2Score === 'number' ? params.team2Score : 0,
     winnerTeam: params.winnerTeam ?? null,
+    playerStats: params.playerStats ?? null,
     completedAt: params.completedAt ?? Math.floor(Date.now() / 1000),
   };
 
@@ -70,6 +96,7 @@ export async function recordMapResult(params: {
       payload.team2Score,
       payload.winnerTeam,
       null, // demo_file_path - will be set when demo is uploaded
+      payload.playerStats ? JSON.stringify(payload.playerStats) : null,
       payload.completedAt,
     ]);
     log.debug('[MatchMapResults] Stored map result', payload);
@@ -89,9 +116,10 @@ export async function getMapResults(matchSlug: string): Promise<MatchMapResultRe
     team2_score: number;
     winner_team?: string | null;
     demo_file_path?: string | null;
+    player_stats?: string | null;
     completed_at: number;
   }>(
-    `SELECT map_number, map_name, team1_score, team2_score, winner_team, demo_file_path, completed_at
+    `SELECT map_number, map_name, team1_score, team2_score, winner_team, demo_file_path, player_stats, completed_at
      FROM match_map_results
      WHERE match_slug = ?
      ORDER BY map_number ASC`,
@@ -106,8 +134,19 @@ export async function getMapResults(matchSlug: string): Promise<MatchMapResultRe
     team2Score: row.team2_score ?? 0,
     winnerTeam: (row.winner_team as WinnerTeam) ?? null,
     demoFilePath: row.demo_file_path ?? null,
+    playerStats: row.player_stats ? parsePlayerStats(row.player_stats) : null,
     completedAt: row.completed_at,
   }));
+}
+
+function parsePlayerStats(value: string): MapPlayerStatsSnapshot | null {
+  try {
+    const parsed = JSON.parse(value) as MapPlayerStatsSnapshot;
+    if (!parsed || !Array.isArray(parsed.team1) || !Array.isArray(parsed.team2)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 export async function clearMapResults(matchSlug: string): Promise<void> {

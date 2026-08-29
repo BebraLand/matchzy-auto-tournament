@@ -90,6 +90,7 @@ export class PostgresAdapter implements DatabaseAdapter {
         { table: 'matches', column: 'queue_position', type: 'INTEGER' },
         { table: 'matches', column: 'veto_opened_at', type: 'INTEGER' },
         { table: 'matches', column: 'postponed_at', type: 'INTEGER' },
+        { table: 'match_map_results', column: 'player_stats', type: 'TEXT' },
         { table: 'map_pools', column: 'enabled', type: 'INTEGER NOT NULL DEFAULT 1' },
         { table: 'servers', column: 'matchzy_config', type: 'TEXT' },
         { table: 'tournament_templates', column: 'team_ids', type: 'TEXT' },

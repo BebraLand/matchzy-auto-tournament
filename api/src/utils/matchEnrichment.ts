@@ -35,6 +35,76 @@ export async function enrichMatchWithPlayerStats(
       // Ignore parse errors
     }
   }
+
+  // Completed matches persist their final series totals in player_match_stats.
+  // Use that table when the webhook did not include a legacy player_stats
+  // event (the normal MatchZy round_end payload is stored as map data instead).
+  const shouldPreferPersistedStats = (match as { status?: string }).status === 'completed';
+  if (shouldPreferPersistedStats || !(match.team1Players?.length || match.team2Players?.length)) {
+    if (shouldPreferPersistedStats) {
+      delete match.team1Players;
+      delete match.team2Players;
+    }
+    const rows = await db.queryAsync<{
+      player_id: string;
+      team: 'team1' | 'team2';
+      kills?: number | null;
+      deaths?: number | null;
+      assists?: number | null;
+      total_damage?: number | null;
+      headshots?: number | null;
+      flash_assists?: number | null;
+      utility_damage?: number | null;
+      kast?: number | null;
+      mvps?: number | null;
+      score?: number | null;
+      rounds_played?: number | null;
+    }>(
+      `SELECT pms.*
+       FROM player_match_stats pms
+       WHERE pms.match_slug = ?
+       ORDER BY pms.created_at DESC`,
+      [matchSlug]
+    );
+
+    if (rows.length > 0) {
+      const playerNames = new Map<string, string>();
+      const config = (match as { config?: {
+        team1?: { players?: Array<{ steamid?: string; name?: string }> };
+        team2?: { players?: Array<{ steamid?: string; name?: string }> };
+      } }).config;
+      for (const player of [...(config?.team1?.players ?? []), ...(config?.team2?.players ?? [])]) {
+        if (player.steamid) playerNames.set(player.steamid.toLowerCase(), player.name ?? player.steamid);
+      }
+
+      const seen = new Set<string>();
+      for (const row of rows) {
+        const key = row.player_id.toLowerCase();
+        if (seen.has(`${row.team}:${key}`)) continue;
+        seen.add(`${row.team}:${key}`);
+        const player = {
+          name: playerNames.get(key) ?? row.player_id,
+          steamId: row.player_id,
+          kills: row.kills ?? 0,
+          deaths: row.deaths ?? 0,
+          assists: row.assists ?? 0,
+          damage: row.total_damage ?? 0,
+          headshots: row.headshots ?? 0,
+          flashAssists: row.flash_assists ?? 0,
+          utilityDamage: row.utility_damage ?? 0,
+          kast: row.kast ?? 0,
+          mvps: row.mvps ?? 0,
+          score: row.score ?? 0,
+          roundsPlayed: row.rounds_played ?? 0,
+        };
+        if (row.team === 'team1') {
+          (match.team1Players ??= []).push(player);
+        } else {
+          (match.team2Players ??= []).push(player);
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -46,7 +116,7 @@ export async function enrichMatchWithScores(
 ): Promise<void> {
   const scoreEvent = await db.queryOneAsync<DbEventRow>(
     `SELECT event_data FROM match_events 
-     WHERE match_slug = ? AND event_type IN ('series_end', 'round_end', 'map_end') 
+     WHERE match_slug = ? AND event_type IN ('series_end', 'round_end', 'map_end', 'map_result')
      ORDER BY received_at DESC LIMIT 1`,
     [matchSlug]
   );
@@ -89,8 +159,15 @@ export async function enrichMatchWithScores(
     }
   }
 
-  // If we still don't have series scores, derive them from persisted map results.
-  if (match.team1Score === undefined && match.team2Score === undefined) {
+  // If series scores are missing (or a completed match still has 0-0), derive
+  // them from persisted map results. Map round scores must never be exposed as
+  // the final BO2/BO3/BO5 series score.
+  const matchStatus = (match as { status?: string }).status;
+  if (
+    match.team1Score === undefined ||
+    match.team2Score === undefined ||
+    (matchStatus === 'completed' && match.team1Score === 0 && match.team2Score === 0)
+  ) {
     const rows = await db.queryAsync<{
       team1_score: number;
       team2_score: number;

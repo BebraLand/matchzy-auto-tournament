@@ -170,6 +170,7 @@ export interface MatchMapResult {
   winner?: 'team1' | 'team2' | 'none' | null;
   winnerTeam?: 'team1' | 'team2' | 'none' | null;
   demoFilePath?: string | null;
+  playerStats?: MatchPlayerStatsSnapshot | null;
   completedAt: number;
 }
 

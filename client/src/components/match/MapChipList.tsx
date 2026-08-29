@@ -1,4 +1,3 @@
-import React from 'react';
 import { Box, Chip } from '@mui/material';
 import type { MatchMapResult } from '../../types';
 import { getMapDisplayName } from '../../constants/maps';
@@ -8,6 +7,8 @@ interface MapChipListProps {
   activeMapIndex: number | null;
   activeMapLabel?: string | null;
   mapResults: MatchMapResult[];
+  onMapClick?: (mapNumber: number) => void;
+  selectedMapIndex?: number | null;
 }
 
 export function MapChipList({
@@ -15,6 +16,8 @@ export function MapChipList({
   activeMapIndex,
   activeMapLabel,
   mapResults,
+  onMapClick,
+  selectedMapIndex = null,
 }: MapChipListProps) {
   return (
     <Box display="flex" flexWrap="wrap" gap={1} alignItems="center">
@@ -22,6 +25,7 @@ export function MapChipList({
         const displayName = getMapDisplayName(map) || map;
         const labelBase = `${idx + 1}. ${displayName}`;
         const result = mapResults.find((mr) => mr.mapNumber === idx);
+        const isSelected = selectedMapIndex === idx;
         let chipLabel = labelBase;
         let chipColor: 'default' | 'success' | 'error' | 'secondary' = 'default';
 
@@ -37,8 +41,11 @@ export function MapChipList({
           <Chip
             key={`${map}-${idx}`}
             label={chipLabel}
-            color={chipColor}
-            variant={chipColor === 'default' ? 'outlined' : 'filled'}
+            color={isSelected ? 'primary' : chipColor}
+            variant={isSelected || chipColor !== 'default' ? 'filled' : 'outlined'}
+            clickable={Boolean(onMapClick && result)}
+            onClick={onMapClick && result ? () => onMapClick(idx) : undefined}
+            sx={isSelected ? { fontWeight: 700 } : undefined}
           />
         );
       })}

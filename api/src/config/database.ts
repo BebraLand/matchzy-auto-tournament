@@ -143,6 +143,7 @@ class DatabaseManager {
         { table: 'matches', column: 'postponed_at', type: 'INTEGER' },
         { table: 'map_pools', column: 'enabled', type: 'INTEGER NOT NULL DEFAULT 1' },
         { table: 'match_map_results', column: 'demo_file_path', type: 'TEXT' },
+        { table: 'match_map_results', column: 'player_stats', type: 'TEXT' },
         { table: 'tournament_templates', column: 'team_ids', type: 'TEXT' },
         { table: 'tournament', column: 'map_sequence', type: 'TEXT' },
         { table: 'tournament', column: 'team_size', type: 'INTEGER DEFAULT 5' },

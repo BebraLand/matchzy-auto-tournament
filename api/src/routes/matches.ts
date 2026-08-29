@@ -37,6 +37,19 @@ const router = Router();
 // downloaded by the target MatchZy server immediately after it is captured.
 const liveReallocationStates = new Map<string, { payload: Buffer; receivedAt: number }>();
 
+function getSeriesScoreFromMapResults(
+  results: Array<{ team1Score: number; team2Score: number }>
+): { team1: number; team2: number } {
+  return results.reduce(
+    (score, result) => {
+      if (result.team1Score > result.team2Score) score.team1 += 1;
+      if (result.team2Score > result.team1Score) score.team2 += 1;
+      return score;
+    },
+    { team1: 0, team2: 0 }
+  );
+}
+
 function stripMatchServerAccess(match: MatchListItem): MatchListItem {
   const safeMatch = { ...match };
   delete safeMatch.serverId;
@@ -1032,9 +1045,9 @@ router.get('/', async (req: Request, res: Response) => {
             ((match.team1Score as number) === 0 && (match.team2Score as number) === 0)) &&
           mapResults.length > 0
         ) {
-          const lastResult = mapResults[mapResults.length - 1];
-          match.team1Score = lastResult.team1Score;
-          match.team2Score = lastResult.team2Score;
+          const seriesScore = getSeriesScoreFromMapResults(mapResults);
+          match.team1Score = seriesScore.team1;
+          match.team2Score = seriesScore.team2;
         }
 
         // For matches that are still in progress, optionally overlay in‑memory
@@ -1397,6 +1410,21 @@ router.get('/:slug', async (req: Request, res: Response) => {
     }
 
     const serverAccess = await getMatchServerAccess(req);
+
+    // Keep the public match history window consistent for direct detail links
+    // as well as the list endpoint. Live/upcoming matches remain visible.
+    const matchTimestamp = match.completedAt ?? match.createdAt ?? 0;
+    const publicHistoryCutoff = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
+    if (
+      !serverAccess.isAdmin &&
+      (match.status === 'completed' || match.status === 'cancelled') &&
+      matchTimestamp < publicHistoryCutoff
+    ) {
+      return res.status(404).json({
+        success: false,
+        error: 'Match is outside the public history window',
+      });
+    }
 
     return res.json({
       success: true,

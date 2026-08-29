@@ -9,9 +9,7 @@ import {
   IconButton,
   Stack,
   Divider,
-  Grid,
   Card,
-  CardContent,
   Snackbar,
   Alert,
   Accordion,
@@ -20,6 +18,12 @@ import {
   Chip,
   Button,
   Tooltip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
@@ -47,7 +51,7 @@ import { PlayerRoster } from '../match/PlayerRoster';
 import { AddBackupPlayer } from '../admin/AddBackupPlayer';
 import { getMapDisplayName, getMapFullImageUrl } from '../../constants/maps';
 import { getPhaseDisplay } from '../../types/matchPhase.types';
-import type { Match, PlayersResponse } from '../../types';
+import type { Match, PlayerStats, PlayersResponse } from '../../types';
 import { useTournamentStatus } from '../../hooks/useTournamentStatus';
 import { MapChipList } from '../match/MapChipList';
 import { MapDemoDownloads } from '../match/MapDemoDownloads';
@@ -74,6 +78,168 @@ interface MatchDetailsModalProps {
   readOnly?: boolean;
 }
 
+type DisplayPlayerStats = PlayerStats & { avatar?: string };
+
+interface PlayerStatsTableProps {
+  teamName: string;
+  players: DisplayPlayerStats[];
+}
+
+const PlayerStatsTable: React.FC<PlayerStatsTableProps> = ({ teamName, players }) => {
+  const sortedPlayers = [...players].sort(
+    (a, b) => b.kills - a.kills || b.damage - a.damage || a.name.localeCompare(b.name)
+  );
+  const hasRecordedStats = sortedPlayers.some(
+    (player) =>
+      player.kills > 0 ||
+      player.deaths > 0 ||
+      player.assists > 0 ||
+      player.damage > 0 ||
+      (player.roundsPlayed ?? 0) > 0
+  );
+
+  const value = (stat: number | string) => (hasRecordedStats ? stat : '—');
+
+  return (
+    <Box
+      sx={{
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: 1.5,
+        overflow: 'hidden',
+        bgcolor: 'background.paper',
+      }}
+    >
+      <Box
+        sx={{
+          px: 1.5,
+          py: 1,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          bgcolor: 'action.hover',
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <Typography variant="subtitle2" fontWeight={700} noWrap>
+          {teamName}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {players.length} {players.length === 1 ? 'player' : 'players'}
+        </Typography>
+      </Box>
+      <TableContainer sx={{ overflowX: 'auto' }}>
+        <Table size="small" sx={{ minWidth: 760 }} aria-label={`${teamName} player statistics`}>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ minWidth: 180 }}>Player</TableCell>
+              <TableCell align="right">K-D-A</TableCell>
+              <TableCell align="right">DMG</TableCell>
+              <TableCell align="right">
+                <Tooltip title="Average damage per round">
+                  <span>ADR</span>
+                </Tooltip>
+              </TableCell>
+              <TableCell align="right">
+                <Tooltip title="Headshot kills">
+                  <span>HS</span>
+                </Tooltip>
+              </TableCell>
+              <TableCell align="right">
+                <Tooltip title="Kill, Assist, Survived or Traded">
+                  <span>KAST</span>
+                </Tooltip>
+              </TableCell>
+              <TableCell align="right">
+                <Tooltip title="Flash assists">
+                  <span>Flash</span>
+                </Tooltip>
+              </TableCell>
+              <TableCell align="right">
+                <Tooltip title="Utility damage">
+                  <span>Util</span>
+                </Tooltip>
+              </TableCell>
+              <TableCell align="right">MVP</TableCell>
+              <TableCell align="right">Score</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {sortedPlayers.length > 0 ? (
+              sortedPlayers.map((player, index) => {
+                const adr =
+                  hasRecordedStats && (player.roundsPlayed ?? 0) > 0
+                    ? (player.damage / (player.roundsPlayed ?? 1)).toFixed(1)
+                    : '—';
+                return (
+                  <TableRow
+                    key={player.steamId}
+                    sx={{
+                      '&:last-child td': { borderBottom: 0 },
+                      bgcolor: index === 0 && hasRecordedStats ? 'action.selected' : 'transparent',
+                    }}
+                  >
+                    <TableCell>
+                      <Box display="flex" alignItems="center" gap={1} minWidth={0}>
+                        <PlayerAvatar
+                          id={player.steamId}
+                          name={player.name}
+                          avatarUrl={player.avatar}
+                          size={28}
+                        />
+                        <Typography
+                          variant="body2"
+                          fontWeight={600}
+                          component="a"
+                          href={getPlayerPageUrl(player.steamId)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          noWrap
+                          sx={{
+                            color: 'primary.main',
+                            textDecoration: 'none',
+                            '&:hover': { textDecoration: 'underline' },
+                          }}
+                        >
+                          {player.name}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      {value(`${player.kills}-${player.deaths}-${player.assists}`)}
+                    </TableCell>
+                    <TableCell align="right">{value(player.damage)}</TableCell>
+                    <TableCell align="right">{adr}</TableCell>
+                    <TableCell align="right">{value(player.headshots)}</TableCell>
+                    <TableCell align="right">
+                      {hasRecordedStats && typeof player.kast === 'number'
+                        ? `${player.kast.toFixed(1)}%`
+                        : '—'}
+                    </TableCell>
+                    <TableCell align="right">{value(player.flashAssists ?? 0)}</TableCell>
+                    <TableCell align="right">{value(player.utilityDamage ?? 0)}</TableCell>
+                    <TableCell align="right">{value(player.mvps ?? 0)}</TableCell>
+                    <TableCell align="right">{value(player.score ?? 0)}</TableCell>
+                  </TableRow>
+                );
+              })
+            ) : (
+              <TableRow>
+                <TableCell colSpan={10}>
+                  <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+                    No player statistics recorded for this scope yet.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+};
+
 const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
   match,
   matchNumber,
@@ -92,6 +258,11 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [playerEloIndex, setPlayerEloIndex] = useState<Record<string, number> | null>(null);
   const [serverAddressCopied, setServerAddressCopied] = useState(false);
+  const [selectedMapNumber, setSelectedMapNumber] = useState<number | null>(null);
+
+  useEffect(() => {
+    setSelectedMapNumber(null);
+  }, [match?.slug]);
 
   const serverAddress =
     match?.serverHost && match?.serverPort ? `${match.serverHost}:${match.serverPort}` : null;
@@ -387,8 +558,16 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
     return index;
   }, [match.config?.team1?.players, match.config?.team2?.players]);
 
-  const normalizedTeam1Players = livePlayerStats?.team1?.length
-    ? livePlayerStats.team1.map((player) => ({
+  const selectedMapStats =
+    selectedMapNumber === null
+      ? null
+      : match.mapResults?.find((result) => result.mapNumber === selectedMapNumber)?.playerStats;
+  const displayedPlayerStats = selectedMapNumber === null ? livePlayerStats : selectedMapStats;
+  const fallbackTeam1Players = selectedMapNumber === null ? match.team1Players || [] : [];
+  const fallbackTeam2Players = selectedMapNumber === null ? match.team2Players || [] : [];
+
+  const normalizedTeam1Players = displayedPlayerStats?.team1?.length
+    ? displayedPlayerStats.team1.map((player) => ({
         name: player.name,
         steamId: player.steamId,
         kills: player.kills,
@@ -396,13 +575,20 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
         assists: player.assists,
         damage: player.damage,
         headshots: player.headshotKills,
+        flashAssists: player.flashAssists,
+        utilityDamage: player.utilityDamage,
+        kast: player.kast,
+        mvps: player.mvps,
+        score: player.score,
+        roundsPlayed: player.roundsPlayed,
+        avatar: avatarIndex[player.steamId.toLowerCase()],
       }))
-    : (match.team1Players || []).map((player) => ({
+    : fallbackTeam1Players.map((player) => ({
         ...player,
         avatar: avatarIndex[player.steamId.toLowerCase()],
       }));
-  const normalizedTeam2Players = livePlayerStats?.team2?.length
-    ? livePlayerStats.team2.map((player) => ({
+  const normalizedTeam2Players = displayedPlayerStats?.team2?.length
+    ? displayedPlayerStats.team2.map((player) => ({
         name: player.name,
         steamId: player.steamId,
         kills: player.kills,
@@ -410,8 +596,15 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
         assists: player.assists,
         damage: player.damage,
         headshots: player.headshotKills,
+        flashAssists: player.flashAssists,
+        utilityDamage: player.utilityDamage,
+        kast: player.kast,
+        mvps: player.mvps,
+        score: player.score,
+        roundsPlayed: player.roundsPlayed,
+        avatar: avatarIndex[player.steamId.toLowerCase()],
       }))
-    : (match.team2Players || []).map((player) => ({
+    : fallbackTeam2Players.map((player) => ({
         ...player,
         avatar: avatarIndex[player.steamId.toLowerCase()],
       }));
@@ -482,8 +675,17 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
 
   return (
     <>
-      <Dialog open={!!match} onClose={onClose} maxWidth="md" fullWidth>
-        <DialogTitle>
+      <Dialog open={!!match} onClose={onClose} maxWidth="lg" fullWidth>
+        <DialogTitle
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 2,
+            bgcolor: 'background.paper',
+            borderBottom: 1,
+            borderColor: 'divider',
+          }}
+        >
           <Box display="flex" justifyContent="space-between" alignItems="center">
             <Box>
               <Typography variant="h6" fontWeight={600}>
@@ -498,7 +700,7 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
             </IconButton>
           </Box>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 2, md: 3 }, py: 2.5 }}>
           <Stack spacing={3} mt={1}>
             {/* Status and Timer */}
             <Box
@@ -871,188 +1073,67 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
                 </>
               )}
 
-            {/* Player Leaderboards */}
-            {(normalizedTeam1Players.length > 0 || normalizedTeam2Players.length > 0) && (
+            {/* Player Statistics */}
+            {(match.status === 'completed' ||
+              match.status === 'live' ||
+              match.status === 'loaded' ||
+              normalizedTeam1Players.length > 0 ||
+              normalizedTeam2Players.length > 0) && (
               <>
                 <Divider />
                 <Box>
-                  <Box display="flex" alignItems="center" gap={1} mb={2}>
-                    <GroupsIcon color="primary" />
-                    <Typography variant="subtitle1" fontWeight={600}>
-                      Player Leaderboards
-                    </Typography>
+                  <Box
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems={{ xs: 'flex-start', sm: 'center' }}
+                    flexDirection={{ xs: 'column', sm: 'row' }}
+                    gap={1.5}
+                    mb={1.5}
+                  >
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <GroupsIcon color="primary" />
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={700}>
+                          Player statistics
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {selectedMapNumber === null
+                            ? 'All maps combined'
+                            : `Map ${selectedMapNumber + 1} only`}
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                      <Chip
+                        label="Series"
+                        size="small"
+                        clickable
+                        color={selectedMapNumber === null ? 'primary' : 'default'}
+                        variant={selectedMapNumber === null ? 'filled' : 'outlined'}
+                        onClick={() => setSelectedMapNumber(null)}
+                      />
+                      {(match.mapResults || [])
+                        .slice()
+                        .sort((a, b) => a.mapNumber - b.mapNumber)
+                        .map((result) => (
+                          <Chip
+                            key={result.mapNumber}
+                            label={`${result.mapNumber + 1}. ${getMapDisplayName(result.mapName || '') || `Map ${result.mapNumber + 1}`} · ${result.team1Score}-${result.team2Score}`}
+                            size="small"
+                            clickable={Boolean(result.playerStats)}
+                            color={selectedMapNumber === result.mapNumber ? 'primary' : 'default'}
+                            variant={selectedMapNumber === result.mapNumber ? 'filled' : 'outlined'}
+                            onClick={() =>
+                              result.playerStats && setSelectedMapNumber(result.mapNumber)
+                            }
+                          />
+                        ))}
+                    </Stack>
                   </Box>
-                  <Grid container spacing={2}>
-                    {/* Team 1 Players */}
-                    <Grid size={{ xs: 12, md: 6 }}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" fontWeight={600} mb={2} color="primary">
-                            {match.team1?.name ||
-                              (match.config?.team1 as { name?: string } | undefined)?.name ||
-                              'Team 1'}
-                          </Typography>
-                          {normalizedTeam1Players.length > 0 ? (
-                            <Stack spacing={1}>
-                              {normalizedTeam1Players
-                                .sort((a, b) => b.kills - a.kills)
-                                .map((player, idx) => (
-                                  <Box
-                                    key={player.steamId}
-                                    sx={{
-                                      p: 1.5,
-                                      bgcolor: idx === 0 ? 'action.selected' : 'action.hover',
-                                      borderRadius: 1,
-                                    }}
-                                  >
-                                    <Box
-                                      display="flex"
-                                      justifyContent="space-between"
-                                      alignItems="center"
-                                    >
-                                      <Box display="flex" alignItems="center" gap={1.25}>
-                                        <PlayerAvatar
-                                          id={player.steamId}
-                                          name={player.name}
-                                          avatarUrl={player.avatar}
-                                          size={28}
-                                        />
-                                        <Typography
-                                          variant="body2"
-                                          fontWeight={600}
-                                          component="a"
-                                          href={getPlayerPageUrl(player.steamId)}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          sx={{
-                                            color: 'primary.main',
-                                            textDecoration: 'none',
-                                            cursor: 'pointer',
-                                            '&:hover': {
-                                              textDecoration: 'underline',
-                                            },
-                                          }}
-                                        >
-                                          {player.name}
-                                        </Typography>
-                                      </Box>
-                                      <Typography
-                                        variant="body2"
-                                        fontWeight={600}
-                                        color={idx === 0 ? 'primary' : 'text.primary'}
-                                      >
-                                        {player.kills}/{player.deaths}/{player.assists}
-                                      </Typography>
-                                    </Box>
-                                    <Box display="flex" justifyContent="space-between" mt={0.5}>
-                                      <Typography variant="caption" color="text.secondary">
-                                        KDA:{' '}
-                                        {(
-                                          (player.kills + player.assists) /
-                                          Math.max(1, player.deaths)
-                                        ).toFixed(2)}
-                                      </Typography>
-                                      <Typography variant="caption" color="text.secondary">
-                                        HS: {player.headshots} | DMG: {player.damage}
-                                      </Typography>
-                                    </Box>
-                                  </Box>
-                                ))}
-                            </Stack>
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              No player data available
-                            </Typography>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-
-                    {/* Team 2 Players */}
-                    <Grid size={{ xs: 12, md: 6 }}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" fontWeight={600} mb={2} color="primary">
-                            {match.team2?.name ||
-                              (match.config?.team2 as { name?: string } | undefined)?.name ||
-                              'Team 2'}
-                          </Typography>
-                          {normalizedTeam2Players.length > 0 ? (
-                            <Stack spacing={1}>
-                              {normalizedTeam2Players
-                                .sort((a, b) => b.kills - a.kills)
-                                .map((player, idx) => (
-                                  <Box
-                                    key={player.steamId}
-                                    sx={{
-                                      p: 1.5,
-                                      bgcolor: idx === 0 ? 'action.selected' : 'action.hover',
-                                      borderRadius: 1,
-                                    }}
-                                  >
-                                    <Box
-                                      display="flex"
-                                      justifyContent="space-between"
-                                      alignItems="center"
-                                    >
-                                      <Box display="flex" alignItems="center" gap={1.25}>
-                                          <PlayerAvatar
-                                            id={player.steamId}
-                                            name={player.name}
-                                            avatarUrl={player.avatar}
-                                            size={28}
-                                          />
-                                        <Typography
-                                          variant="body2"
-                                          fontWeight={600}
-                                          component="a"
-                                          href={getPlayerPageUrl(player.steamId)}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          sx={{
-                                            color: 'primary.main',
-                                            textDecoration: 'none',
-                                            cursor: 'pointer',
-                                            '&:hover': {
-                                              textDecoration: 'underline',
-                                            },
-                                          }}
-                                        >
-                                          {player.name}
-                                        </Typography>
-                                      </Box>
-                                      <Typography
-                                        variant="body2"
-                                        fontWeight={600}
-                                        color={idx === 0 ? 'primary' : 'text.primary'}
-                                      >
-                                        {player.kills}/{player.deaths}/{player.assists}
-                                      </Typography>
-                                    </Box>
-                                    <Box display="flex" justifyContent="space-between" mt={0.5}>
-                                      <Typography variant="caption" color="text.secondary">
-                                        KDA:{' '}
-                                        {(
-                                          (player.kills + player.assists) /
-                                          Math.max(1, player.deaths)
-                                        ).toFixed(2)}
-                                      </Typography>
-                                      <Typography variant="caption" color="text.secondary">
-                                        HS: {player.headshots} | DMG: {player.damage}
-                                      </Typography>
-                                    </Box>
-                                  </Box>
-                                ))}
-                            </Stack>
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              No player data available
-                            </Typography>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
+                  <Stack spacing={1.25}>
+                    <PlayerStatsTable teamName={team1Name} players={normalizedTeam1Players} />
+                    <PlayerStatsTable teamName={team2Name} players={normalizedTeam2Players} />
+                  </Stack>
                 </Box>
               </>
             )}
@@ -1130,6 +1211,10 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
                       activeMapIndex={activeMapNumber}
                       activeMapLabel={currentMapLabel}
                       mapResults={match.mapResults || []}
+                      selectedMapIndex={selectedMapNumber}
+                      onMapClick={(mapNumber) =>
+                        setSelectedMapNumber((current) => (current === mapNumber ? null : mapNumber))
+                      }
                     />
                     {match.mapResults && match.mapResults.some((mr) => mr.demoFilePath) && (
                       <Box mt={3}>

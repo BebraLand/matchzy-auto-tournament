@@ -149,6 +149,33 @@ export interface PlayerStats {
   assists: number;
   damage: number;
   headshots: number;
+  flashAssists?: number;
+  utilityDamage?: number;
+  kast?: number;
+  mvps?: number;
+  score?: number;
+  roundsPlayed?: number;
+}
+
+export interface MapPlayerStatsLine {
+  steamId: string;
+  name: string;
+  kills: number;
+  deaths: number;
+  assists: number;
+  flashAssists: number;
+  headshotKills: number;
+  damage: number;
+  utilityDamage: number;
+  kast: number;
+  mvps: number;
+  score: number;
+  roundsPlayed: number;
+}
+
+export interface MapPlayerStatsSnapshot {
+  team1: MapPlayerStatsLine[];
+  team2: MapPlayerStatsLine[];
 }
 
 export interface MatchMapResult {
@@ -158,6 +185,7 @@ export interface MatchMapResult {
   team2Score: number;
   winnerTeam?: 'team1' | 'team2' | 'none' | null;
   demoFilePath?: string | null;
+  playerStats?: MapPlayerStatsSnapshot | null;
   completedAt: number;
 }
 

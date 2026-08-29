@@ -79,7 +79,11 @@ export async function handleMatchEvent(event: MatchZyEvent): Promise<void> {
       {
         const match = await resolveMatch(event.matchid);
         if (match) {
-          updateLiveStats(match, parseScorePayload(eventData, 'postgame'));
+          const snapshot = extractPlayerStatsFromEvent(eventData);
+          updateLiveStats(match, {
+            ...parseScorePayload(eventData, 'postgame'),
+            ...(snapshot ? { playerStats: snapshot } : {}),
+          });
           await handleMapCompletion(match, event, eventData);
         }
       }
@@ -117,7 +121,10 @@ export async function handleMatchEvent(event: MatchZyEvent): Promise<void> {
         );
         await updateMatchStatus(liveMatch, 'live');
         playerConnectionService.markAllReady(liveMatch.slug);
-        updateLiveStats(liveMatch, parseScorePayload(eventData, 'live'));
+        updateLiveStats(liveMatch, {
+          ...parseScorePayload(eventData, 'live'),
+          playerStats: null,
+        });
       } else {
         log.warn(`Going live event received for unknown match`, { matchId: event.matchid });
       }
@@ -220,6 +227,53 @@ export async function handleMatchEvent(event: MatchZyEvent): Promise<void> {
           status: match.status,
         });
       }
+      break;
+    }
+
+    case 'player_stats_update': {
+      const match = await resolveMatch(event.matchid);
+      const player = eventData.player as {
+        steamid?: string;
+        name?: string;
+        team?: 'team1' | 'team2';
+      };
+      const rawStats = eventData.stats as Record<string, unknown> | undefined;
+      if (!match || !player?.steamid || !player.team || !rawStats) break;
+
+      // MatchZy can send player_stats_update instead of embedding the full
+      // roster in round_end. Merge the single-player update into the current
+      // map snapshot so map_result can persist all basic stats reliably.
+      const current = matchLiveStatsService.getStats(match.slug);
+      const snapshot: MatchPlayerStatsSnapshot = {
+        team1: [...(current?.playerStats?.team1 ?? [])],
+        team2: [...(current?.playerStats?.team2 ?? [])],
+      };
+      const side = snapshot[player.team];
+      const old = side.find((line) => line.steamId === player.steamid);
+      const number = (key: string, fallback: number) => {
+        const value = rawStats[key];
+        return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+      };
+      const line: PlayerStatLine = {
+        steamId: player.steamid,
+        name: player.name || old?.name || 'Unknown',
+        kills: number('kills', old?.kills ?? 0),
+        deaths: number('deaths', old?.deaths ?? 0),
+        assists: number('assists', old?.assists ?? 0),
+        flashAssists: number('flash_assists', old?.flashAssists ?? 0),
+        headshotKills: number('headshot_kills', old?.headshotKills ?? 0),
+        damage: number('damage', old?.damage ?? 0),
+        utilityDamage: number('utility_damage', old?.utilityDamage ?? 0),
+        kast: number('kast', old?.kast ?? 0),
+        mvps: number('mvps', number('mvp', old?.mvps ?? 0)),
+        score: number('score', old?.score ?? 0),
+        roundsPlayed: number('rounds_played', old?.roundsPlayed ?? current?.roundNumber ?? 0),
+      };
+      const index = side.findIndex((entry) => entry.steamId === player.steamid);
+      if (index >= 0) side[index] = line;
+      else side.push(line);
+
+      updateLiveStats(match, { playerStats: snapshot });
       break;
     }
 
@@ -451,8 +505,14 @@ function updateLiveStats(match: DbMatchRow, updates: Partial<MatchLiveStats>): v
 function extractPlayerStatsFromEvent(
   eventData: Record<string, unknown>
 ): MatchPlayerStatsSnapshot | null {
-  const team1 = eventData.team1 as { players?: unknown[] } | undefined;
-  const team2 = eventData.team2 as { players?: unknown[] } | undefined;
+  const team1Payload = eventData.team1 as { players?: unknown[] } | undefined;
+  const team2Payload = eventData.team2 as { players?: unknown[] } | undefined;
+  const team1 = {
+    players: team1Payload?.players ?? (eventData.team1_players as unknown[] | undefined),
+  };
+  const team2 = {
+    players: team2Payload?.players ?? (eventData.team2_players as unknown[] | undefined),
+  };
 
   const buildTeam = (team?: { players?: unknown[] }): PlayerStatLine[] => {
     if (!team?.players || !Array.isArray(team.players)) return [];
@@ -599,6 +659,9 @@ async function handleMapCompletion(
     team1Score: team1ScoreFinal,
     team2Score: team2ScoreFinal,
     winnerTeam,
+    // round_end events carry the cumulative player snapshot for the map. Keep
+    // it beside the map result before the live cache is moved to the next map.
+    playerStats: matchLiveStatsService.getStats(match.slug)?.playerStats ?? null,
   });
 
   const team1SeriesScore =
@@ -683,6 +746,15 @@ async function handleMapCompletion(
   // stop here and let handleSeriesEnd(event) process that event instead of
   // synthesizing our own.
   if (seriesFinished) {
+    const mapResults = await getMapResults(match.slug);
+    const finalMapStats = matchLiveStatsService.getStats(match.slug);
+    emitMatchUpdate({
+      slug: match.slug,
+      team1Score: team1SeriesScore,
+      team2Score: team2SeriesScore,
+      liveStats: finalMapStats,
+      mapResults,
+    });
     return;
   }
 
@@ -693,6 +765,7 @@ async function handleMapCompletion(
     status: 'warmup',
     mapNumber: completedMapNumber + 1,
     mapName: null,
+    playerStats: null,
   });
 
   const mapResults = await getMapResults(match.slug);
@@ -1139,12 +1212,65 @@ async function persistPlayerMatchStats(options: {
   let team1PlayerStats: Record<string, Record<string, unknown>> = {};
   let team2PlayerStats: Record<string, Record<string, unknown>> = {};
 
+  // Prefer the snapshots saved with each finished map. Summing these gives a
+  // real BO2/BO3/BO5 series total instead of retaining only the last map.
+  const mapResults = await getMapResults(matchSlug);
+  const mapSnapshots = mapResults
+    .map((result) => result.playerStats)
+    .filter((snapshot): snapshot is NonNullable<typeof snapshot> => Boolean(snapshot));
+
+  if (mapSnapshots.length > 0) {
+    const aggregate = (side: 'team1' | 'team2') => {
+      const byPlayer = new Map<string, Record<string, unknown>>();
+      for (const snapshot of mapSnapshots) {
+        for (const line of snapshot[side]) {
+          const current = byPlayer.get(line.steamId) ?? {
+            rounds_played: 0,
+            damage: 0,
+            kills: 0,
+            deaths: 0,
+            assists: 0,
+            headshot_kills: 0,
+            flash_assists: 0,
+            utility_damage: 0,
+            kast_rounds: 0,
+            kast_weight: 0,
+            mvps: 0,
+            score: 0,
+          };
+          const rounds = Number(line.roundsPlayed) || 0;
+          current.rounds_played = Number(current.rounds_played) + rounds;
+          current.damage = Number(current.damage) + (Number(line.damage) || 0);
+          current.kills = Number(current.kills) + (Number(line.kills) || 0);
+          current.deaths = Number(current.deaths) + (Number(line.deaths) || 0);
+          current.assists = Number(current.assists) + (Number(line.assists) || 0);
+          current.headshot_kills = Number(current.headshot_kills) + (Number(line.headshotKills) || 0);
+          current.flash_assists = Number(current.flash_assists) + (Number(line.flashAssists) || 0);
+          current.utility_damage = Number(current.utility_damage) + (Number(line.utilityDamage) || 0);
+          current.kast_rounds = Number(current.kast_rounds) + (Number(line.kast) || 0) * rounds;
+          current.kast_weight = Number(current.kast_weight) + rounds;
+          current.mvps = Number(current.mvps) + (Number(line.mvps) || 0);
+          current.score = Number(current.score) + (Number(line.score) || 0);
+          byPlayer.set(line.steamId, current);
+        }
+      }
+      for (const stats of byPlayer.values()) {
+        stats.kast = Number(stats.kast_weight) > 0
+          ? Number(stats.kast_rounds) / Number(stats.kast_weight)
+          : 0;
+      }
+      return Object.fromEntries(byPlayer);
+    };
+    team1PlayerStats = aggregate('team1');
+    team2PlayerStats = aggregate('team2');
+  }
+
   // Preferred source: final live stats snapshot built from round_end events.
   // These include cumulative per-player damage and rounds_played, which we use
   // to derive ADR. This avoids needing a separate "player_stats" event from
   // the plugin.
   const liveStats = matchLiveStatsService.getStats(matchSlug);
-  if (liveStats?.playerStats) {
+  if (!mapSnapshots.length && liveStats?.playerStats) {
     const toMap = (lines: PlayerStatLine[]): Record<string, Record<string, unknown>> => {
       const map: Record<string, Record<string, unknown>> = {};
       for (const line of lines) {
