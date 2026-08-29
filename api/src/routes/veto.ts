@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../config/database';
 import { log } from '../utils/logger';
 import { emitBracketUpdate, emitMatchUpdate, emitVetoUpdate } from '../services/socketService';
@@ -18,6 +18,7 @@ import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
 import { operatorControlService } from '../services/operatorControlService';
 import { mapService } from '../services/mapService';
 import { hudProjectionService } from '../services/hudProjectionService';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -244,10 +245,21 @@ async function getVetoContext(match: DbMatchRow): Promise<VetoContext | null> {
  * profile or bracket. Security‑sensitive operations (choosing bans/picks)
  * are protected at the /action endpoint and via the team view UI.
  */
-router.get('/:matchSlug', async (req: Request, res: Response) => {
-  try {
-    const { matchSlug } = req.params;
-    const isSelectedBroadcastVeto = req.query.broadcast === '1';
+router.get(
+  '/:matchSlug',
+  (req: Request, res: Response, next: NextFunction) => {
+    // The operator view is read-only, but still requires the normal admin
+    // authentication before the endpoint returns the full veto state.
+    if (req.query.operator === '1') {
+      return requireAuth(req, res, next);
+    }
+    return next();
+  },
+  async (req: Request, res: Response) => {
+    try {
+      const { matchSlug } = req.params;
+      const isSelectedBroadcastVeto = req.query.broadcast === '1';
+      const isOperatorView = req.query.operator === '1';
 
     // A broadcast operator explicitly selects one match in HUD Integration.
     // Only that match may expose the full read-only veto audit to an anonymous
@@ -397,7 +409,7 @@ router.get('/:matchSlug', async (req: Request, res: Response) => {
     const viewerSteamId = getViewerSteamId(req);
     const viewerTeam = await resolveViewerTeamForMatch(match, viewerSteamId);
 
-    if (!viewerTeam && !isSelectedBroadcastVeto) {
+    if (!viewerTeam && !isSelectedBroadcastVeto && !isOperatorView) {
       const publicVeto = {
         matchSlug: vetoState.matchSlug,
         format: vetoState.format,
@@ -425,14 +437,15 @@ router.get('/:matchSlug', async (req: Request, res: Response) => {
       maps: vetoMaps,
       teamLogos: { team1: team1LogoUrl, team2: team2LogoUrl },
     });
-  } catch (error) {
-    log.error('Error getting veto state', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get veto state',
-    });
+    } catch (error) {
+      log.error('Error getting veto state', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to get veto state',
+      });
+    }
   }
-});
+);
 
 /**
  * POST /api/veto/:matchSlug/action

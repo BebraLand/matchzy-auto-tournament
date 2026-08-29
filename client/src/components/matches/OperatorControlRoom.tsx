@@ -440,7 +440,7 @@ export function OperatorControlRoom({
         fullWidth
         maxWidth="md"
       >
-        <DialogTitle>Map veto</DialogTitle>
+        <DialogTitle>Map veto · admin view</DialogTitle>
         <DialogContent>
           {vetoMatch && (
             <VetoInterface
@@ -448,7 +448,6 @@ export function OperatorControlRoom({
               team1Name={teamName(vetoMatch, 'team1')}
               team2Name={teamName(vetoMatch, 'team2')}
               operatorMode
-              onComplete={() => setVetoMatch(null)}
             />
           )}
         </DialogContent>

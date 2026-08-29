@@ -88,7 +88,9 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
     setError('');
 
     try {
-      const response = await fetch(`/api/veto/${matchSlug}`);
+      const response = await fetch(
+        `/api/veto/${matchSlug}${operatorMode ? '?operator=1' : ''}`
+      );
       const data = await response.json();
       if (generation !== loadGenerationRef.current) return;
 
@@ -122,7 +124,7 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
         setLoading(false);
       }
     }
-  }, [matchSlug, t, translateVetoError]);
+  }, [matchSlug, operatorMode, t, translateVetoError]);
 
 
   useEffect(() => {
@@ -379,7 +381,8 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
   // Determine if it's this team's turn. Require valid team IDs and currentTeamSlug;
   // otherwise we cannot reliably tell whose turn it is (don't default to "your turn").
   const isMyTurn =
-    (operatorMode || !!currentTeamSlug) &&
+    !operatorMode &&
+    !!currentTeamSlug &&
     !!vetoState.team1Id &&
     !!vetoState.team2Id &&
     hasKnownCurrentTurn &&
@@ -397,6 +400,12 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
 
   return (
     <Box data-testid="veto-interface">
+      {operatorMode && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Админский просмотр: команды выполняют veto, а оператор наблюдает за прогрессом.
+        </Alert>
+      )}
+
       {/* Match Header */}
       <Paper elevation={2} sx={{ mb: 3, p: 3, bgcolor: 'background.paper' }}>
         <Box display="flex" alignItems="center" justifyContent="center" gap={3}>
