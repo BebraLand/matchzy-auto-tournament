@@ -1012,6 +1012,7 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
                     serverId={match.serverId}
                     matchSlug={match.slug}
                     matchStatus={match.status}
+                    matchPhase={match.matchPhase}
                     onSuccess={(message) => {
                       setSuccess(message);
                       setTimeout(() => setSuccess(''), 3000);

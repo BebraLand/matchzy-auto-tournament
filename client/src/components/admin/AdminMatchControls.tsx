@@ -32,6 +32,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CloseIcon from '@mui/icons-material/Close';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { api } from '../../utils/api';
+import type { MatchPhase } from '../../types/matchPhase.types';
 
 interface ReallocationServer {
   id: string;
@@ -43,6 +44,7 @@ interface AdminMatchControlsProps {
   serverId?: string;
   matchSlug?: string;
   matchStatus?: 'pending' | 'ready' | 'loaded' | 'live' | 'completed' | 'cancelled';
+  matchPhase?: MatchPhase;
   onSuccess?: (message: string) => void;
   onError?: (message: string) => void;
 }
@@ -68,6 +70,7 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
   serverId,
   matchSlug,
   matchStatus,
+  matchPhase,
   onSuccess,
   onError,
 }) => {
@@ -89,6 +92,8 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
   const [reallocationServers, setReallocationServers] = useState<ReallocationServer[]>([]);
   const [reallocationServerId, setReallocationServerId] = useState('');
   const [loadingReallocationServers, setLoadingReallocationServers] = useState(false);
+  const canStartMatch =
+    matchStatus === 'loaded' || (matchStatus === 'live' && matchPhase === 'warmup');
 
   const showError = (message: string) => {
     if (onError) {
@@ -321,6 +326,32 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
           </AccordionSummary>
           <AccordionDetails>
             <Grid container spacing={1}>
+              <Grid size={{ xs: 6, sm: 4 }}>
+                <Tooltip
+                  title={canStartMatch ? 'Start the match from warmup' : 'The match is already in progress'}
+                  arrow
+                >
+                  <span>
+                    <Button
+                      fullWidth
+                      variant="outlined"
+                      color="success"
+                      startIcon={<PlayArrowIcon />}
+                      onClick={() =>
+                        handleActionClick(
+                          'startMatch',
+                          'Start Match',
+                          'This will start the match from warmup.',
+                          'primary'
+                        )
+                      }
+                      disabled={executing || !canStartMatch}
+                    >
+                      Start Match
+                    </Button>
+                  </span>
+                </Tooltip>
+              </Grid>
               <Grid size={{ xs: 6, sm: 4 }}>
                 <Tooltip title="Admin pause - players cannot unpause" arrow>
                   <span>
