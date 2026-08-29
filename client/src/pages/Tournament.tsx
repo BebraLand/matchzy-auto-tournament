@@ -98,6 +98,19 @@ const Tournament: React.FC = () => {
   const [disablingOutdated, setDisablingOutdated] = useState(false);
   const [saveTemplateModalOpen, setSaveTemplateModalOpen] = useState(false);
 
+  // The start endpoint acknowledges the request before its background
+  // allocation task changes the tournament status. Keep the button busy until
+  // the status refresh confirms that the tournament is actually live.
+  useEffect(() => {
+    if (
+      starting &&
+      tournament &&
+      (tournament.status === 'in_progress' || tournament.status === 'completed')
+    ) {
+      setStarting(false);
+    }
+  }, [starting, tournament]);
+
   // Set dynamic page title
   useEffect(() => {
     document.title = 'Tournament Setup';
@@ -871,12 +884,17 @@ const Tournament: React.FC = () => {
     setStarting(true);
     setShowStartConfirm(false);
     setStartWarningInfo(null);
+    let waitForStatusUpdate = false;
 
     try {
       const baseUrl = window.location.origin;
       const response = await startTournament(baseUrl);
 
       if (response.success) {
+        // The API returns before background allocation finishes. Leave the
+        // button in its starting state until the socket/API refresh observes
+        // the real in_progress status.
+        waitForStatusUpdate = true;
         const allocated = (response as { allocated?: number }).allocated || 0;
         if (allocated > 0) {
           showSuccess(
@@ -924,7 +942,9 @@ const Tournament: React.FC = () => {
         showError(error.message || 'Failed to start tournament');
       }
     } finally {
-      setStarting(false);
+      if (!waitForStatusUpdate) {
+        setStarting(false);
+      }
     }
   };
 
