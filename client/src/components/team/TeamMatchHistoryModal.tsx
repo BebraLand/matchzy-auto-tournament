@@ -258,6 +258,12 @@ export function TeamMatchHistoryModal({
                   team2Players={match.team2Players ?? []}
                   maps={match.maps ?? []}
                   mapResults={match.mapResults ?? []}
+                  playerAvatars={Object.fromEntries(
+                    [...(match.team1.players ?? []), ...(match.team2.players ?? [])].map((player) => [
+                      player.steamId.toLowerCase(),
+                      player.avatar,
+                    ])
+                  )}
                 />
               </Box>
             )}

@@ -561,6 +561,12 @@ export function MatchInfoCard({
                 liveMapNumber={mapNumber}
                 livePlayerStats={playerStats}
                 highlightPlayerId={highlightPlayerId}
+                playerAvatars={Object.fromEntries(
+                  [...(team?.players ?? []), ...(match.opponent?.players ?? [])].map((player) => [
+                    player.steamId.toLowerCase(),
+                    player.avatar,
+                  ])
+                )}
               />
             )}
 

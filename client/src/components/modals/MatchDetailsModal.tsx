@@ -881,6 +881,7 @@ const InnerMatchDetailsModal: React.FC<Required<MatchDetailsModalProps>> = ({
                   mapResults={match.mapResults || []}
                   liveMapNumber={activeMapNumber}
                   livePlayerStats={livePlayerStats}
+                  playerAvatars={avatarIndex}
                 />
               </>
             )}

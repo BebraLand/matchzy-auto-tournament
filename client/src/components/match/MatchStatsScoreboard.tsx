@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Chip,
@@ -36,6 +36,7 @@ interface MatchStatsScoreboardProps {
     team2: MatchPlayerStatsLine[];
   } | null;
   highlightPlayerId?: string;
+  playerAvatars?: Record<string, string | undefined>;
 }
 
 function normalizePlayer(player: PlayerStats | MatchPlayerStatsLine): StatsPlayer {
@@ -187,6 +188,7 @@ export function MatchStatsScoreboard({
   liveMapNumber = null,
   livePlayerStats = null,
   highlightPlayerId,
+  playerAvatars = {},
 }: MatchStatsScoreboardProps) {
   const { t } = useTranslation();
   const [selectedMap, setSelectedMap] = useState<number | null>(null);
@@ -196,22 +198,32 @@ export function MatchStatsScoreboard({
     : mapResults.find((result) => result.mapNumber === selectedMap);
   const selectedLive = selectedMap !== null && selectedMap === liveMapNumber ? livePlayerStats : null;
 
+  const withAvatar = (player: PlayerStats | MatchPlayerStatsLine): StatsPlayer => {
+    const normalized = normalizePlayer(player);
+    return {
+      ...normalized,
+      avatar: normalized.avatar ?? playerAvatars[normalized.steamId.toLowerCase()],
+    };
+  };
+
   const selectedTeam1 = selectedLive?.team1 ?? selectedResult?.playerStats?.team1;
   const selectedTeam2 = selectedLive?.team2 ?? selectedResult?.playerStats?.team2;
-  const seriesTeam1 = useMemo(
-    () => (team1Players.length
-      ? team1Players.map(normalizePlayer)
-      : aggregatePlayers(mapResults.filter((result) => result.mapNumber !== liveMapNumber), 'team1', livePlayerStats?.team1)),
-    [team1Players, mapResults, liveMapNumber, livePlayerStats]
-  );
-  const seriesTeam2 = useMemo(
-    () => (team2Players.length
-      ? team2Players.map(normalizePlayer)
-      : aggregatePlayers(mapResults.filter((result) => result.mapNumber !== liveMapNumber), 'team2', livePlayerStats?.team2)),
-    [team2Players, mapResults, liveMapNumber, livePlayerStats]
-  );
-  const displayTeam1 = selectedTeam1?.map(normalizePlayer) ?? seriesTeam1;
-  const displayTeam2 = selectedTeam2?.map(normalizePlayer) ?? seriesTeam2;
+  const seriesTeam1 = team1Players.length
+    ? team1Players.map(withAvatar)
+    : aggregatePlayers(
+        mapResults.filter((result) => result.mapNumber !== liveMapNumber),
+        'team1',
+        livePlayerStats?.team1
+      ).map(withAvatar);
+  const seriesTeam2 = team2Players.length
+    ? team2Players.map(withAvatar)
+    : aggregatePlayers(
+        mapResults.filter((result) => result.mapNumber !== liveMapNumber),
+        'team2',
+        livePlayerStats?.team2
+      ).map(withAvatar);
+  const displayTeam1 = selectedTeam1?.map(withAvatar) ?? seriesTeam1;
+  const displayTeam2 = selectedTeam2?.map(withAvatar) ?? seriesTeam2;
   const hasStats = displayTeam1.length > 0 || displayTeam2.length > 0;
   const hasSelectedStats = (selectedTeam1?.length ?? 0) > 0 || (selectedTeam2?.length ?? 0) > 0;
 
