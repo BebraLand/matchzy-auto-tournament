@@ -53,11 +53,13 @@ interface OperatorControlRoomProps {
   controlMode: TournamentControlMode;
   playerReadyEnabled: boolean;
   autoPrepareNextMatch: boolean;
+  autoStartNextMap: boolean;
   busyKey: string | null;
   connectionStatuses: Map<string, { totalConnected: number }>;
   onModeChange: (mode: TournamentControlMode) => Promise<void>;
   onPlayerReadyEnabledChange: (enabled: boolean) => Promise<void>;
   onAutoPrepareNextMatchChange: (enabled: boolean) => Promise<void>;
+  onAutoStartNextMapChange: (enabled: boolean) => Promise<void>;
   onAction: (match: Match, action: OperatorAction) => Promise<void>;
   onRuling: (match: Match, ruling: MatchRuling) => Promise<void>;
   onReorder: (slugs: string[]) => Promise<void>;
@@ -97,11 +99,13 @@ export function OperatorControlRoom({
   controlMode,
   playerReadyEnabled,
   autoPrepareNextMatch,
+  autoStartNextMap,
   busyKey,
   connectionStatuses,
   onModeChange,
   onPlayerReadyEnabledChange,
   onAutoPrepareNextMatchChange,
+  onAutoStartNextMapChange,
   onAction,
   onRuling,
   onReorder,
@@ -181,6 +185,17 @@ export function OperatorControlRoom({
             <FormControlLabel
               control={
                 <Switch
+                  checked={autoStartNextMap}
+                  disabled={controlMode === 'automatic' || busyKey === 'auto-next-map'}
+                  onChange={(event) => void onAutoStartNextMapChange(event.target.checked)}
+                />
+              }
+              label="Auto-start next map after demo"
+              sx={{ ml: 0.5 }}
+            />
+            <FormControlLabel
+              control={
+                <Switch
                   checked={playerReadyEnabled}
                   disabled={busyKey === 'ready'}
                   onChange={(event) => void onPlayerReadyEnabledChange(event.target.checked)}
@@ -204,6 +219,13 @@ export function OperatorControlRoom({
                 ? 'The next queued match will be prepared automatically.'
                 : 'The operator must prepare each match manually.'}
           </Alert>
+          <Alert severity={controlMode === 'automatic' ? 'info' : autoStartNextMap ? 'success' : 'warning'}>
+            {controlMode === 'automatic'
+              ? 'Automatic mode controls map transitions.'
+              : autoStartNextMap
+                ? 'After the demo upload, the next map loads automatically into warmup. Go Live and .ready rules remain unchanged.'
+                : `The operator can start the next map after its demo upload. The map will remain in warmup until Go Live${playerReadyEnabled ? ' or player .ready' : ''}.`}
+          </Alert>
 
           {showOperatorActions && (
             <Stack spacing={1} data-testid="operator-queue">
@@ -217,6 +239,8 @@ export function OperatorControlRoom({
                 match.config?.expected_players_total ?? (match.config?.players_per_team ?? 5) * 2;
               const connectedPlayers = connectionStatuses.get(match.slug)?.totalConnected ?? 0;
               const awaitingNextMap = match.status === 'live' && match.matchPhase === 'post_match';
+              const latestMapResult = match.mapResults?.[match.mapResults.length - 1];
+              const nextMapDemoReady = Boolean(latestMapResult?.demoFilePath);
               const readyToGoLive =
                 Boolean(match.serverId) &&
                 (match.status === 'loaded' || (match.status === 'live' && match.matchPhase === 'warmup'));
@@ -271,6 +295,13 @@ export function OperatorControlRoom({
                       <Chip size="small" color={operatorColor(match)} label={operatorLabel(match)} />
                       {match.queuePosition != null && (
                         <Chip size="small" variant="outlined" label={`Queue #${match.queuePosition}`} />
+                      )}
+                      {awaitingNextMap && (
+                        <Chip
+                          size="small"
+                          color={nextMapDemoReady ? 'success' : 'warning'}
+                          label={nextMapDemoReady ? 'DEMO READY' : 'WAITING FOR DEMO'}
+                        />
                       )}
                       {match.status === 'loaded' && (
                         <Chip
@@ -349,16 +380,26 @@ export function OperatorControlRoom({
                           </Button>
                         )}
                         {awaitingNextMap && (
-                          <Button
-                            size="small"
-                            color="success"
-                            variant="contained"
-                            startIcon={<FastForward />}
-                            disabled={busy}
-                            onClick={() => void onAction(match, 'start_next_map')}
+                          <Tooltip
+                            title={
+                              nextMapDemoReady
+                                ? 'Load the next map into warmup.'
+                                : 'Waiting for the current map demo to finish uploading.'
+                            }
                           >
-                            Start Next Map
-                          </Button>
+                            <span>
+                              <Button
+                                size="small"
+                                color="success"
+                                variant="contained"
+                                startIcon={<FastForward />}
+                                disabled={busy || !nextMapDemoReady}
+                                onClick={() => void onAction(match, 'start_next_map')}
+                              >
+                                Start Next Map
+                              </Button>
+                            </span>
+                          </Tooltip>
                         )}
                         {unstarted && (
                           <Tooltip

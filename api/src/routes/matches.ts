@@ -746,6 +746,7 @@ router.get('/', async (req: Request, res: Response) => {
     const controlMode = await operatorControlService.getControlMode();
     const playerReadyEnabled = await operatorControlService.isPlayerReadyEnabled();
     const autoPrepareNextMatch = await operatorControlService.isAutoPrepareNextMatchEnabled();
+    const autoStartNextMap = await operatorControlService.isAutoStartNextMapEnabled();
     if (controlMode !== 'automatic') {
       await operatorControlService.ensureQueuePositions();
     }
@@ -1156,6 +1157,7 @@ router.get('/', async (req: Request, res: Response) => {
       controlMode,
       playerReadyEnabled,
       autoPrepareNextMatch,
+      autoStartNextMap,
       matches: responseMatches,
     });
   } catch (error) {
@@ -1291,7 +1293,20 @@ router.post('/:slug/operator-action', requireAuth, async (req: Request, res: Res
           error: 'Only a live match with a prepared server can start its next map.',
         });
       }
-      const { rconService } = await import('../services/rconService');
+      const latestMapResult = await db.queryOneAsync<{ demo_file_path?: string | null }>(
+        `SELECT demo_file_path
+         FROM match_map_results
+         WHERE match_slug = ?
+         ORDER BY map_number DESC
+         LIMIT 1`,
+        [slug]
+      );
+      if (!latestMapResult?.demo_file_path?.trim()) {
+        return res.status(409).json({
+          success: false,
+          error: 'Wait for the current map demo to finish uploading before starting the next map.',
+        });
+      }
       const result = await rconService.sendCommand(match.server_id, 'css_nextmap');
       if (!result.success) {
         const rconError = new Error(result.error ?? 'Server rejected the next-map command.') as Error & {

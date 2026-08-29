@@ -60,8 +60,9 @@ export default function Matches() {
   const [selectedMatchSlugs, setSelectedMatchSlugs] = useState<Set<string>>(() => new Set());
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [controlMode, setControlMode] = useState<TournamentControlMode>('automatic');
-  const [playerReadyEnabled, setPlayerReadyEnabled] = useState(true);
+  const [playerReadyEnabled, setPlayerReadyEnabled] = useState(false);
   const [autoPrepareNextMatch, setAutoPrepareNextMatch] = useState(true);
+  const [autoStartNextMap, setAutoStartNextMap] = useState(false);
   const [operatorBusyKey, setOperatorBusyKey] = useState<string | null>(null);
   const [connectionStatuses, setConnectionStatuses] = useState<Map<string, { totalConnected: number }>>(
     () => new Map()
@@ -87,8 +88,9 @@ export default function Matches() {
         const matches = data.matches || [];
         setTournamentStatus(data.tournamentStatus || 'setup');
         setControlMode(data.controlMode || 'automatic');
-        setPlayerReadyEnabled(data.playerReadyEnabled ?? true);
+        setPlayerReadyEnabled(data.playerReadyEnabled ?? false);
         setAutoPrepareNextMatch(data.autoPrepareNextMatch ?? true);
+        setAutoStartNextMap(data.autoStartNextMap ?? false);
 
         const hasTeams = (m: Match) => {
           // Manual matches (round = 0) don't have bracket-seeded teams; rely on
@@ -627,6 +629,20 @@ export default function Matches() {
     }
   };
 
+  const handleAutoStartNextMapChange = async (enabled: boolean) => {
+    setOperatorBusyKey('auto-next-map');
+    try {
+      await api.put('/api/tournament', { settings: { autoStartNextMap: enabled } });
+      setAutoStartNextMap(enabled);
+      showSuccess(`Auto-start next map ${enabled ? 'enabled' : 'disabled'}`);
+      await fetchMatches();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to change auto-start next map setting');
+    } finally {
+      setOperatorBusyKey(null);
+    }
+  };
+
   const handleOperatorAction = async (match: Match, action: OperatorAction) => {
     setOperatorBusyKey(match.slug);
     try {
@@ -784,11 +800,13 @@ export default function Matches() {
           controlMode={controlMode}
           playerReadyEnabled={playerReadyEnabled}
           autoPrepareNextMatch={autoPrepareNextMatch}
+          autoStartNextMap={autoStartNextMap}
           busyKey={operatorBusyKey}
           connectionStatuses={connectionStatuses}
           onModeChange={handleControlModeChange}
           onPlayerReadyEnabledChange={handlePlayerReadyEnabledChange}
           onAutoPrepareNextMatchChange={handleAutoPrepareNextMatchChange}
+          onAutoStartNextMapChange={handleAutoStartNextMapChange}
           onAction={handleOperatorAction}
           onRuling={handleMatchRuling}
           onReorder={handleQueueReorder}

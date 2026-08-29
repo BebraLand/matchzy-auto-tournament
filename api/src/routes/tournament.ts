@@ -130,6 +130,26 @@ async function applyPlayerReadySettingToActiveServers(enabled: boolean): Promise
   }
 }
 
+async function applyAutoStartNextMapSettingToActiveServers(enabled: boolean): Promise<void> {
+  const activeMatches = await db.queryAsync<{ server_id: string }>(
+    `SELECT DISTINCT server_id
+     FROM matches
+     WHERE server_id IS NOT NULL
+       AND status IN ('ready', 'loaded', 'live')`,
+    []
+  );
+
+  for (const { server_id: serverId } of activeMatches) {
+    const result = await rconService.sendCommand(
+      serverId,
+      `matchzy_operator_auto_start_next_map_after_demo ${enabled ? '1' : '0'}`
+    );
+    if (!result.success) {
+      log.warn(`Failed to apply auto-start next map setting to server ${serverId}: ${result.error}`);
+    }
+  }
+}
+
 async function preflightServersUpToDateForTournamentStart(): Promise<
   | { ok: true }
   | {
@@ -548,10 +568,19 @@ router.put('/', async (req: Request, res: Response) => {
       ) {
         throw new Error('autoPrepareNextMatch must be a boolean');
       }
+      if (
+        input.settings?.autoStartNextMap !== undefined &&
+        typeof input.settings.autoStartNextMap !== 'boolean'
+      ) {
+        throw new Error('autoStartNextMap must be a boolean');
+      }
       const tournament = await tournamentService.updateTournament(input);
 
       if (typeof input.settings?.playerReadyEnabled === 'boolean') {
         await applyPlayerReadySettingToActiveServers(input.settings.playerReadyEnabled);
+      }
+      if (typeof input.settings?.autoStartNextMap === 'boolean') {
+        await applyAutoStartNextMapSettingToActiveServers(input.settings.autoStartNextMap);
       }
 
       if (input.settings?.controlMode === 'automatic') {

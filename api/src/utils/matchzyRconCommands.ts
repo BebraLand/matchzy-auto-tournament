@@ -144,6 +144,7 @@ export function getMatchZyServerConfigCommands(config: {
   debugChatEnabled?: boolean | null;
   operatorReadyGate?: boolean | null;
   operatorManualNextMap?: boolean | null;
+  operatorAutoStartNextMapAfterDemo?: boolean | null;
 }): string[] {
   const commands: string[] = [];
 
@@ -238,6 +239,14 @@ export function getMatchZyServerConfigCommands(config: {
   }
   if (config.operatorManualNextMap !== undefined && config.operatorManualNextMap !== null) {
     commands.push(`matchzy_operator_manual_next_map ${config.operatorManualNextMap ? '1' : '0'}`);
+  }
+  if (
+    config.operatorAutoStartNextMapAfterDemo !== undefined &&
+    config.operatorAutoStartNextMapAfterDemo !== null
+  ) {
+    commands.push(
+      `matchzy_operator_auto_start_next_map_after_demo ${config.operatorAutoStartNextMapAfterDemo ? '1' : '0'}`
+    );
   }
 
   return commands;

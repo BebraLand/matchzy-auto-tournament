@@ -38,6 +38,8 @@ export interface TournamentSettings {
   playerReadyEnabled?: boolean;
   /** Whether Assisted/Manual modes automatically prepare the next queued match. */
   autoPrepareNextMatch?: boolean;
+  /** Whether Assisted/Manual modes load the next map after its demo is uploaded. */
+  autoStartNextMap?: boolean;
   /** Explicitly marks a tournament as an operator-only bot simulation. */
   simulation?: boolean;
   simulationTimescale?: number;

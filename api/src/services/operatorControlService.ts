@@ -41,13 +41,13 @@ class OperatorControlService {
       [1]
     );
 
-    if (!tournament?.settings) return true;
+    if (!tournament?.settings) return false;
 
     try {
       const settings = JSON.parse(tournament.settings) as { playerReadyEnabled?: unknown };
-      return settings.playerReadyEnabled !== false;
+      return settings.playerReadyEnabled === true;
     } catch {
-      return true;
+      return false;
     }
   }
 
@@ -64,6 +64,22 @@ class OperatorControlService {
       return settings.autoPrepareNextMatch !== false;
     } catch {
       return true;
+    }
+  }
+
+  async isAutoStartNextMapEnabled(): Promise<boolean> {
+    const tournament = await db.queryOneAsync<Pick<DbTournamentRow, 'settings'>>(
+      'SELECT settings FROM tournament WHERE id = ?',
+      [1]
+    );
+
+    if (!tournament?.settings) return false;
+
+    try {
+      const settings = JSON.parse(tournament.settings) as { autoStartNextMap?: unknown };
+      return settings.autoStartNextMap === true;
+    } catch {
+      return false;
     }
   }
 

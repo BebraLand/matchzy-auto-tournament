@@ -25,8 +25,9 @@ export const DEFAULT_SETTINGS: TournamentSettings = {
   seedingMethod: 'random',
   grandFinalMode: 'simple',
   controlMode: 'assisted',
-  playerReadyEnabled: true,
+  playerReadyEnabled: false,
   autoPrepareNextMatch: true,
+  autoStartNextMap: false,
 };
 
 class TournamentService {

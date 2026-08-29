@@ -6,6 +6,8 @@ import { log } from '../utils/logger';
 import { settingsService } from '../services/settingsService';
 import { emitMatchUpdate } from '../services/socketService';
 import { getMapResults } from '../services/matchMapResultService';
+import { operatorControlService } from '../services/operatorControlService';
+import { rconService } from '../services/rconService';
 import path from 'path';
 import fs from 'fs';
 import type { DbMatchRow } from '../types/database.types';
@@ -36,6 +38,61 @@ function resolveDemoFilePath(matchSlug: string, storedPath: string): string | nu
   }
 
   return null;
+}
+
+async function maybeAutoStartNextMap(matchSlug: string): Promise<void> {
+  if (!(await operatorControlService.usesOperatorQueue())) return;
+  if (!(await operatorControlService.isAutoStartNextMapEnabled())) return;
+
+  const match = await db.queryOneAsync<DbMatchRow>(
+    'SELECT * FROM matches WHERE slug = ?',
+    [matchSlug]
+  );
+  if (!match || match.status !== 'live' || !match.server_id) return;
+
+  const latestMapResult = await db.queryOneAsync<{
+    map_number: number;
+    demo_file_path?: string | null;
+  }>(
+    `SELECT map_number, demo_file_path
+     FROM match_map_results
+     WHERE match_slug = ?
+     ORDER BY map_number DESC
+     LIMIT 1`,
+    [matchSlug]
+  );
+  if (!latestMapResult?.demo_file_path) return;
+
+  let totalMaps = 1;
+  try {
+    const config = match.config
+      ? JSON.parse(match.config) as { num_maps?: unknown; maplist?: unknown }
+      : null;
+    const configuredMaps = Number(config?.num_maps);
+    if (Number.isInteger(configuredMaps) && configuredMaps > 0) {
+      totalMaps = configuredMaps;
+    } else if (Array.isArray(config?.maplist) && config.maplist.length > 0) {
+      totalMaps = config.maplist.length;
+    }
+  } catch {
+    // A malformed legacy config should not prevent the upload from succeeding.
+  }
+
+  // The final map ends the series; never ask MatchZy to transition past it.
+  if (latestMapResult.map_number >= totalMaps - 1) return;
+
+  const result = await rconService.sendCommand(match.server_id, 'css_nextmap');
+  if (result.success) {
+    log.info('[Demo Upload] Automatically started next map in warmup', {
+      matchSlug,
+      mapNumber: latestMapResult.map_number,
+    });
+  } else {
+    log.warn('[Demo Upload] Failed to automatically start next map', {
+      matchSlug,
+      error: result.error,
+    });
+  }
 }
 
 // Ensure demos directory exists
@@ -265,6 +322,17 @@ router.post(
         fileSizeBytes: fileSize,
         filepath,
       });
+
+      try {
+        await maybeAutoStartNextMap(matchSlug);
+      } catch (autoStartError) {
+        // Demo storage is already complete; an RCON failure must not make
+        // MatchZy retry the upload and create duplicate files.
+        log.warn('[Demo Upload] Auto-start next map failed', {
+          matchSlug,
+          error: autoStartError instanceof Error ? autoStartError.message : String(autoStartError),
+        });
+      }
 
       // Emit match update to notify frontend that demo was uploaded
       try {

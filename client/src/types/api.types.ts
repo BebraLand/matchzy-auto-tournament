@@ -168,6 +168,7 @@ export interface MatchesResponse extends ApiResponse {
   controlMode?: 'automatic' | 'assisted' | 'manual';
   playerReadyEnabled?: boolean;
   autoPrepareNextMatch?: boolean;
+  autoStartNextMap?: boolean;
 }
 
 export interface MatchResponse extends ApiResponse {
