@@ -146,7 +146,6 @@ export function ELOProgressionChart({
         sx={{
           position: 'relative',
           width: '100%',
-          height: chartHeight + padding,
           mt: 2,
         }}
       >

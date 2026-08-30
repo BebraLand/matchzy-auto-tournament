@@ -137,9 +137,10 @@ export function PerformanceMetricsChart({ matchHistory }: PerformanceMetricsChar
       if (match.adr === undefined || match.adr === 0) return null;
       const x = getX(index);
       const y = getAdrY(match.adr);
-      return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+      return `${x} ${y}`;
     })
     .filter((v): v is string => v !== null)
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point}`)
     .join(' ');
 
   // Generate K/D line path
@@ -149,9 +150,10 @@ export function PerformanceMetricsChart({ matchHistory }: PerformanceMetricsChar
       const kd = match.kills / match.deaths;
       const x = getX(index);
       const y = getKdY(kd);
-      return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+      return `${x} ${y}`;
     })
     .filter((v): v is string => v !== null)
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point}`)
     .join(' ');
 
   return (
