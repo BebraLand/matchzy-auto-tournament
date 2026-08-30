@@ -21,7 +21,7 @@ import { EmptyState } from '../components/shared/EmptyState';
 import { StatusLegend } from '../components/shared/StatusLegend';
 import { MatchCard } from '../components/shared/MatchCard';
 import { ServerAllocationWidget } from '../components/shared/ServerAllocationWidget';
-import { getRoundLabel } from '../utils/matchUtils';
+import { getBracketMatchNumber, getRoundLabel } from '../utils/matchUtils';
 import { isManualMatch as isManualMatchFlag } from '../utils/matchFlags';
 import { api } from '../utils/api';
 import type { Match, MatchEvent, MatchesResponse, ServerAvailabilityResponse } from '../types';
@@ -557,20 +557,6 @@ export default function Matches() {
   //   }
   // };
 
-  // Calculate global match number based on all matches
-  const getGlobalMatchNumber = (match: Match, allMatches: Match[]): number => {
-    // Sort all matches by round, then by matchNumber
-    // For manual matches (round=0, match_number=0), use database ID to maintain consistent order
-    const sortedMatches = [...allMatches].sort((a, b) => {
-      if (a.round !== b.round) return a.round - b.round;
-      if (a.matchNumber !== b.matchNumber) return a.matchNumber - b.matchNumber;
-      // If round and match_number are the same (e.g., manual matches), sort by ID
-      return a.id - b.id;
-    });
-
-    return sortedMatches.findIndex((m) => m.id === match.id) + 1;
-  };
-
   // Get all matches for numbering context
   const allMatches = [...upcomingMatches, ...liveMatches, ...matchHistory];
 
@@ -975,7 +961,7 @@ export default function Matches() {
               <Grid container spacing={2}>
                 {liveMatches.map((match) => {
                   const event = liveEvents.get(match.slug);
-                  const matchNumber = getGlobalMatchNumber(match, allMatches);
+                  const matchNumber = getBracketMatchNumber(match, allMatches);
                   return (
                     <Grid size={{ xs: 12, sm: 6, md: 6, lg: 6 }} key={match.id}>
                       <Box>
@@ -1026,7 +1012,7 @@ export default function Matches() {
               </Box>
               <Grid container spacing={2}>
                 {upcomingMatches.map((match) => {
-                  const matchNumber = getGlobalMatchNumber(match, allMatches);
+                  const matchNumber = getBracketMatchNumber(match, allMatches);
                   const isManualMatch = isManualMatchFlag(match);
                   // Don't show "Manual match" text - the pill is more explanatory
                   const manualRoundLabel = undefined;
@@ -1082,7 +1068,7 @@ export default function Matches() {
               </Typography>
               <Grid container spacing={2}>
                 {matchHistory.map((match) => {
-                  const matchNumber = getGlobalMatchNumber(match, allMatches);
+                  const matchNumber = getBracketMatchNumber(match, allMatches);
                   return (
                     <Grid size={{ xs: 12, sm: 6, md: 6, lg: 6 }} key={match.id}>
                       <Box>
@@ -1114,7 +1100,7 @@ export default function Matches() {
       {selectedMatch && (
         <MatchDetailsModal
           match={selectedMatch}
-          matchNumber={getGlobalMatchNumber(selectedMatch, allMatches)}
+          matchNumber={getBracketMatchNumber(selectedMatch, allMatches)}
           roundLabel={getRoundLabel(selectedMatch.round)}
           onClose={() => setSelectedMatch(null)}
           onDeleted={(slug) => {

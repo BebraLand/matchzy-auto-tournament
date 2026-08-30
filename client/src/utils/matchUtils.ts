@@ -2,6 +2,21 @@
  * Utility functions for match-related data formatting and calculations
  */
 
+import type { Match } from '../types';
+
+/**
+ * Get the stable bracket number without considering the operator queue.
+ */
+export const getBracketMatchNumber = (match: Match, allMatches: Match[]): number => {
+  const sortedMatches = [...allMatches].sort((a, b) => {
+    if (a.round !== b.round) return a.round - b.round;
+    if (a.matchNumber !== b.matchNumber) return a.matchNumber - b.matchNumber;
+    return a.id - b.id;
+  });
+
+  return sortedMatches.findIndex((item) => item.id === match.id) + 1;
+};
+
 /**
  * Format a Unix timestamp to a localized date string
  */

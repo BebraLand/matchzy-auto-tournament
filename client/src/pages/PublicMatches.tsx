@@ -28,7 +28,7 @@ import { EmptyState } from '../components/shared/EmptyState';
 import { MatchCard } from '../components/shared/MatchCard';
 import { StatusLegend } from '../components/shared/StatusLegend';
 import { api } from '../utils/api';
-import { getRoundLabel } from '../utils/matchUtils';
+import { getBracketMatchNumber, getRoundLabel } from '../utils/matchUtils';
 import { normalizeConfigPlayers } from '../utils/playerUtils';
 import type { Match, MatchesResponse } from '../types';
 
@@ -192,7 +192,7 @@ export default function PublicMatches() {
   );
 
   const allVisibleMatches = [...liveMatches, ...upcomingMatches, ...historyMatches];
-  const matchNumber = (match: Match) => allVisibleMatches.findIndex((item) => item.id === match.id) + 1;
+  const matchNumber = (match: Match) => getBracketMatchNumber(match, matches);
 
   if (loading) {
     return (

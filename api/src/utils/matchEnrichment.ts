@@ -70,14 +70,21 @@ export async function enrichMatchWithPlayerStats(
     const seen = new Set<string>();
     const names = new Map<string, string>();
     const config = (match as { config?: {
-      team1?: { players?: Array<{ steamid?: string; name?: string }> };
-      team2?: { players?: Array<{ steamid?: string; name?: string }> };
+      team1?: { players?: Record<string, string> | Array<{ steamid?: string; name?: string }> };
+      team2?: { players?: Record<string, string> | Array<{ steamid?: string; name?: string }> };
     } }).config;
-    for (const player of [
-      ...(config?.team1?.players ?? []),
-      ...(config?.team2?.players ?? []),
-    ]) {
-      if (player.steamid) names.set(player.steamid.toLowerCase(), player.name ?? player.steamid);
+    for (const players of [config?.team1?.players, config?.team2?.players]) {
+      if (Array.isArray(players)) {
+        for (const player of players) {
+          if (player.steamid) {
+            names.set(player.steamid.toLowerCase(), player.name ?? player.steamid);
+          }
+        }
+        continue;
+      }
+      for (const [steamId, name] of Object.entries(players ?? {})) {
+        if (typeof name === 'string') names.set(steamId.toLowerCase(), name);
+      }
     }
 
     for (const row of rows) {
