@@ -97,7 +97,17 @@ export default function Bracket() {
     : null;
   const selectedMatch: Match | null =
     baseSelectedMatch && selectedMatchOverride
-      ? { ...selectedMatchOverride, ...baseSelectedMatch }
+      ? {
+          ...selectedMatchOverride,
+          ...baseSelectedMatch,
+          // Keep the detailed match payload's enriched roster/config. The
+          // bracket payload is intentionally lightweight and can overwrite
+          // custom avatar URLs during this merge.
+          config: selectedMatchOverride.config ?? baseSelectedMatch.config,
+          mapResults: selectedMatchOverride.mapResults ?? baseSelectedMatch.mapResults,
+          team1Players: selectedMatchOverride.team1Players ?? baseSelectedMatch.team1Players,
+          team2Players: selectedMatchOverride.team2Players ?? baseSelectedMatch.team2Players,
+        }
       : baseSelectedMatch ?? null;
 
   // Load round status for shuffle tournaments
