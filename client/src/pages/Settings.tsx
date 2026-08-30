@@ -186,6 +186,15 @@ export default function Settings() {
   const [initialBranding, setInitialBranding] = useState(DEFAULT_BRANDING);
   const brandingFileInputRef = useRef<HTMLInputElement>(null);
   const { t } = useTranslation();
+  const currentTabLabel =
+    [
+      t('settingsPage.tabs.integrations', 'Integrations & Webhooks'),
+      t('settingsPage.tabs.players', 'Players & Access'),
+      t('settingsPage.tabs.matches', 'Matches & Ratings'),
+      t('settingsPage.tabs.advanced', 'Advanced'),
+      t('settingsPage.tabs.branding', 'Branding'),
+      t('settingsPage.tabs.developer', 'Developer / Simulation'),
+    ][tabIndex] ?? t('settingsPage.tabs.branding', 'Branding');
 
   const ACCORDION_SX = {
     bgcolor: 'rgba(0, 0, 0, 0.18)',
@@ -1937,7 +1946,7 @@ export default function Settings() {
               onClick={() => setResetDialogOpen(true)}
               disabled={loading || saving}
             >
-              {t('settingsPage.footer.resetButton')}
+              {t('settingsPage.footer.resetCurrentTabButton', 'Reset current tab')}
             </Button>
           </Box>
 
@@ -1947,11 +1956,15 @@ export default function Settings() {
             aria-labelledby="reset-settings-dialog-title"
           >
             <DialogTitle id="reset-settings-dialog-title">
-              {t('settingsPage.resetDialog.title')}
+              {t('settingsPage.resetDialog.currentTabTitle', 'Reset {{tab}}?', { tab: currentTabLabel })}
             </DialogTitle>
             <DialogContent>
               <Typography variant="body2" color="text.secondary">
-                {t('settingsPage.resetDialog.description')}
+                {t(
+                  'settingsPage.resetDialog.currentTabDescription',
+                  'Only settings in "{{tab}}" will be reset. Other settings will stay unchanged.',
+                  { tab: currentTabLabel }
+                )}
               </Typography>
             </DialogContent>
             <DialogActions>
@@ -1973,6 +1986,8 @@ export default function Settings() {
                       webhookUrl: null;
                       matchzyChatPrefix: null;
                       matchzyAdminChatPrefix: null;
+                      allowSelfRegister: null;
+                      ratingsEnabled: null;
                       branding: {
                         displayName: null;
                         logoUrl: null;
@@ -1982,7 +1997,9 @@ export default function Settings() {
                       matchzyKnifeEnabledDefault: null;
                       matchzyDebugChatEnabled?: boolean;
                       simulateMatches?: boolean;
+                      simulationTimescale?: null;
                       // MatchZy core defaults
+                      matchzyAutostartMode?: null;
                       matchzyMinimumReadyRequired?: null;
                       matchzyAllowForceReady?: null;
                       matchzyKickWhenNoMatchLoaded?: null;
@@ -2013,6 +2030,8 @@ export default function Settings() {
                       webhookUrl: null,
                       matchzyChatPrefix: null,
                       matchzyAdminChatPrefix: null,
+                      allowSelfRegister: null,
+                      ratingsEnabled: null,
                       branding: {
                         displayName: null,
                         logoUrl: null,
@@ -2021,6 +2040,8 @@ export default function Settings() {
                       },
                       matchzyKnifeEnabledDefault: null,
                       matchzyDebugChatEnabled: false,
+                      simulationTimescale: null,
+                      matchzyAutostartMode: null,
                       matchzyMinimumReadyRequired: null,
                       matchzyAllowForceReady: null,
                       matchzyKickWhenNoMatchLoaded: null,
@@ -2050,10 +2071,61 @@ export default function Settings() {
                       ...(isDev && { simulateMatches: false }),
                     };
 
-                    const response: SettingsResponse = await api.put(
-                      '/api/settings',
-                      resetPayload
-                    );
+                    const currentTabPayload =
+                      tabIndex === 0
+                        ? { webhookUrl: resetPayload.webhookUrl }
+                        : tabIndex === 1
+                          ? { allowSelfRegister: resetPayload.allowSelfRegister }
+                          : tabIndex === 2
+                            ? {
+                                ratingsEnabled: resetPayload.ratingsEnabled,
+                                matchzyChatPrefix: resetPayload.matchzyChatPrefix,
+                                matchzyAdminChatPrefix: resetPayload.matchzyAdminChatPrefix,
+                                matchzyKnifeEnabledDefault: resetPayload.matchzyKnifeEnabledDefault,
+                                matchzyDemoRecordingEnabled: resetPayload.matchzyDemoRecordingEnabled,
+                                matchzyDemoPath: resetPayload.matchzyDemoPath,
+                                matchzyDemoNameFormat: resetPayload.matchzyDemoNameFormat,
+                                matchzySeriesEndKickDelayNoDemo:
+                                  resetPayload.matchzySeriesEndKickDelayNoDemo,
+                                matchzySeriesEndKickDelayDemoNoUpload:
+                                  resetPayload.matchzySeriesEndKickDelayDemoNoUpload,
+                                matchzySeriesEndKickDelayDemoUpload:
+                                  resetPayload.matchzySeriesEndKickDelayDemoUpload,
+                              }
+                            : tabIndex === 3
+                              ? {
+                                  matchzyAutostartMode: resetPayload.matchzyAutostartMode,
+                                  matchzyMinimumReadyRequired: resetPayload.matchzyMinimumReadyRequired,
+                                  matchzyAllowForceReady: resetPayload.matchzyAllowForceReady,
+                                  matchzyKickWhenNoMatchLoaded: resetPayload.matchzyKickWhenNoMatchLoaded,
+                                  matchzyWhitelistEnabledDefault: resetPayload.matchzyWhitelistEnabledDefault,
+                                  matchzyPauseAfterRestore: resetPayload.matchzyPauseAfterRestore,
+                                  matchzyStopCommandAvailable: resetPayload.matchzyStopCommandAvailable,
+                                  matchzyStopCommandNoDamage: resetPayload.matchzyStopCommandNoDamage,
+                                  matchzyUsePauseCommandForTacticalPause:
+                                    resetPayload.matchzyUsePauseCommandForTacticalPause,
+                                  matchzyAutoreadyEnabled: resetPayload.matchzyAutoreadyEnabled,
+                                  matchzyBothTeamsUnpauseRequired:
+                                    resetPayload.matchzyBothTeamsUnpauseRequired,
+                                  matchzyMaxPausesPerTeam: resetPayload.matchzyMaxPausesPerTeam,
+                                  matchzyPauseDuration: resetPayload.matchzyPauseDuration,
+                                  matchzySideSelectionEnabled: resetPayload.matchzySideSelectionEnabled,
+                                  matchzySideSelectionTime: resetPayload.matchzySideSelectionTime,
+                                  matchzyGgEnabled: resetPayload.matchzyGgEnabled,
+                                  matchzyGgThreshold: resetPayload.matchzyGgThreshold,
+                                  matchzyGgMinScoreDiff: resetPayload.matchzyGgMinScoreDiff,
+                                  matchzyFfwEnabled: resetPayload.matchzyFfwEnabled,
+                                  matchzyFfwTime: resetPayload.matchzyFfwTime,
+                                }
+                              : tabIndex === 4
+                                ? { branding: resetPayload.branding }
+                                : {
+                                    matchzyDebugChatEnabled: resetPayload.matchzyDebugChatEnabled,
+                                    simulateMatches: resetPayload.simulateMatches,
+                                    simulationTimescale: resetPayload.simulationTimescale,
+                                  };
+
+                    const response: SettingsResponse = await api.put('/api/settings', currentTabPayload);
 
                     const newWebhook = response.settings.webhookUrl ?? '';
                     const newSimulate = response.settings.simulateMatches ?? false;
@@ -2175,7 +2247,11 @@ export default function Settings() {
                         detail: response.settings,
                       })
                     );
-                    showSuccess('Settings reset to defaults');
+                    showSuccess(
+                      t('settingsPage.resetDialog.currentTabSuccess', 'Reset "{{tab}}" to defaults', {
+                        tab: currentTabLabel,
+                      })
+                    );
                   } catch (err) {
                     const message = err instanceof Error ? err.message : 'Failed to reset settings';
                     showError(message);
@@ -2185,7 +2261,7 @@ export default function Settings() {
                 }}
                 autoFocus
               >
-                {t('settingsPage.resetDialog.confirm')}
+                {t('settingsPage.resetDialog.currentTabConfirm', 'Reset current tab')}
               </Button>
             </DialogActions>
           </Dialog>
