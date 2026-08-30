@@ -83,7 +83,7 @@ const columns: Array<{ key: SortKey; label: string; format?: (value: number) => 
   { key: 'matchesPlayed', label: 'matches' },
   { key: 'wins', label: 'wins' },
   { key: 'losses', label: 'losses' },
-  { key: 'winRate', label: 'winRate', format: (value) => `${value.toFixed(1)}%` },
+  { key: 'winRate', label: 'winRate', format: (value) => `${(value * 100).toFixed(1)}%` },
   { key: 'kills', label: 'kills' },
   { key: 'deaths', label: 'deaths' },
   { key: 'assists', label: 'assists' },
