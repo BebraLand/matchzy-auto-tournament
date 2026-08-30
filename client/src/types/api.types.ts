@@ -43,6 +43,8 @@ export interface Server {
   cs2UpdateRequiredAt?: number | null;
   /** Best-effort: CS2 server build ID parsed from `version` output. */
   cs2BuildId?: number | null;
+  /** Unix timestamp when MAT last ran the Steam UpToDateCheck for this server. */
+  cs2UpdateCheckedAt?: number | null;
   /** Best-effort: `version` output (display-only; may include multiple lines). */
   cs2VersionString?: string | null;
   /** Unix timestamp when version/build was last fetched via RCON. */
@@ -82,6 +84,7 @@ export interface Server {
     /** MatchZy Enhanced: 0=idle, 1=match, 2=practice */
     autostartMode?: 0 | 1 | 2 | null;
     demoPath?: string | null;
+    hostnameFormat?: string | null;
     demoNameFormat?: string | null;
     demoUploadUrl?: string | null;
   } | null;
@@ -353,6 +356,8 @@ export interface SettingsResponse extends ApiResponse {
     matchzyStopCommandAvailable?: boolean;
     matchzyStopCommandNoDamage?: boolean;
     matchzyUsePauseCommandForTacticalPause?: boolean;
+    /** '' means: leave each server's own hostname alone. */
+    matchzyHostnameFormat?: string;
     matchzyDemoPath?: string;
     matchzyDemoNameFormat?: string;
     matchzySeriesEndKickDelayNoDemo?: number;

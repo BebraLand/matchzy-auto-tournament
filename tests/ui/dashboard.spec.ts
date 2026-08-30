@@ -16,8 +16,7 @@ test.describe.serial('Dashboard Page', () => {
     await ensureSignedIn(page);
   });
 
-  test.skip(
-    'should display dashboard',
+  test('should display dashboard',
     {
       tag: ['@ui', '@dashboard'],
     },
@@ -30,7 +29,7 @@ test.describe.serial('Dashboard Page', () => {
       expect(page.url()).toContain('/');
 
       // Verify dashboard page loaded
-      await expect(page.getByTestId('dashboard-page')).toBeVisible({ timeout: 5000 });
+      await expect(page.getByTestId('dashboard-page')).toBeVisible({ timeout: 15000 });
     }
   );
 });

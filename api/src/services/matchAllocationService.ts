@@ -32,6 +32,15 @@ export class MatchAllocationService {
   // full reset without making brackets feel "stuck".
   private static readonly ALLOCATION_GRACE_PERIOD_SECONDS = 120; // 2 minutes for real matches
   private static readonly SIMULATION_GRACE_PERIOD_SECONDS = 30; // Fast path for simulated matches
+  /**
+   * How long a match may sit in 'loaded' while the server reports IDLE before
+   * the row is treated as stale rather than as a server that is busy.
+   *
+   * Deliberately not the allocation grace period: that one answers "how long
+   * should an idle server settle before reuse", which is a different question
+   * from "how long before we stop believing our own database".
+   */
+  private static readonly STALE_LOADED_SECONDS = 600; // 10 minutes
 
   /**
    * In-memory guard to prevent multiple matches being loaded onto the same server
@@ -143,8 +152,10 @@ export class MatchAllocationService {
       slug: string;
       match_number: number;
       round: number;
+      loaded_at: number | null;
+      status: string;
     }>(
-      `SELECT server_id, slug, match_number, round
+      `SELECT server_id, slug, match_number, round, loaded_at, status
          FROM matches
         WHERE server_id IS NOT NULL
           AND server_id != ''
@@ -154,6 +165,8 @@ export class MatchAllocationService {
       slug: string;
       matchNumber: number;
       round: number;
+      loadedAt: number | null;
+      status: string;
     }>();
     for (const row of dbBusyRows) {
       if (row.server_id && !dbBusyByServer.has(row.server_id)) {
@@ -161,6 +174,8 @@ export class MatchAllocationService {
           slug: row.slug,
           matchNumber: row.match_number,
           round: row.round,
+          loadedAt: row.loaded_at ?? null,
+          status: row.status,
         });
       }
     }
@@ -185,6 +200,16 @@ export class MatchAllocationService {
       inGraceWindow: boolean;
       secondsUntilReady: number | null;
       allocatable: boolean;
+      /** Set when a 'loaded' row was overridden as stale, so the UI can offer to cancel it. */
+      staleMatchSlug: string | null;
+      /** Why this server cannot take a match, for operators staring at an idle server. */
+      notAllocatableReason:
+        | 'offline'
+        | 'busy'
+        | 'grace-window'
+        | 'cs2-out-of-date'
+        | 'cs2-unverified'
+        | null;
     }> = [];
 
     let offlineCount = 0;
@@ -208,7 +233,42 @@ export class MatchAllocationService {
       // a match in warmup but the plugin hasn't updated the ConVar yet.
       const pluginSaysIdle = status === ServerStatus.IDLE;
       const dbSaysBusy = dbBusy !== null;
-      const isIdle = pluginSaysIdle && !dbSaysBusy;
+
+      // A freshly loaded match legitimately looks idle for a moment: MatchZy has
+      // not flipped its convar yet. Past that window, a server the plugin calls
+      // idle while our own row still says "loaded" means the row is stale - the
+      // match was abandoned, or the load only appeared to succeed. Holding the
+      // server hostage on that row is what made servers stop being allocated
+      // after their first match, recoverable only by deleting the matches.
+      //
+      // Two refinements on top of that:
+      //
+      // Only 'loaded' rows are overridden. A 'live' row against an idle-looking
+      // plugin is a much bigger disagreement, and getting it wrong means
+      // handing out a server with a match actually running on it. That is not
+      // a call this function should make on a timer, so live rows keep
+      // blocking and are surfaced instead.
+      //
+      // And it runs on its own, longer clock. The allocation grace period is
+      // 120s (30s simulated), which is about how long a server should sit idle
+      // before being handed out — not how long to wait before declaring our own
+      // database wrong. Ten minutes is comfortably past any real load while
+      // still clearing an abandoned row promptly.
+      const dbBusyIsRecent =
+        dbBusy !== null &&
+        (dbBusy.loadedAt === null ||
+          now - dbBusy.loadedAt < MatchAllocationService.STALE_LOADED_SECONDS);
+      const dbRecordIsStale =
+        dbSaysBusy && pluginSaysIdle && !dbBusyIsRecent && dbBusy?.status === 'loaded';
+
+      if (dbRecordIsStale) {
+        log.warn(
+          `[ALLOCATION] ${server.id} reports idle but match ${dbBusy?.slug} is still marked loaded; ` +
+            `treating the record as stale and allowing allocation`
+        );
+      }
+
+      const isIdle = pluginSaysIdle && (!dbSaysBusy || dbRecordIsStale);
       
       let inGraceWindow = false;
       let secondsUntilReady: number | null = null;
@@ -251,6 +311,15 @@ export class MatchAllocationService {
         availableServerCount += 1;
       }
 
+      let notAllocatableReason: (typeof servers)[number]['notAllocatableReason'] = null;
+      if (!allocatable) {
+        if (!online) notAllocatableReason = 'offline';
+        else if (!isIdle) notAllocatableReason = 'busy';
+        else if (inGraceWindow) notAllocatableReason = 'grace-window';
+        else if (isOutOfDate) notAllocatableReason = 'cs2-out-of-date';
+        else if (!isCs2Verified) notAllocatableReason = 'cs2-unverified';
+      }
+
       servers.push({
         id: server.id,
         name: server.name,
@@ -263,6 +332,8 @@ export class MatchAllocationService {
         inGraceWindow,
         secondsUntilReady,
         allocatable,
+        notAllocatableReason,
+        staleMatchSlug: dbRecordIsStale ? (dbBusy?.slug ?? null) : null,
       });
     }
 

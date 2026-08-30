@@ -43,8 +43,6 @@ interface MatchStatusChartProps {
 export default function MatchStatusChart({
   totalMatches,
   completedMatches,
-  _liveMatches,
-  _pendingMatches,
   matchData,
 }: MatchStatusChartProps) {
   const theme = useTheme();
@@ -96,7 +94,7 @@ export default function MatchStatusChart({
             {
               scaleType: 'point',
               data: data.slice(0, matchData.length),
-              tickInterval: (index, i) => (i + 1) % 5 === 0,
+              tickInterval: (_value, i) => (i + 1) % 5 === 0,
               height: 24,
             },
           ]}

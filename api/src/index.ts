@@ -323,6 +323,11 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
+    // Seconds this process has been running. A drop means the API restarted,
+    // which is the difference between "survived an error" and "crashed and
+    // came back" — indistinguishable from the outside otherwise, since the
+    // container restarts in a couple of seconds.
+    uptime: Math.floor(process.uptime()),
   });
 });
 
@@ -342,12 +347,15 @@ app.get('/api/health/fleet', async (_req: Request, res: Response) => {
   const now = Math.floor(Date.now() / 1000);
   const servers = await serverService.getAllServers(true);
 
-  const enabled = servers.filter((s) => s.enabled === 1 && s.host !== '0.0.0.0');
-  const outdated = enabled.filter((s) => typeof s.cs2_required_version === 'number');
+  // NOTE: getAllServers already filters to enabled servers, and ServerResponse
+  // exposes `enabled` as a boolean. Comparing it to 1 is always false, which
+  // silently made this whole endpoint report an empty fleet.
+  const enabled = servers.filter((s) => s.enabled && s.host !== '0.0.0.0');
+  const outdated = enabled.filter((s) => typeof s.cs2RequiredVersion === 'number');
   const stale = enabled.filter(
-    (s) => !s.cs2_update_checked_at || now - s.cs2_update_checked_at >= 30 * 60
+    (s) => !s.cs2UpdateCheckedAt || now - s.cs2UpdateCheckedAt >= 30 * 60
   );
-  const neverChecked = enabled.filter((s) => !s.cs2_update_checked_at);
+  const neverChecked = enabled.filter((s) => !s.cs2UpdateCheckedAt);
 
   res.json({
     status: 'ok',
@@ -362,13 +370,13 @@ app.get('/api/health/fleet', async (_req: Request, res: Response) => {
       id: s.id,
       name: s.name,
       status: s.status ?? null,
-      lastSeen: s.last_seen ?? null,
-      cs2BuildId: s.cs2_build_id ?? null,
-      cs2RequiredVersion: s.cs2_required_version ?? null,
-      cs2UpdatePhase: s.cs2_update_phase ?? null,
-      cs2UpdateRequiredAt: s.cs2_update_required_at ?? null,
-      cs2UpdateCheckedAt: s.cs2_update_checked_at ?? null,
-      cs2VersionFetchedAt: s.cs2_version_fetched_at ?? null,
+      lastSeen: s.lastSeen ?? null,
+      cs2BuildId: s.cs2BuildId ?? null,
+      cs2RequiredVersion: s.cs2RequiredVersion ?? null,
+      cs2UpdatePhase: s.cs2UpdatePhase ?? null,
+      cs2UpdateRequiredAt: s.cs2UpdateRequiredAt ?? null,
+      cs2UpdateCheckedAt: s.cs2UpdateCheckedAt ?? null,
+      cs2VersionFetchedAt: s.cs2VersionFetchedAt ?? null,
     })),
   });
 });
@@ -431,6 +439,29 @@ initializeSocket(httpServer);
 
 // Cleanup old event logs (keep last 30 days)
 cleanupOldLogs(30);
+
+// A rejected promise with no catch is fatal in Node by default, so a single
+// stray background task can take the whole tournament server down mid-match.
+// This was not hypothetical: a background settings read rejected with
+// `relation "app_settings" does not exist` and killed the process, after
+// which Caddy served 502 for every request.
+//
+// A rejection is not evidence that the process state is corrupt, so log it
+// loudly and keep serving.
+process.on('unhandledRejection', (reason) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  log.error(`[FATAL-GUARD] Unhandled promise rejection: ${err.message}`);
+  if (err.stack) log.error(err.stack);
+});
+
+// An uncaught exception is different: it unwound the stack somewhere
+// arbitrary, so continuing risks acting on corrupt state. Log it and let the
+// container restart us.
+process.on('uncaughtException', (err) => {
+  log.error(`[FATAL] Uncaught exception, shutting down: ${err.message}`);
+  if (err.stack) log.error(err.stack);
+  process.exit(1);
+});
 
 // Initialize database and start server
 (async () => {
@@ -615,6 +646,11 @@ async function bootstrapServerWebhooks(): Promise<void> {
       );
       return;
     }
+  }
+
+  if (!baseUrl) {
+    log.warn('Webhook URL is still unavailable after fallback resolution; skipping bootstrap.');
+    return;
   }
 
   const enabledServers = await serverService.getAllServers(true);

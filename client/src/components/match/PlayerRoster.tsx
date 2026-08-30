@@ -56,6 +56,7 @@ export const PlayerRoster: React.FC<PlayerRosterProps> = ({
           <Typography
             variant="h6"
             fontWeight={600}
+            color={`${teamColor}.main`}
             component={teamId ? RouterLink : 'span'}
             to={teamId ? `/team/${teamId}` : undefined}
             sx={{

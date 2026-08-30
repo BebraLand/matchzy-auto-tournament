@@ -18,6 +18,14 @@ export function getMatchZyWebhookCommands(
     `matchzy_remote_log_url "${webhookUrl}"`,
     `matchzy_remote_log_header_key "X-MatchZy-Token"`,
     `matchzy_remote_log_header_value "${serverToken}"`,
+    // Where the plugin pushes full match reports. Without this the plugin's
+    // upload is skipped and the report is only offered as the reply to an RCON
+    // command — which it builds asynchronously, long after the RCON response has
+    // been sent, so MAT reads an empty string and drops the report entirely.
+    // `matchzy_report_server_id` needs no command: the plugin sets it from
+    // `matchzy_server_id`, which is already sent during initialization.
+    `matchzy_report_endpoint "${baseUrl}/api/events/report"`,
+    `matchzy_report_token "${serverToken}"`,
     `get5_check_auths true`, // Enable auth check to prevent random players
   ];
 }
@@ -135,6 +143,11 @@ export function getMatchZyServerConfigCommands(config: {
    * 0 = idle/sleep, 1 = match mode, 2 = practice mode
    */
   autostartMode?: 0 | 1 | 2 | null;
+  /**
+   * Hostname MatchZy applies on match load. `''` is a meaningful value: it tells
+   * the plugin to leave the server's own `hostname` alone.
+   */
+  hostnameFormat?: string | null;
   demoPath?: string | null;
   demoNameFormat?: string | null;
   seriesEndKickDelayNoDemo?: number | null;
@@ -194,6 +207,12 @@ export function getMatchZyServerConfigCommands(config: {
 
   if (config.autostartMode !== undefined && config.autostartMode !== null) {
     commands.push(`matchzy_autostart_mode ${config.autostartMode}`);
+  }
+
+  // Emitted even when empty — `matchzy_hostname_format ""` is how the plugin is
+  // told not to overwrite the hostname set in the server's own config.
+  if (config.hostnameFormat !== undefined && config.hostnameFormat !== null) {
+    commands.push(`matchzy_hostname_format "${config.hostnameFormat}"`);
   }
 
   if (config.demoPath !== undefined && config.demoPath !== null) {

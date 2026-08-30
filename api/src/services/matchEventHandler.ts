@@ -254,7 +254,13 @@ export async function handleMatchEvent(event: MatchZyEvent): Promise<void> {
       });
       const match = await resolveMatch(event.matchid);
       if (match) {
-        updateLiveStats(match, { status: 'warmup' });
+        // The knife winner still has to pick a side, and MatchZy emits no event
+        // for that choice — the next signal is `going_live`. Reporting warmup
+        // here dropped the UI out of the knife round for the whole selection
+        // window (matchzy_side_selection_time, 60s by default), which is what
+        // users saw: "it looks like it goes back to warmup, but they are
+        // picking sides". Stay on 'knife' until the match actually starts.
+        updateLiveStats(match, { status: 'knife' });
       }
       break;
     }
@@ -1287,7 +1293,19 @@ async function persistPlayerMatchStats(options: {
   if (mapStats) {
     team1PlayerStats = mapStats.team1;
     team2PlayerStats = mapStats.team2;
-  } else if (liveStats?.playerStats) {
+  } else {
+  // Preferred source: final live stats snapshot built from round_end events.
+  // These include cumulative per-player damage and rounds_played, which we use
+  // to derive ADR. This avoids needing a separate "player_stats" event from
+  // the plugin.
+  // Series totals, not just the map that happened to finish last. `round_end`
+  // reports stats cumulative within the current map, so reading `playerStats`
+  // directly recorded only the final map of a BO3/BO5 - which is what made a
+  // player's profile show the last map's KDA for a whole series.
+    const seriesPlayerStats = liveStats
+      ? matchLiveStatsService.getSeriesPlayerStats(matchSlug)
+      : null;
+    if (seriesPlayerStats) {
     const toMap = (lines: PlayerStatLine[]): Record<string, Record<string, unknown>> => {
       const map: Record<string, Record<string, unknown>> = {};
       for (const line of lines) {
@@ -1309,9 +1327,9 @@ async function persistPlayerMatchStats(options: {
       return map;
     };
 
-    team1PlayerStats = toMap(liveStats.playerStats.team1);
-    team2PlayerStats = toMap(liveStats.playerStats.team2);
-  } else {
+    team1PlayerStats = toMap(seriesPlayerStats.team1);
+    team2PlayerStats = toMap(seriesPlayerStats.team2);
+    } else {
     // Fallback for older/alternate setups: look for a dedicated "player_stats"
     // match event if present and parse its per-player dictionaries.
     const playerStatsEvent = await db.queryOneAsync<{
@@ -1391,6 +1409,7 @@ async function persistPlayerMatchStats(options: {
           log.warn('Failed to parse player stats from round_end event', { error, matchSlug });
         }
       }
+    }
     }
   }
 

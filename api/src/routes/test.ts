@@ -1,9 +1,11 @@
 import { Router, type Request, type Response } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { log } from '../utils/logger';
+import { applyMatchReport, type MatchReport } from '../services/connectionSnapshotService';
 import { db } from '../config/database';
 import { playerService } from '../services/playerService';
 import { signPlayerSteamId } from '../utils/signedPlayerCookie';
+import { primeServerStatusForTests, ServerStatus } from '../services/serverStatusService';
 
 
 const router = Router();
@@ -125,6 +127,139 @@ router.post('/reset-database', requireAuth, async (req: Request, res: Response):
       details: error.message,
     });
   }
+});
+
+/**
+ * Test-only helper: stand in for a CS2 server's reported status.
+ *
+ * POST /api/test/server-status  { serverId, status, updatedAt?, online?, matchSlug? }
+ *
+ * Allocation decisions hinge on what the MatchZy plugin reports through its
+ * convars, and CI has no CS2 server to report anything — so without this the
+ * idle/busy paths cannot be exercised at all.
+ *
+ * NOTE: This endpoint is only available in non-production environments.
+ */
+router.post('/server-status', requireAuth, (req: Request, res: Response): void => {
+  if (process.env.NODE_ENV === 'production' && !isE2eTestHelperEnabled()) {
+    res.status(403).json({ success: false, error: 'Disabled in production' });
+    return;
+  }
+
+  const { serverId, status, updatedAt, online, matchSlug } = (req.body || {}) as {
+    serverId?: string;
+    status?: string;
+    updatedAt?: number;
+    online?: boolean;
+    matchSlug?: string;
+  };
+
+  if (!serverId) {
+    res.status(400).json({ success: false, error: 'serverId is required' });
+    return;
+  }
+
+  const allowed = Object.values(ServerStatus) as string[];
+  if (status !== undefined && status !== null && !allowed.includes(status)) {
+    res.status(400).json({ success: false, error: `status must be one of: ${allowed.join(', ')}` });
+    return;
+  }
+
+  primeServerStatusForTests(serverId, {
+    status: (status as ServerStatus) ?? null,
+    updatedAt: updatedAt ?? null,
+    online: online ?? true,
+    matchSlug: matchSlug ?? null,
+  });
+
+  log.warn(`[DEV-TOOLS] Primed server status for ${serverId}: ${status ?? 'null'}`);
+  res.json({ success: true });
+});
+
+/**
+ * Test-only helper: put a match into a given state.
+ *
+ * POST /api/test/match-state  { slug, status?, serverId?, loadedAt? }
+ *
+ * Reaching states like "assigned to a server and loaded ten minutes ago"
+ * through the real flow needs a live CS2 server to allocate against. This lets
+ * a test set that state directly and then assert on how MAT reacts to it.
+ *
+ * NOTE: This endpoint is only available in non-production environments.
+ */
+router.post('/match-state', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  if (process.env.NODE_ENV === 'production' && !isE2eTestHelperEnabled()) {
+    res.status(403).json({ success: false, error: 'Disabled in production' });
+    return;
+  }
+
+  const { slug, status, serverId, loadedAt } = (req.body || {}) as {
+    slug?: string;
+    status?: string;
+    serverId?: string;
+    loadedAt?: number;
+  };
+
+  if (!slug) {
+    res.status(400).json({ success: false, error: 'slug is required' });
+    return;
+  }
+
+  const sets: string[] = [];
+  const params: Array<string | number> = [];
+  if (typeof status === 'string') {
+    sets.push('status = ?');
+    params.push(status);
+  }
+  if (typeof serverId === 'string') {
+    sets.push('server_id = ?');
+    params.push(serverId);
+  }
+  if (typeof loadedAt === 'number') {
+    sets.push('loaded_at = ?');
+    params.push(loadedAt);
+  }
+
+  if (sets.length === 0) {
+    res.status(400).json({ success: false, error: 'nothing to set' });
+    return;
+  }
+
+  params.push(slug);
+  await db.runAsync(`UPDATE matches SET ${sets.join(', ')} WHERE slug = ?`, params);
+  log.warn(`[DEV-TOOLS] Set match state for ${slug}: ${sets.join(', ')}`);
+  res.json({ success: true });
+});
+
+/**
+ * Test-only helper: apply a MatchZy match report as if it arrived from a server.
+ *
+ * POST /api/test/match-report  { slug, report }
+ *
+ * Match reports reach MAT over RCON, and `rconService` short-circuits fake test
+ * servers (host 0.0.0.0) with a canned non-JSON response — so the whole
+ * `applyMatchReport` path, including the plugin-phase mapping that decides
+ * whether a match reads as WARMUP or LIVE, is otherwise unreachable from the
+ * suite. This injects a report directly.
+ *
+ * NOTE: This endpoint is only available in non-production environments.
+ */
+router.post('/match-report', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  if (process.env.NODE_ENV === 'production' && !isE2eTestHelperEnabled()) {
+    res.status(403).json({ success: false, error: 'Disabled in production' });
+    return;
+  }
+
+  const { slug, report } = (req.body || {}) as { slug?: string; report?: unknown };
+
+  if (!slug || !report || typeof report !== 'object') {
+    res.status(400).json({ success: false, error: 'slug and report are required' });
+    return;
+  }
+
+  await applyMatchReport(slug, report as MatchReport);
+  log.warn(`[DEV-TOOLS] Applied injected match report for ${slug}`);
+  res.json({ success: true });
 });
 
 /**

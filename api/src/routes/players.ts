@@ -25,13 +25,14 @@ import { generateMatchConfig } from '../services/matchConfigBuilder';
 import type { TournamentResponse } from '../types/tournament.types';
 import type { MatchConfig } from '../types/match.types';
 import { generateAvatarSvg } from '../generation/avatar';
-import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
 import { saveBroadcastAsset } from '../services/broadcastAssetService';
 import { operatorControlService } from '../services/operatorControlService';
 import {
   canViewMatchServerConfig,
   getMatchServerAccess,
 } from '../services/matchConfigAccessService';
+import { getEffectiveViewerSteamId } from '../utils/viewerIdentity';
+import { resolveCurrentVetoTurn } from '../utils/vetoContext';
 
 const router = Router();
 
@@ -580,7 +581,9 @@ router.get('/:playerId/team', async (req: Request, res: Response) => {
  */
 router.get('/me/match-status', async (req: Request, res: Response) => {
   try {
-    const steamId = getVerifiedPlayerSteamId(req.headers.cookie);
+    // Honour admin impersonation so the navbar CTA reflects the player being
+    // impersonated, not the admin doing the impersonating.
+    const steamId = await getEffectiveViewerSteamId(req);
     if (!steamId) {
       return res.json({
         success: true,
@@ -683,7 +686,13 @@ router.get('/me/match-status', async (req: Request, res: Response) => {
       ? (JSON.parse(match.veto_state) as { status?: string; currentTurn?: string })
       : null;
     const vetoCompleted = vetoState?.status === 'completed';
-    const currentTurn = vetoState?.currentTurn ?? null;
+
+    // Do NOT read currentTurn straight off veto_state: that row is only written
+    // once the first action is submitted, so on step 1 it is NULL and the team
+    // that has to act first would be told "waiting for veto" instead of
+    // "your turn". resolveCurrentVetoTurn derives the opening step from the
+    // configured veto order in that case.
+    const currentTurn = vetoCompleted ? null : (await resolveCurrentVetoTurn(match))?.currentTurn ?? null;
 
     if (['loaded', 'live'].includes(match.status)) {
       return res.json({

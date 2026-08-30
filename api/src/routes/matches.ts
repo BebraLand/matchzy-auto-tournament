@@ -7,6 +7,7 @@ import { TournamentResponse } from '../types/tournament.types';
 import { requireAuth } from '../middleware/auth';
 import { log } from '../utils/logger';
 import { db } from '../config/database';
+import { matchConfigFetchTracker } from '../services/matchConfigFetchTracker';
 import type { DbMatchRow, DbTournamentRow } from '../types/database.types';
 import { getBaseUrl, getWebhookBaseUrl } from '../utils/urlHelper';
 import { emitMatchUpdate, emitBracketUpdate, emitHudProjectionInvalidated } from '../services/socketService';
@@ -435,6 +436,10 @@ router.get('/:slug.json', async (req: Request, res: Response) => {
         error: `Match configuration '${slug}' not found`,
       });
     }
+
+    // The game server fetching this config is the only reliable proof that
+    // MatchZy accepted the load command - see matchConfigFetchTracker.
+    matchConfigFetchTracker.record(slug);
 
     // Manual / non-bracket matches:
     // We treat any match with round = 0 as a manually created match. For these,
@@ -2066,27 +2071,10 @@ router.post('/:slug/force-cancel', requireAuth, async (req: Request, res: Respon
       }
     }
 
-    // Mark match as cancelled in database (use seconds, not milliseconds)
-    await db.updateAsync(
-      'matches',
-      { status: 'cancelled', completed_at: Math.floor(Date.now() / 1000) },
-      'slug = ?',
-      [slug]
-    );
-
-    log.info(`Match ${slug} force-cancelled`);
-
-    // Free up the server if it was assigned
-    if (serverId) {
-      serverAllocationTracker.markIdle(serverId);
-      log.info(`Server ${serverId} freed by force-cancel, triggering immediate allocation`);
-      setImmediate(() => {
-        void matchAllocationService.tryImmediateAllocation();
-      });
-    }
-
-    // Emit match update
-    emitMatchUpdate({ slug, status: 'cancelled' });
+    // Same settle-up the End Match control performs; shared so the two paths
+    // cannot drift apart.
+    const { settleEndedMatch } = await import('../services/matchTerminationService');
+    await settleEndedMatch(match, 'force-cancel');
 
     return res.json({
       success: true,

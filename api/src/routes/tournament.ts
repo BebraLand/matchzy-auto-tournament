@@ -32,6 +32,7 @@ import { checkTournamentCompletion } from '../utils/matchProgression';
 import { cs2UpdateService } from '../services/cs2UpdateService';
 import { extractCs2StatusVersionLine, parseCs2BuildId } from '../utils/cs2Version';
 import { simulationTournamentService } from '../services/simulationTournamentService';
+import { validateVetoOrder, type VetoStep } from '../utils/vetoConfig';
 
 const router = Router();
 
@@ -485,6 +486,58 @@ router.get('/', async (_req: Request, res: Response) => {
  *       400:
  *         description: Invalid input
  */
+
+/**
+ * Validate a tournament's optional `settings.customVetoOrder`.
+ *
+ * Without this check an invalid order is accepted at creation time and only
+ * discovered during veto, where `getVetoOrder` silently falls back to the
+ * standard format — so the tournament runs a different veto than configured.
+ * Rejecting up front keeps the configured order and the actual veto in sync.
+ *
+ * Only the formats present in the payload are checked; each is validated
+ * against the tournament's own map pool size.
+ */
+function validateCustomVetoOrderSetting(
+  settings: unknown,
+  mapCount: number
+): { valid: true } | { valid: false; error: string } {
+  if (!settings || typeof settings !== 'object') {
+    return { valid: true };
+  }
+
+  const customVetoOrder = (settings as { customVetoOrder?: unknown }).customVetoOrder;
+  if (!customVetoOrder || typeof customVetoOrder !== 'object') {
+    return { valid: true };
+  }
+
+  const orders = customVetoOrder as Record<string, unknown>;
+
+  for (const format of ['bo1', 'bo3', 'bo5'] as const) {
+    const order = orders[format];
+    if (typeof order === 'undefined' || order === null) {
+      continue;
+    }
+
+    if (!Array.isArray(order)) {
+      return {
+        valid: false,
+        error: `Custom veto order for ${format} must be an array of veto steps`,
+      };
+    }
+
+    const result = validateVetoOrder(order as VetoStep[], format, mapCount);
+    if (!result.valid) {
+      return {
+        valid: false,
+        error: `Invalid custom veto order for ${format}: ${result.error}`,
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
 router.post('/', async (req: Request, res: Response) => {
   try {
     const input: CreateTournamentInput = req.body;
@@ -508,6 +561,14 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         error: 'At least 2 teams are required',
+      });
+    }
+
+    const vetoOrderCheck = validateCustomVetoOrderSetting(input.settings, input.maps.length);
+    if (!vetoOrderCheck.valid) {
+      return res.status(400).json({
+        success: false,
+        error: vetoOrderCheck.error,
       });
     }
 
@@ -575,6 +636,32 @@ router.put('/', async (req: Request, res: Response) => {
       ) {
         throw new Error('autoStartNextMap must be a boolean');
       }
+
+      if (input.settings) {
+      // Fall back to the stored map pool when the update does not change it,
+      // so the order is validated against the pool it will actually run on.
+      let mapCount = input.maps?.length;
+      if (typeof mapCount !== 'number') {
+        const existing = await db.queryOneAsync<{ maps: string }>(
+          'SELECT maps FROM tournament WHERE id = ?',
+          [1]
+        );
+        try {
+          mapCount = existing ? (JSON.parse(existing.maps) as string[]).length : undefined;
+        } catch {
+          mapCount = undefined;
+        }
+      }
+
+      const vetoOrderCheck = validateCustomVetoOrderSetting(input.settings, mapCount ?? 7);
+      if (!vetoOrderCheck.valid) {
+        return res.status(400).json({
+          success: false,
+          error: vetoOrderCheck.error,
+        });
+      }
+      }
+
       const tournament = await tournamentService.updateTournament(input);
 
       if (typeof input.settings?.playerReadyEnabled === 'boolean') {

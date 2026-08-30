@@ -30,6 +30,7 @@ import BroadcastVeto from './pages/BroadcastVeto';
 import Layout from './components/layout/Layout';
 import NotFound from './pages/NotFound';
 import { BrandLogo } from './components/common/BrandLogo';
+import { ImpersonationBanner } from './components/common/ImpersonationBanner';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -233,6 +234,7 @@ function AuthenticatedApp() {
     <AuthProvider>
       <SnackbarProvider>
         <PageHeaderProvider>
+          <ImpersonationBanner />
           <AppRoutes />
         </PageHeaderProvider>
       </SnackbarProvider>

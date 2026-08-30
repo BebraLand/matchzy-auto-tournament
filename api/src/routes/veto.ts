@@ -11,26 +11,27 @@ import { matchAllocationService } from '../services/matchAllocationService';
 import type { DbMatchRow, DbTournamentRow } from '../types/database.types';
 import type { TournamentResponse } from '../types/tournament.types';
 import { generateMatchConfig } from '../services/matchConfigBuilder';
-import { getVetoOrder } from '../utils/vetoConfig';
+import { getVetoOrder, type VetoStep } from '../utils/vetoConfig';
+import { getVetoContext } from '../utils/vetoContext';
 import { settingsService } from '../services/settingsService';
 import { normalizeConfigPlayers } from '../utils/playerTransform';
-import { getVerifiedPlayerSteamId } from '../utils/signedPlayerCookie';
 import { operatorControlService } from '../services/operatorControlService';
 import { mapService } from '../services/mapService';
 import { hudProjectionService } from '../services/hudProjectionService';
+import { resolveViewerIdentity } from '../utils/viewerIdentity';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
-function getViewerSteamId(req: Request): string | null {
-  const cookieSteamId = getVerifiedPlayerSteamId(req.headers.cookie);
-  if (cookieSteamId) return cookieSteamId;
-
-  const anyReq = req as Request & { user?: { steamId?: string } };
-  if (anyReq.user?.steamId && anyReq.user.steamId.trim().length > 0) {
-    return anyReq.user.steamId.trim();
-  }
-  return null;
+/**
+ * Steam ID this request should be treated as.
+ *
+ * Honours admin impersonation, so an admin can walk through a real team's veto
+ * to reproduce and debug issues without borrowing a player's Steam account.
+ */
+async function getViewerSteamId(req: Request): Promise<string | null> {
+  const { effectiveSteamId } = await resolveViewerIdentity(req);
+  return effectiveSteamId;
 }
 
 function normalizeTeamRosterPlayers(players: string | null | undefined) {
@@ -47,10 +48,20 @@ function normalizeTeamRosterPlayers(players: string | null | undefined) {
   }
 }
 
+/**
+ * Which side of a match a viewer plays for.
+ *
+ * `'both'` is a real, reachable state: nothing stops a player self-registering
+ * onto two teams of the same tournament. It is reported separately from `null`
+ * so callers can say what is actually wrong instead of treating the player as a
+ * spectator and leaving the veto deadlocked with "it's not your turn".
+ */
+type ViewerTeam = 'team1' | 'team2' | 'both';
+
 async function resolveViewerTeamForMatch(
   match: DbMatchRow,
   viewerSteamId: string | null
-): Promise<'team1' | 'team2' | null> {
+): Promise<ViewerTeam | null> {
   if (!viewerSteamId) {
     return null;
   }
@@ -146,15 +157,8 @@ async function resolveViewerTeamForMatch(
     ? normalizeConfigPlayers(config.team2.players)
     : [];
 
-  const isInTeam1 = normalizedTeam1Players.some((p) => p.steamid === viewerSteamId);
-  const isInTeam2 = normalizedTeam2Players.some((p) => p.steamid === viewerSteamId);
-
-  if (isInTeam1 && !isInTeam2) {
-    return 'team1';
-  }
-  if (!isInTeam1 && isInTeam2) {
-    return 'team2';
-  }
+  const isInConfigTeam1 = normalizedTeam1Players.some((p) => p.steamid === viewerSteamId);
+  const isInConfigTeam2 = normalizedTeam2Players.some((p) => p.steamid === viewerSteamId);
 
   const [team1Roster, team2Roster] = await Promise.all([
     match.team1_id
@@ -176,22 +180,29 @@ async function resolveViewerTeamForMatch(
     (player) => player.steamid === viewerSteamId
   );
 
-  if ((isInTeam1 || isInTeam1Roster) && !(isInTeam2 || isInTeam2Roster)) {
+  // The stored match config is a snapshot taken when the match was created; the
+  // teams table is what the admin edits. When both rosters exist they are the
+  // source of truth, so removing a player from a team takes effect immediately.
+  // Trusting the snapshot as well would keep a corrected roster looking wrong
+  // until the tournament was recreated.
+  const rostersAreAuthoritative = team1Roster !== null && team2Roster !== null;
+
+  const isInTeam1 = rostersAreAuthoritative ? isInTeam1Roster : isInConfigTeam1 || isInTeam1Roster;
+  const isInTeam2 = rostersAreAuthoritative ? isInTeam2Roster : isInConfigTeam2 || isInTeam2Roster;
+
+  if (isInTeam1 && isInTeam2) {
+    return 'both';
+  }
+  if (isInTeam1) {
     return 'team1';
   }
-  if (!(isInTeam1 || isInTeam1Roster) && (isInTeam2 || isInTeam2Roster)) {
+  if (isInTeam2) {
     return 'team2';
   }
 
-  // Ambiguous or not present – treat as spectator for veto security purposes.
+  // Not playing in this match – a spectator as far as the veto is concerned.
   return null;
 }
-
-type VetoContext = {
-  format: 'bo1' | 'bo3' | 'bo5';
-  tournamentMaps: string[];
-  customVetoOrder?: { bo1?: unknown[]; bo3?: unknown[]; bo5?: unknown[] };
-};
 
 async function getVetoMapMetadata(mapIds: string[]) {
   const requestedMapIds = new Set(mapIds);
@@ -204,36 +215,6 @@ async function getVetoMapMetadata(mapIds: string[]) {
       displayName: map.displayName,
       imageUrl: map.imageUrl,
     }));
-}
-
-/**
- * Resolve format and map pool for veto. Tournament matches use tournament row;
- * manual matches (round === 0, no tournament) use match config.
- */
-async function getVetoContext(match: DbMatchRow): Promise<VetoContext | null> {
-  const isManual = match.round === 0 || match.tournament_id == null;
-
-  if (isManual) {
-    const config = match.config ? (JSON.parse(match.config) as { maplist?: string[]; num_maps?: number }) : {};
-    const maplist = Array.isArray(config.maplist) ? config.maplist : [];
-    const numMaps = config.num_maps === 1 ? 1 : config.num_maps === 3 ? 3 : config.num_maps === 5 ? 5 : 1;
-    const format: 'bo1' | 'bo3' | 'bo5' = numMaps === 1 ? 'bo1' : numMaps === 3 ? 'bo3' : 'bo5';
-    if (maplist.length === 0) return null;
-    return { format, tournamentMaps: maplist };
-  }
-
-  const tournament = await db.queryOneAsync<{ format: string; maps: string; settings: string | null }>(
-    'SELECT format, maps, settings FROM tournament WHERE id = ?',
-    [match.tournament_id]
-  );
-  if (!tournament) return null;
-
-  const tournamentSettings = tournament.settings ? JSON.parse(tournament.settings) : {};
-  return {
-    format: tournament.format as 'bo1' | 'bo3' | 'bo5',
-    tournamentMaps: JSON.parse(tournament.maps),
-    customVetoOrder: tournamentSettings.customVetoOrder,
-  };
 }
 
 /**
@@ -301,8 +282,8 @@ router.get(
         })
       : {};
 
-    let team1Id: string | null = match.team1_id;
-    let team2Id: string | null = match.team2_id;
+    let team1Id: string | null = match.team1_id ?? null;
+    let team2Id: string | null = match.team2_id ?? null;
     let team1Name = 'Team 1';
     let team2Name = 'Team 2';
     let team1LogoUrl: string | null = null;
@@ -345,7 +326,11 @@ router.get(
     let vetoState = match.veto_state ? JSON.parse(match.veto_state) : null;
 
     if (!vetoState) {
-      const vetoOrder = getVetoOrder(format, customVetoOrder, tournamentMaps.length);
+      const vetoOrder = getVetoOrder(
+        format,
+        customVetoOrder as { bo1?: VetoStep[]; bo3?: VetoStep[]; bo5?: VetoStep[] } | undefined,
+        tournamentMaps.length
+      );
       vetoState = {
         matchSlug,
         format,
@@ -406,10 +391,12 @@ router.get(
     // Determine whether the current viewer is actually on one of the two teams.
     // Team members get the full veto state; spectators get a redacted, read‑only
     // view with only high‑level information (team names, status, picked maps).
-    const viewerSteamId = getViewerSteamId(req);
+    const viewerSteamId = await getViewerSteamId(req);
     const viewerTeam = await resolveViewerTeamForMatch(match, viewerSteamId);
 
-    if (!viewerTeam && !isSelectedBroadcastVeto && !isOperatorView) {
+    // A player on both teams cannot represent either side, so they see the same
+    // redacted view as a spectator. The /action endpoint explains why.
+    if ((!viewerTeam || viewerTeam === 'both') && !isSelectedBroadcastVeto && !isOperatorView) {
       const publicVeto = {
         matchSlug: vetoState.matchSlug,
         format: vetoState.format,
@@ -483,8 +470,16 @@ router.post('/:matchSlug/action', async (req: Request, res: Response) => {
 
     // Resolve which team (if any) the current viewer belongs to based on their
     // Steam ID (from player_steam_id cookie or Passport user).
-    const viewerSteamId = getViewerSteamId(req);
+    const viewerSteamId = await getViewerSteamId(req);
     const viewerTeam = await resolveViewerTeamForMatch(match, viewerSteamId);
+
+    if (viewerTeam === 'both') {
+      return res.status(409).json({
+        success: false,
+        error:
+          'You are on both teams in this match, so you cannot veto for either side. An admin needs to remove you from one of the teams.',
+      });
+    }
 
     if (!viewerSteamId || !viewerTeam) {
       return res.status(403).json({
@@ -495,8 +490,8 @@ router.post('/:matchSlug/action', async (req: Request, res: Response) => {
     }
 
     const isManualMatch = match.round === 0 || match.tournament_id == null;
-    let team1Id: string | null = match.team1_id;
-    let team2Id: string | null = match.team2_id;
+    let team1Id: string | null = match.team1_id ?? null;
+    let team2Id: string | null = match.team2_id ?? null;
     let team1Name = 'Team 1';
     let team2Name = 'Team 2';
 
@@ -529,7 +524,11 @@ router.post('/:matchSlug/action', async (req: Request, res: Response) => {
       });
     }
     const { format, tournamentMaps, customVetoOrder } = vetoContext;
-    const vetoOrder = getVetoOrder(format, customVetoOrder, tournamentMaps.length);
+    const vetoOrder = getVetoOrder(
+      format,
+      customVetoOrder as { bo1?: VetoStep[]; bo3?: VetoStep[]; bo5?: VetoStep[] } | undefined,
+      tournamentMaps.length
+    );
 
     let vetoState = match.veto_state ? JSON.parse(match.veto_state) : null;
 
@@ -908,9 +907,11 @@ router.post('/:matchSlug/action', async (req: Request, res: Response) => {
 
 /**
  * POST /api/veto/:matchSlug/reset
- * Reset veto state (admin only in future)
+ *
+ * Wipes a match's veto so it can be redone. Admin only: without the guard any
+ * anonymous caller could reset a live tournament's veto.
  */
-router.post('/:matchSlug/reset', async (req: Request, res: Response) => {
+router.post('/:matchSlug/reset', requireAuth, async (req: Request, res: Response) => {
   try {
     const { matchSlug } = req.params;
 
