@@ -320,6 +320,13 @@ export interface PlayerConnectionResponse extends ApiResponse {
 }
 
 // Settings types
+export interface BrandingSettings {
+  displayName: string;
+  logoUrl: string;
+  primaryColor: string;
+  secondaryColor: string;
+}
+
 export interface SettingsResponse extends ApiResponse {
   settings: {
     webhookUrl: string | null;
@@ -335,6 +342,7 @@ export interface SettingsResponse extends ApiResponse {
     matchzyDebugChatEnabled?: boolean;
     ratingsEnabled?: boolean;
     allowSelfRegister?: boolean;
+    branding?: BrandingSettings;
     // MatchZy core defaults
     matchzyAutostartMode?: 0 | 1 | 2;
     matchzyMinimumReadyRequired?: number;
@@ -364,6 +372,10 @@ export interface SettingsResponse extends ApiResponse {
     matchzyFfwTime?: number | null;
     matchzyDemoRecordingEnabled?: 0 | 1 | null;
   };
+}
+
+export interface BrandingResponse extends ApiResponse {
+  branding: BrandingSettings;
 }
 
 // Map types

@@ -28,7 +28,9 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import SyncIcon from '@mui/icons-material/Sync';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { api } from '../utils/api';
-import type { SettingsResponse } from '../types/api.types';
+import type { BrandingSettings, SettingsResponse } from '../types/api.types';
+import { DEFAULT_BRANDING } from '../contexts/BrandingContext';
+import { BrandLogo } from '../components/common/BrandLogo';
 import { useIsDevelopment } from '../hooks/useIsDevelopment';
 import { useTranslation } from 'react-i18next';
 
@@ -180,6 +182,9 @@ export default function Settings() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const isDev = useIsDevelopment();
   const [tabIndex, setTabIndex] = useState(0);
+  const [branding, setBranding] = useState(DEFAULT_BRANDING);
+  const [initialBranding, setInitialBranding] = useState(DEFAULT_BRANDING);
+  const brandingFileInputRef = useRef<HTMLInputElement>(null);
   const { t } = useTranslation();
 
   const ACCORDION_SX = {
@@ -227,6 +232,7 @@ export default function Settings() {
         response.settings.allowSelfRegister !== undefined
           ? response.settings.allowSelfRegister
           : false;
+      const savedBranding = response.settings.branding ?? DEFAULT_BRANDING;
       // MatchZy core defaults
       const autostartMode = response.settings.matchzyAutostartMode ?? 1;
       const minimumReadyRequired = response.settings.matchzyMinimumReadyRequired ?? 0;
@@ -276,6 +282,8 @@ export default function Settings() {
       setInitialMatchzyDebugChatEnabled(debugChatEnabled);
       setAllowSelfRegister(allowSelfRegisterValue);
       setInitialAllowSelfRegister(allowSelfRegisterValue);
+      setBranding(savedBranding);
+      setInitialBranding(savedBranding);
       setRatingsEnabled(ratingsEnabledValue);
       setInitialRatingsEnabled(ratingsEnabledValue);
       setMatchzyAutostartMode(autostartMode);
@@ -663,6 +671,59 @@ export default function Settings() {
     }
   };
 
+  const saveBranding = useCallback(async () => {
+    if (JSON.stringify(branding) === JSON.stringify(initialBranding)) return;
+    try {
+      const response: SettingsResponse = await api.put('/api/settings', { branding });
+      const saved = response.settings.branding ?? DEFAULT_BRANDING;
+      setBranding(saved);
+      setInitialBranding(saved);
+      window.dispatchEvent(
+        new CustomEvent<SettingsResponse['settings']>('matchzy:settingsUpdated', {
+          detail: response.settings,
+        })
+      );
+      showSuccess(t('settingsPage.success.saveSettings'));
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to save branding');
+    }
+  }, [branding, initialBranding, showError, showSuccess, t]);
+
+  const handleBrandingLogoUpload = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file) return;
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+        showError('Logo must be PNG, JPEG, or WebP and 5 MB or smaller');
+        return;
+      }
+      try {
+        const imageData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(new Error('Failed to read logo file'));
+          reader.readAsDataURL(file);
+        });
+        const response = await api.post<{ logoUrl: string; branding: BrandingSettings }>(
+          '/api/settings/branding/logo',
+          { imageData },
+        );
+        setBranding(response.branding);
+        setInitialBranding(response.branding);
+        window.dispatchEvent(
+          new CustomEvent('matchzy:brandingUpdated', {
+            detail: response.branding,
+          })
+        );
+        showSuccess('Branding logo updated');
+      } catch (err) {
+        showError(err instanceof Error ? err.message : 'Failed to upload branding logo');
+      }
+    },
+    [showError, showSuccess]
+  );
+
   const handleFieldKeyDown = (event: React.KeyboardEvent) => {
     // Save on Enter key
     if (event.key === 'Enter') {
@@ -930,7 +991,8 @@ export default function Settings() {
                 <Tab label={t('settingsPage.tabs.players')} {...a11yProps(1)} />
                 <Tab label={t('settingsPage.tabs.matches')} {...a11yProps(2)} />
                 <Tab label={t('settingsPage.tabs.advanced')} {...a11yProps(3)} />
-                {isDev && <Tab label={t('settingsPage.tabs.developer')} {...a11yProps(4)} />}
+                <Tab label={t('settingsPage.tabs.branding', 'Branding')} {...a11yProps(4)} />
+                {isDev && <Tab label={t('settingsPage.tabs.developer')} {...a11yProps(5)} />}
               </Tabs>
             </Box>
 
@@ -1645,8 +1707,103 @@ export default function Settings() {
               </Stack>
             </TabPanel>
 
+            <TabPanel value={tabIndex} index={4}>
+              <Stack spacing={3}>
+                <Box>
+                  <Typography variant="h6" fontWeight={600} gutterBottom>
+                    {t('settingsPage.branding.title', 'Custom branding')}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" mb={2}>
+                    {t(
+                      'settingsPage.branding.description',
+                      'Customize the name, logo, and accent colors used throughout the app.'
+                    )}
+                  </Typography>
+                  <Stack spacing={2}>
+                    <TextField
+                      label={t('settingsPage.branding.nameLabel', 'Brand name')}
+                      value={branding.displayName}
+                      onChange={(event) =>
+                        setBranding((current) => ({ ...current, displayName: event.target.value }))
+                      }
+                      onBlur={() => void saveBranding()}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          void saveBranding();
+                        }
+                      }}
+                      fullWidth
+                      slotProps={{ htmlInput: { maxLength: 80, 'data-testid': 'settings-brand-name-input' } }}
+                    />
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                      <TextField
+                        label={t('settingsPage.branding.primaryColorLabel', 'Primary color')}
+                        type="color"
+                        value={branding.primaryColor}
+                        onChange={(event) =>
+                          setBranding((current) => ({ ...current, primaryColor: event.target.value }))
+                        }
+                        onBlur={() => void saveBranding()}
+                        fullWidth
+                        slotProps={{ htmlInput: { 'data-testid': 'settings-brand-primary-input' } }}
+                      />
+                      <TextField
+                        label={t('settingsPage.branding.secondaryColorLabel', 'Secondary color')}
+                        type="color"
+                        value={branding.secondaryColor}
+                        onChange={(event) =>
+                          setBranding((current) => ({ ...current, secondaryColor: event.target.value }))
+                        }
+                        onBlur={() => void saveBranding()}
+                        fullWidth
+                        slotProps={{ htmlInput: { 'data-testid': 'settings-brand-secondary-input' } }}
+                      />
+                    </Stack>
+                    <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
+                      <BrandLogo size={64} />
+                      <Button
+                        variant="outlined"
+                        onClick={() => brandingFileInputRef.current?.click()}
+                        data-testid="settings-brand-logo-upload-button"
+                      >
+                        {t('settingsPage.branding.uploadLogo', 'Upload logo')}
+                      </Button>
+                      <input
+                        ref={brandingFileInputRef}
+                        hidden
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={handleBrandingLogoUpload}
+                        data-testid="settings-brand-logo-input"
+                      />
+                    </Box>
+                    <Paper sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
+                      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                        {t('settingsPage.branding.preview', 'Preview')}
+                      </Typography>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          p: 1.5,
+                          borderRadius: 2,
+                          backgroundColor: branding.primaryColor,
+                          color: '#111',
+                        }}
+                      >
+                        <Box component="img" src={branding.logoUrl} alt="" sx={{ width: 32, height: 32, objectFit: 'contain' }} />
+                        <Typography fontWeight={600}>{branding.displayName}</Typography>
+                      </Box>
+                    </Paper>
+                  </Stack>
+                </Box>
+              </Stack>
+            </TabPanel>
+
             {isDev && (
-              <TabPanel value={tabIndex} index={4}>
+              <TabPanel value={tabIndex} index={5}>
                 <Stack spacing={3}>
                   <Box>
                     <Typography variant="h6" fontWeight={600} gutterBottom>
@@ -1816,6 +1973,12 @@ export default function Settings() {
                       webhookUrl: null;
                       matchzyChatPrefix: null;
                       matchzyAdminChatPrefix: null;
+                      branding: {
+                        displayName: null;
+                        logoUrl: null;
+                        primaryColor: null;
+                        secondaryColor: null;
+                      };
                       matchzyKnifeEnabledDefault: null;
                       matchzyDebugChatEnabled?: boolean;
                       simulateMatches?: boolean;
@@ -1850,6 +2013,12 @@ export default function Settings() {
                       webhookUrl: null,
                       matchzyChatPrefix: null,
                       matchzyAdminChatPrefix: null,
+                      branding: {
+                        displayName: null,
+                        logoUrl: null,
+                        primaryColor: null,
+                        secondaryColor: null,
+                      },
                       matchzyKnifeEnabledDefault: null,
                       matchzyDebugChatEnabled: false,
                       matchzyMinimumReadyRequired: null,
@@ -1893,6 +2062,7 @@ export default function Settings() {
                     const newAdminChatPrefix =
                       response.settings.matchzyAdminChatPrefix ??
                       DEFAULT_MATCHZY_ADMIN_CHAT_PREFIX;
+                    const newBranding = response.settings.branding ?? DEFAULT_BRANDING;
                     const newKnifeEnabled =
                       response.settings.matchzyKnifeEnabledDefault !== undefined
                         ? response.settings.matchzyKnifeEnabledDefault
@@ -1942,6 +2112,8 @@ export default function Settings() {
                     setInitialMatchzyChatPrefix(newChatPrefix);
                     setMatchzyAdminChatPrefix(newAdminChatPrefix);
                     setInitialMatchzyAdminChatPrefix(newAdminChatPrefix);
+                    setBranding(newBranding);
+                    setInitialBranding(newBranding);
                     setMatchzyKnifeEnabledDefault(newKnifeEnabled);
                     setInitialMatchzyKnifeEnabledDefault(newKnifeEnabled);
                     setMatchzyDebugChatEnabled(newDebugChatEnabled);

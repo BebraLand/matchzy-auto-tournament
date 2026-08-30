@@ -12,8 +12,10 @@ import swaggerUi from 'swagger-ui-express';
 import { db } from './config/database';
 import {
   ensureBroadcastAssetsDirectory,
+  ensureBrandingAssetsDirectory,
   ensureMapImagesDirectory,
   getBroadcastAssetsDirectory,
+  getBrandingAssetsDirectory,
   getMapImagesDirectory,
 } from './config/storage';
 import { swaggerSpec } from './config/swagger';
@@ -407,6 +409,8 @@ app.use('/app', express.static(publicPath));
 // Serve map images statically
 ensureMapImagesDirectory();
 app.use('/map-images', express.static(getMapImagesDirectory()));
+ensureBrandingAssetsDirectory();
+app.use('/branding-assets', express.static(getBrandingAssetsDirectory()));
 ensureBroadcastAssetsDirectory();
 app.use('/broadcast-assets', express.static(getBroadcastAssetsDirectory()));
 app.get('/app/*', (_req: Request, res: Response) => {

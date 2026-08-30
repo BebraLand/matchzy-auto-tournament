@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { getMapDisplayName, getMapFullImageUrl } from '../constants/maps';
 import type { VetoAction, VetoMapResult, VetoState } from '../types/veto.types';
+import { DEFAULT_BRANDING, useBranding } from '../contexts/BrandingContext';
 
 type VetoApiResponse = {
   success: boolean;
@@ -46,6 +47,7 @@ const actionLabel = (action: VetoAction['action']) => {
 const formatLabel = (format: VetoState['format']) => format.toUpperCase().replace('BO', 'BEST OF ');
 
 export default function BroadcastVeto() {
+  const { branding } = useBranding();
   const { matchSlug } = useParams<{ matchSlug: string }>();
   const [veto, setVeto] = useState<VetoState | null>(null);
   const [maps, setMaps] = useState<Map<string, MapMetadata>>(new Map());
@@ -207,7 +209,10 @@ export default function BroadcastVeto() {
     <BroadcastShell>
       <main className="veto-show" data-testid="broadcast-veto-show">
         <header className="veto-header">
-          <div className="veto-brand">BEBRALAND <span>LIVE VETO</span></div>
+          <div className="veto-brand">
+            <img src={branding.logoUrl} alt="" />
+            <b>{branding.displayName}</b> <span>LIVE VETO</span>
+          </div>
           <div className="veto-format">{formatLabel(veto.format)}</div>
           <div className={`veto-status ${isComplete ? 'complete' : ''}`}>
             <i /> {isComplete ? 'VETO COMPLETE' : 'LIVE'}
@@ -296,12 +301,24 @@ function TeamBanner({ team, name, logoUrl, active }: { team: 'team1' | 'team2'; 
 }
 
 function StandbyScreen() {
-  return <main className="veto-standby" data-testid="broadcast-veto-standby"><div className="standby-kicker">BEBRALAND BROADCAST</div><div className="standby-mark"><i /><i /><i /></div><h1>VETO DESK</h1><h2>WAITING FOR THE NEXT MATCH</h2><p>LIVE FEED STANDING BY</p><div className="standby-line"><span>MAT CONNECTED</span><b>•</b><span>OPEN VETO TO BEGIN</span></div></main>;
+  const { branding } = useBranding();
+  return <main className="veto-standby" data-testid="broadcast-veto-standby"><div className="standby-kicker">{branding.displayName} BROADCAST</div><div className="standby-mark"><i /><i /><i /></div><h1>VETO DESK</h1><h2>WAITING FOR THE NEXT MATCH</h2><p>LIVE FEED STANDING BY</p><div className="standby-line"><span>{branding.displayName} CONNECTED</span><b>•</b><span>OPEN VETO TO BEGIN</span></div></main>;
 }
 
 function BroadcastShell({ children }: { children: ReactNode }) {
+  const { branding } = useBranding();
+  const isDefaultBranding =
+    branding.primaryColor === DEFAULT_BRANDING.primaryColor &&
+    branding.secondaryColor === DEFAULT_BRANDING.secondaryColor;
   return (
-    <div className="broadcast-veto-root">
+    <div
+      className="broadcast-veto-root"
+      style={{
+        // Keep the existing broadcast palette until an operator chooses custom colors.
+        '--brand-primary': isDefaultBranding ? '#47B5FF' : branding.primaryColor,
+        '--brand-secondary': isDefaultBranding ? '#FFB44A' : branding.secondaryColor,
+      } as CSSProperties}
+    >
       <style>{broadcastStyles}</style>
       {children}
     </div>
@@ -353,4 +370,5 @@ const broadcastStyles = `
   .veto-loading, .veto-error { display: grid; place-items: center; min-height: 100vh; color: #b8dbf7; letter-spacing: .18em; font-weight: 900; }.veto-error { color: #ff9ca2; }
   @keyframes vetoLivePulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.65); } } @keyframes teamOnClock { 0%,100% { box-shadow: inset 0 0 35px rgba(255,255,255,.08), 0 0 10px rgba(255,255,255,.06); } 50% { box-shadow: inset 0 0 35px rgba(255,255,255,.16), 0 0 36px rgba(255,255,255,.18); } } @keyframes mapActionReveal { 0% { transform: scale(1.13); opacity: .15; filter: brightness(2); } 100% { transform: scale(1); opacity: 1; filter: brightness(1); } }
   @media (max-width: 800px) { .veto-show { padding: 22px 16px; }.veto-header { grid-template-columns: 1fr auto; gap: 12px; }.veto-format { grid-row: 2; }.veto-status { grid-row: 2; }.matchup { grid-template-columns: 1fr; gap: 12px; }.team-banner.team2 { flex-direction: row; text-align: left; }.team2 small { left: auto; right: 1.25vw; }.versus { order: 1; }.team-banner.team2 { order: 2; }.map-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }.map-card { min-height: 135px; }.map-info, .map-stage { left: 12px; right: 12px; } }
+  .veto-brand { display:flex; align-items:center; gap:.6em; }.veto-brand img { width:1.7em; height:1.7em; object-fit:contain; }.veto-brand span { color:var(--brand-primary); }.team-indicator { background:var(--brand-primary); box-shadow:0 0 25px var(--brand-primary); }.team2 .team-indicator { background:var(--brand-secondary); box-shadow:0 0 25px var(--brand-secondary); }.team-banner small { background:var(--brand-primary); }.team2 small { background:var(--brand-secondary); }.standby-kicker { color:var(--brand-primary); }.standby-mark i:first-child { background:var(--brand-primary); }.standby-mark i:nth-child(3) { background:var(--brand-secondary); }
 `;

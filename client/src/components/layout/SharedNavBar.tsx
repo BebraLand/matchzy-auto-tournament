@@ -18,6 +18,7 @@ import { LanguageSwitcher } from '../common/LanguageSwitcher';
 import { PlayerAvatar } from '../player/PlayerAvatar';
 import { generateAvatarDataUrl } from '../../generation/avatar';
 import { api } from '../../utils/api';
+import { BrandLogo } from '../common/BrandLogo';
 
 const PLAYER_AVATAR_CACHE_KEY_PREFIX = 'mat.playerAvatarUrl:';
 
@@ -208,12 +209,7 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
             textDecoration: 'none',
           }}
         >
-          <Box
-            component="img"
-            src="/icon.svg"
-            alt="Matchzy Auto Tournament"
-            sx={{ height: 32 }}
-          />
+          <BrandLogo />
         </Box>
 
         <Box

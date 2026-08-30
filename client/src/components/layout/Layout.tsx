@@ -47,6 +47,7 @@ import type { SettingsResponse } from '../../types/api.types';
 import { useIsDevelopment } from '../../hooks/useIsDevelopment';
 import { useTranslation } from 'react-i18next';
 import { SharedNavBar } from './SharedNavBar';
+import { BrandLogo } from '../common/BrandLogo';
 
 const drawerWidth = 240;
 
@@ -515,12 +516,7 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
               justifyContent: 'space-between',
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box component="img" src="/icon.svg" alt="Logo" sx={{ width: 32, height: 32 }} />
-              <Typography variant="body2" noWrap component="div" sx={{ fontWeight: 600 }}>
-                Matchzy Auto Tournament
-              </Typography>
-            </Box>
+            <BrandLogo />
             <IconButton onClick={handleDrawerClose}>
               {theme.direction === 'rtl' ? <ChevronRightIcon /> : <ChevronLeftIcon />}
             </IconButton>

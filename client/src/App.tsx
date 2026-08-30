@@ -1,5 +1,5 @@
 import React from 'react';
-import { ThemeProvider, CssBaseline, Box } from '@mui/material';
+import { Box } from '@mui/material';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { PageHeaderProvider } from './contexts/PageHeaderContext';
@@ -29,7 +29,7 @@ import ELOTemplates from './pages/ELOTemplates';
 import BroadcastVeto from './pages/BroadcastVeto';
 import Layout from './components/layout/Layout';
 import NotFound from './pages/NotFound';
-import { theme } from './theme';
+import { BrandLogo } from './components/common/BrandLogo';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -59,21 +59,7 @@ function ProtectedRoute({ children, adminOnly = true }: ProtectedRouteProps) {
         }}
       >
         <Box textAlign="center">
-          <Box
-            component="img"
-            src="/icon.svg"
-            alt="Logo"
-            sx={{
-              width: 80,
-              height: 80,
-              mb: 2,
-              animation: 'pulse 2s ease-in-out infinite',
-              '@keyframes pulse': {
-                '0%, 100%': { opacity: 1 },
-                '50%': { opacity: 0.5 },
-              },
-            }}
-          />
+          <BrandLogo />
         </Box>
       </Box>
     );
@@ -256,17 +242,14 @@ function AuthenticatedApp() {
 
 export default function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <Routes>
-          {/* OBS needs a truly standalone source. Keep it outside AuthProvider so
-              a fresh browser source never waits on a Steam session bootstrap. */}
-          <Route path="/broadcast/veto" element={<BroadcastVeto />} />
-          <Route path="/broadcast/veto/:matchSlug" element={<BroadcastVeto />} />
-          <Route path="*" element={<AuthenticatedApp />} />
-        </Routes>
-      </BrowserRouter>
-    </ThemeProvider>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <Routes>
+        {/* OBS needs a truly standalone source. Keep it outside AuthProvider so
+            a fresh browser source never waits on a Steam session bootstrap. */}
+        <Route path="/broadcast/veto" element={<BroadcastVeto />} />
+        <Route path="/broadcast/veto/:matchSlug" element={<BroadcastVeto />} />
+        <Route path="*" element={<AuthenticatedApp />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

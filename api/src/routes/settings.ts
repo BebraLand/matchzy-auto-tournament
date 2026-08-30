@@ -3,6 +3,9 @@ import { requireAuth } from '../middleware/auth';
 import { settingsService } from '../services/settingsService';
 import { log } from '../utils/logger';
 import packageJson from '../../package.json';
+import fs from 'fs';
+import path from 'path';
+import { ensureBrandingAssetsDirectory, getBrandingAssetsDirectory } from '../config/storage';
 
 const router = Router();
 
@@ -12,6 +15,11 @@ router.get('/version', async (_req: Request, res: Response) => {
     success: true,
     version: packageJson.version,
   });
+});
+
+// Public branding is intentionally separate from the authenticated settings payload.
+router.get('/branding', async (_req: Request, res: Response) => {
+  return res.json({ success: true, branding: await settingsService.getBranding() });
 });
 
 router.use(requireAuth);
@@ -32,6 +40,7 @@ const mapSettingsResponse = async () => {
   
   // MatchZy Enhanced v1.3.0 settings
   const matchzyEnhanced = await settingsService.getMatchzyEnhancedSettings();
+  const branding = await settingsService.getBranding();
 
   return {
     webhookUrl,
@@ -47,6 +56,7 @@ const mapSettingsResponse = async () => {
     ratingsEnabled,
     matchzyDebugChatEnabled,
     allowSelfRegister,
+    branding,
     // MatchZy core defaults
     matchzyAutostartMode: matchzyCore.autostartMode,
     matchzyMinimumReadyRequired: matchzyCore.minimumReadyRequired,
@@ -96,6 +106,7 @@ router.put('/', async (req: Request, res: Response) => {
     ratingsEnabled,
     matchzyDebugChatEnabled,
     allowSelfRegister,
+    branding,
     // MatchZy core defaults
     matchzyAutostartMode,
     matchzyMinimumReadyRequired,
@@ -134,6 +145,7 @@ router.put('/', async (req: Request, res: Response) => {
     ratingsEnabled?: unknown;
     matchzyDebugChatEnabled?: unknown;
     allowSelfRegister?: unknown;
+    branding?: unknown;
     // MatchZy core defaults
     matchzyAutostartMode?: unknown;
     matchzyMinimumReadyRequired?: unknown;
@@ -165,6 +177,34 @@ router.put('/', async (req: Request, res: Response) => {
   };
 
   try {
+    if (branding !== undefined) {
+      if (!branding || typeof branding !== 'object' || Array.isArray(branding)) {
+        return res.status(400).json({ success: false, error: 'branding must be an object' });
+      }
+      const values = branding as Record<string, unknown>;
+      const brandingKeyMap = {
+        displayName: 'branding_name',
+        logoUrl: 'branding_logo_url',
+        primaryColor: 'branding_primary_color',
+        secondaryColor: 'branding_secondary_color',
+      } as const;
+      if (Object.keys(values).some((key) => !(key in brandingKeyMap))) {
+        return res.status(400).json({ success: false, error: 'Unknown branding field' });
+      }
+      for (const field of Object.keys(brandingKeyMap) as Array<keyof typeof brandingKeyMap>) {
+        if (values[field] !== undefined) {
+          const value = values[field];
+          if (value !== null && typeof value !== 'string') {
+            return res.status(400).json({
+              success: false,
+              error: `branding.${field} must be a string or null`,
+            });
+          }
+          await settingsService.setSetting(brandingKeyMap[field], value as string | null);
+        }
+      }
+    }
+
     if (webhookUrl !== undefined) {
       if (typeof webhookUrl !== 'string' && webhookUrl !== null) {
         return res.status(400).json({
@@ -647,6 +687,53 @@ router.put('/', async (req: Request, res: Response) => {
     return res.status(400).json({
       success: false,
       error: message,
+    });
+  }
+});
+
+router.post('/branding/logo', async (req: Request, res: Response) => {
+  try {
+    const { imageData } = req.body as { imageData?: unknown };
+    if (typeof imageData !== 'string') {
+      return res.status(400).json({ success: false, error: 'imageData is required' });
+    }
+
+    const match = imageData.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/i);
+    if (!match) {
+      return res.status(400).json({
+        success: false,
+        error: 'Logo must be a PNG, JPEG, or WebP data URL',
+      });
+    }
+
+    const extension = match[1].toLowerCase() === 'jpeg' ? 'jpg' : match[1].toLowerCase();
+    const buffer = Buffer.from(match[2], 'base64');
+    if (buffer.length === 0 || buffer.length > 5 * 1024 * 1024) {
+      return res.status(400).json({ success: false, error: 'Logo must be 5 MB or smaller' });
+    }
+
+    ensureBrandingAssetsDirectory();
+    const filename = `logo.${extension}`;
+    const filepath = path.join(getBrandingAssetsDirectory(), filename);
+    const temporaryFilepath = `${filepath}.${process.pid}.tmp`;
+    fs.writeFileSync(temporaryFilepath, buffer);
+    fs.renameSync(temporaryFilepath, filepath);
+    for (const otherExtension of ['png', 'jpg', 'webp']) {
+      if (otherExtension !== extension) {
+        const stalePath = path.join(getBrandingAssetsDirectory(), `logo.${otherExtension}`);
+        if (fs.existsSync(stalePath)) fs.unlinkSync(stalePath);
+      }
+    }
+
+    // Keep the stable filename on disk but bust browser caches after each upload.
+    const logoUrl = `/branding-assets/${filename}?v=${Date.now()}`;
+    await settingsService.setSetting('branding_logo_url', logoUrl);
+    return res.json({ success: true, logoUrl, branding: await settingsService.getBranding() });
+  } catch (error) {
+    log.error('Failed to upload branding logo', error);
+    return res.status(400).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to upload branding logo',
     });
   }
 });

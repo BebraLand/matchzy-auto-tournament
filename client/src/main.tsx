@@ -8,6 +8,7 @@ import './index.css';
 import i18n from './i18n';
 import { theme as baseTheme } from './theme';
 import { createTheme } from '@mui/material/styles';
+import { BrandingProvider, useBranding } from './contexts/BrandingContext';
 
 // Log application version on startup (injected by Vite from package.json)
 
@@ -26,20 +27,32 @@ const getMuiLocale = (lang: string) => {
 };
 
 const Root: React.FC = () => {
-  const [muiTheme, setMuiTheme] = React.useState(() =>
-    createTheme(baseTheme, getMuiLocale(i18n.language))
-  );
+  const { branding } = useBranding();
+  const [language, setLanguage] = React.useState(i18n.language);
 
   React.useEffect(() => {
-    const handleLanguageChange = (lng: string) => {
-      setMuiTheme(createTheme(baseTheme, getMuiLocale(lng)));
-    };
+    const handleLanguageChange = (lng: string) => setLanguage(lng);
 
     i18n.on('languageChanged', handleLanguageChange);
     return () => {
       i18n.off('languageChanged', handleLanguageChange);
     };
   }, []);
+
+  const muiTheme = React.useMemo(
+    () =>
+      createTheme(
+        baseTheme,
+        {
+          palette: {
+            primary: { main: branding.primaryColor },
+            secondary: { main: branding.secondaryColor },
+          },
+        },
+        getMuiLocale(language)
+      ),
+    [branding.primaryColor, branding.secondaryColor, language]
+  );
 
   return (
     <React.StrictMode>
@@ -53,4 +66,8 @@ const Root: React.FC = () => {
   );
 };
 
-ReactDOM.createRoot(document.getElementById('root')!).render(<Root />);
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <BrandingProvider>
+    <Root />
+  </BrandingProvider>
+);

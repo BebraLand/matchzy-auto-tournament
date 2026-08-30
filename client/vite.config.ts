@@ -44,6 +44,10 @@ export default defineConfig({
         target: apiProxyTarget,
         changeOrigin: true,
       },
+      '/branding-assets': {
+        target: apiProxyTarget,
+        changeOrigin: true,
+      },
     },
   },
 });

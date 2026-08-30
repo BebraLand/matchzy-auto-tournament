@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { SteamIcon } from '../components/icons/SteamIcon';
 import { TopNavBar } from '../components/layout/TopNavBar';
+import { BrandLogo } from '../components/common/BrandLogo';
 
 export default function Login() {
   const { t } = useTranslation();
@@ -148,11 +149,7 @@ export default function Login() {
                   width: '100%',
                 }}
               >
-                <img
-                  src="/icon.svg"
-                  alt="MatchZy Auto Tournament Logo"
-                  style={{ width: '108px', height: '108px' }}
-                />
+                <BrandLogo size={108} />
               </Box>
 
               <Stack spacing={0.5} alignItems="center" sx={{ textAlign: 'center', px: 2 }}>

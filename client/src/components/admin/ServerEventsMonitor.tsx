@@ -14,6 +14,7 @@ import {
   Paper,
   IconButton,
   Tooltip,
+  useTheme,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -25,6 +26,7 @@ import { io, Socket } from 'socket.io-client';
 import type { ServerEvent, ServerEventsResponse } from '../../types';
 
 export const ServerEventsMonitor: React.FC = () => {
+  const theme = useTheme();
   const [servers, setServers] = useState<Array<{ id: string; name: string; events?: number }>>([]);
   const [selectedServerId, setSelectedServerId] = useState<string>('');
   const [events, setEvents] = useState<ServerEvent[]>([]);
@@ -236,11 +238,11 @@ export const ServerEventsMonitor: React.FC = () => {
     switch (eventType) {
       case 'series_start':
       case 'going_live':
-        return '#A6E3D0'; // success (mint)
+        return theme.palette.success.main;
       case 'series_end':
         return '#A8C7FA'; // info (soft blue)
       case 'map_result':
-        return '#D0BCFF'; // primary purple
+        return theme.palette.primary.main;
       case 'map_picked':
       case 'side_picked':
       case 'map_vetoed':
@@ -287,7 +289,7 @@ export const ServerEventsMonitor: React.FC = () => {
         return '#38BDF8'; // upload started (sky)
       case 'demo_upload_success':
       case 'demo_upload_ended':
-        return '#A6E3D0'; // upload success (mint)
+        return theme.palette.success.main;
       case 'demo_upload_fail':
         return '#F87171'; // upload failures (red)
       default:

@@ -11,6 +11,10 @@ export type AppSettingKey =
   | 'matchzy_debug_chat'
   | 'ratings_enabled'
   | 'allow_self_register'
+  | 'branding_name'
+  | 'branding_logo_url'
+  | 'branding_primary_color'
+  | 'branding_secondary_color'
   // MatchZy core defaults (persisted convars)
   | 'matchzy_autostart_mode'
   | 'matchzy_minimum_ready_required'
@@ -56,6 +60,10 @@ const ALLOWED_KEYS: AppSettingKey[] = [
   'matchzy_debug_chat',
   'ratings_enabled',
   'allow_self_register',
+  'branding_name',
+  'branding_logo_url',
+  'branding_primary_color',
+  'branding_secondary_color',
   // MatchZy core defaults (persisted convars)
   'matchzy_autostart_mode',
   'matchzy_minimum_ready_required',
@@ -204,6 +212,31 @@ class SettingsService {
           normalized === 'enabled';
         await db.setAppSettingAsync(key, isEnabled ? '1' : '0');
         log.success(`Player self‑registration ${isEnabled ? 'enabled' : 'disabled'}`);
+        return;
+      }
+
+      if (key === 'branding_name') {
+        if (trimmed.length > 80) throw new Error('Branding name must be 80 characters or fewer');
+        await db.setAppSettingAsync(key, trimmed);
+        log.success('Branding name updated');
+        return;
+      }
+
+      if (key === 'branding_logo_url') {
+        if (!this.isSafeBrandingUrl(trimmed)) {
+          throw new Error('Branding logo must be an HTTP(S) URL or a local asset path');
+        }
+        await db.setAppSettingAsync(key, trimmed);
+        log.success('Branding logo updated');
+        return;
+      }
+
+      if (key === 'branding_primary_color' || key === 'branding_secondary_color') {
+        if (!/^#[0-9a-f]{6}$/i.test(trimmed)) {
+          throw new Error(`${key} must be a 6-digit hex color`);
+        }
+        await db.setAppSettingAsync(key, trimmed.toUpperCase());
+        log.success(`${key} updated`);
         return;
       }
 
@@ -386,6 +419,27 @@ class SettingsService {
     const trimmed = value ? value.trim() : '';
     // Default to a sensible admin prefix if none is configured explicitly
     return trimmed !== '' ? trimmed : '[{Red}ADMIN{Default}]';
+  }
+
+  async getBranding(): Promise<{
+    displayName: string;
+    logoUrl: string;
+    primaryColor: string;
+    secondaryColor: string;
+  }> {
+    const [name, logoUrl, primaryColor, secondaryColor] = await Promise.all([
+      this.getSetting('branding_name'),
+      this.getSetting('branding_logo_url'),
+      this.getSetting('branding_primary_color'),
+      this.getSetting('branding_secondary_color'),
+    ]);
+
+    return {
+      displayName: name?.trim() || 'Matchzy Auto Tournament',
+      logoUrl: logoUrl?.trim() && this.isSafeBrandingUrl(logoUrl.trim()) ? logoUrl.trim() : '/icon.svg',
+      primaryColor: this.normalizeBrandColor(primaryColor, '#D0BCFF'),
+      secondaryColor: this.normalizeBrandColor(secondaryColor, '#CCC2DC'),
+    };
   }
 
   async isMatchzyDebugChatEnabled(): Promise<boolean> {
@@ -719,6 +773,20 @@ class SettingsService {
       throw new Error(
         'Invalid webhook URL. Please provide a full URL including protocol (e.g., https://example.com)'
       );
+    }
+  }
+
+  private normalizeBrandColor(value: string | null, fallback: string): string {
+    return value && /^#[0-9a-f]{6}$/i.test(value.trim()) ? value.trim().toUpperCase() : fallback;
+  }
+
+  private isSafeBrandingUrl(value: string): boolean {
+    if (value.startsWith('/')) return !value.startsWith('//') && !value.includes('..');
+    try {
+      const url = new URL(value);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
     }
   }
 }

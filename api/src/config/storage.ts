@@ -16,6 +16,16 @@ export function ensureMapImagesDirectory(): void {
   fs.mkdirSync(getMapImagesDirectory(), { recursive: true });
 }
 
+export function getBrandingAssetsDirectory(): string {
+  return path.resolve(
+    process.env.BRANDING_ASSETS_DIR || path.join(process.cwd(), 'data', 'branding-assets')
+  );
+}
+
+export function ensureBrandingAssetsDirectory(): void {
+  fs.mkdirSync(getBrandingAssetsDirectory(), { recursive: true });
+}
+
 export type BroadcastAssetKind = 'players' | 'teams';
 
 export function getBroadcastAssetsDirectory(): string {
