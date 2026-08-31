@@ -125,7 +125,17 @@ function teamIdForVetoValue(value: string | undefined, match: MatchRow): string 
 
 class HudProjectionService {
   async getBroadcastMatchSlug(): Promise<string | null> {
-    return db.getAppSettingAsync(BROADCAST_MATCH_SETTING);
+    const slug = await db.getAppSettingAsync(BROADCAST_MATCH_SETTING);
+    if (!slug) return null;
+
+    const match = await db.queryOneAsync<Pick<MatchRow, 'status' | 'operator_state'>>(
+      `SELECT status, operator_state FROM matches
+       WHERE slug = ?
+         AND status IN ('pending', 'ready', 'loaded', 'live')
+         AND COALESCE(operator_state, 'queued') NOT IN ('held', 'postponed')`,
+      [slug]
+    );
+    return match ? slug : null;
   }
 
   async setBroadcastMatch(slug: string | null): Promise<string | null> {
@@ -138,6 +148,9 @@ class HudProjectionService {
     const config = parseJson<Partial<MatchConfig>>(match.config, {});
     if (!(match.team1_id || config.team1) || !(match.team2_id || config.team2)) {
       throw new Error('Broadcast match must have two assigned teams');
+    }
+    if (!['pending', 'ready', 'loaded', 'live'].includes(match.status)) {
+      throw new Error('Completed or cancelled match cannot be selected for broadcast');
     }
     if (match.operator_state === 'held' || match.operator_state === 'postponed') {
       throw new Error('Held or postponed match cannot be selected for broadcast');
@@ -215,7 +228,9 @@ class HudProjectionService {
     if (selected) {
       const match = await db.queryOneAsync<MatchRow>(
         `SELECT * FROM matches
-         WHERE slug = ? AND COALESCE(operator_state, 'queued') NOT IN ('held', 'postponed')`,
+         WHERE slug = ?
+           AND status IN ('pending', 'ready', 'loaded', 'live')
+           AND COALESCE(operator_state, 'queued') NOT IN ('held', 'postponed')`,
         [selected]
       );
       if (match) return match;
