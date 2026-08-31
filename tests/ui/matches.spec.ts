@@ -58,4 +58,32 @@ test.describe.serial('Matches UI', () => {
       await expect(page.getByTestId('matches-empty-state')).toHaveCount(0);
     }
   );
+
+  test(
+    'should enable player ready by default and show its explicit status',
+    { tag: ['@ui', '@matches'] },
+    async ({ page }) => {
+      await page.goto('/matches');
+      await page
+        .getByRole('button', { name: /^(Create Match|Or Create Manual Match)$/ })
+        .click();
+      await page.getByText('Create new match', { exact: true }).click();
+      await page.getByRole('button', { name: 'Next' }).click();
+      await page.getByRole('button', { name: 'Next' }).click();
+
+      const mapPicker = page.getByPlaceholder('Choose maps...');
+      await expect(mapPicker).toBeVisible();
+      await mapPicker.click();
+      await page.getByRole('option').first().click();
+      await page.getByRole('button', { name: 'Next' }).click();
+
+      const playerReady = page.getByRole('switch', { name: 'Player ready' });
+      await expect(playerReady).toBeChecked();
+      await expect(page.getByText('Player ready: Enabled', { exact: true })).toBeVisible();
+
+      await playerReady.click();
+      await expect(playerReady).not.toBeChecked();
+      await expect(page.getByText('Player ready: Disabled', { exact: true })).toBeVisible();
+    }
+  );
 });

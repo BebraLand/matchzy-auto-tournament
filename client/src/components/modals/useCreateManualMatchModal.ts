@@ -135,7 +135,7 @@ export function useCreateManualMatchModal({
   const [maxRounds, setMaxRounds] = useState<number>(24);
   const [overtimeEnabled, setOvertimeEnabled] = useState<boolean>(true);
   const [overtimeMaxRounds, setOvertimeMaxRounds] = useState<number | null>(null);
-  const [playerReadyEnabled, setPlayerReadyEnabled] = useState<boolean>(false);
+  const [playerReadyEnabled, setPlayerReadyEnabled] = useState<boolean>(true);
   const [mapSideSelections, setMapSideSelections] = useState<
     Array<'knife' | 'team1_ct' | 'team2_ct'>
   >(['knife']);
@@ -174,7 +174,7 @@ export function useCreateManualMatchModal({
     setMaxRounds(24);
     setOvertimeEnabled(true);
     setOvertimeMaxRounds(null);
-    setPlayerReadyEnabled(false);
+    setPlayerReadyEnabled(true);
     setBestOf('bo1');
     setKnifeMode('default');
     setStartingSide('knife');

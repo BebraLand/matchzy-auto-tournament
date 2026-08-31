@@ -323,14 +323,11 @@ export const ManualMatchBasicsStep: React.FC<ManualMatchBasicsStepProps> = ({
             <Switch
               checked={playerReadyEnabled}
               onChange={(e) => onPlayerReadyEnabledChange(e.target.checked)}
+              inputProps={{ 'aria-label': 'Player ready' }}
               color="primary"
             />
           }
-          label={
-            playerReadyEnabled
-              ? 'Players can start the manual match with .ready'
-              : 'Only an operator can start the manual match'
-          }
+          label={`Player ready: ${playerReadyEnabled ? 'Enabled' : 'Disabled'}`}
         />
         <Typography variant="caption" color="text.secondary" display="block">
           This setting applies only to this manual match and is independent of the tournament
