@@ -32,6 +32,7 @@ test.describe.serial('Authentication', () => {
     async ({ page }) => {
       await page.goto('/login');
       await expect(page).toHaveTitle(/Login/i);
+      await expect(page.getByTestId('nav-sign-in-button')).toBeVisible();
 
       // Login is provider-based (SSO): one button per *enabled* provider. Which
       // providers are enabled depends on the environment — Steam, for instance,

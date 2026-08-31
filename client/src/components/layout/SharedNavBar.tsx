@@ -8,6 +8,7 @@ import {
   MenuItem,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
+import LoginIcon from '@mui/icons-material/Login';
 import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -264,6 +265,21 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
           ) : null}
         </Box>
         <LanguageSwitcher />
+
+        {!playerSteamId && !isAuthenticated && !needsSteamLink && (
+          <Button
+            component={RouterLink}
+            to="/login"
+            variant="contained"
+            color="primary"
+            size="small"
+            startIcon={<LoginIcon />}
+            data-testid="nav-sign-in-button"
+            sx={{ fontWeight: 700, textTransform: 'none', px: 2 }}
+          >
+            {t('login.signIn')}
+          </Button>
+        )}
 
         {needsSteamLink && (
           <Button
