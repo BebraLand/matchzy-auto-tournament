@@ -170,5 +170,9 @@ test.describe.serial('Series stats', () => {
     expect(row.deaths).toBe(map1.deaths + map2.deaths);
     expect(row.assists).toBe(map1.assists + map2.assists);
     expect(row.total_damage).toBe(map1.damage + map2.damage);
+
+    const leaderboard = await (await request.get(`/api/players/stats?playerId=${steamId}`)).json();
+    const leaderboardRow = leaderboard.stats?.find((player: { id: string }) => player.id === steamId);
+    expect(leaderboardRow?.kills).toBe(map1.kills + map2.kills);
   });
 });

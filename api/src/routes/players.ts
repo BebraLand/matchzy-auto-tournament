@@ -210,6 +210,122 @@ function parseStatsDate(value: unknown, endOfDay = false): number | undefined {
   return Math.floor(date.getTime() / 1000);
 }
 
+type PlayerStatsAggregate = {
+  id: string;
+  name: string;
+  matches: Set<string>;
+  wins: Set<string>;
+  kills: number;
+  deaths: number;
+  assists: number;
+  headshots: number;
+  flashAssists: number;
+  enemiesFlashed: number;
+  utilityDamage: number;
+  mvps: number;
+  score: number;
+  totalDamage: number;
+  roundsPlayed: number;
+  kastRounds: number;
+};
+
+type StoredPlayerStatLine = {
+  steamId?: string;
+  steamid?: string;
+  name?: string;
+  kills?: unknown;
+  deaths?: unknown;
+  assists?: unknown;
+  headshotKills?: unknown;
+  headshots?: unknown;
+  flashAssists?: unknown;
+  enemiesFlashed?: unknown;
+  utilityDamage?: unknown;
+  mvps?: unknown;
+  mvp?: unknown;
+  score?: unknown;
+  damage?: unknown;
+  roundsPlayed?: unknown;
+  rounds_played?: unknown;
+  kast?: unknown;
+};
+
+function numberValue(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function parseStoredPlayerStats(value: string | null): {
+  team1: StoredPlayerStatLine[];
+  team2: StoredPlayerStatLine[];
+} | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as { team1?: unknown; team2?: unknown };
+    return Array.isArray(parsed.team1) && Array.isArray(parsed.team2)
+      ? {
+          team1: parsed.team1 as StoredPlayerStatLine[],
+          team2: parsed.team2 as StoredPlayerStatLine[],
+        }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function addPlayerStats(
+  aggregates: Map<string, PlayerStatsAggregate>,
+  line: StoredPlayerStatLine,
+  matchSlug: string,
+  wonMatch: boolean,
+  playerIdFilter?: string
+): boolean {
+  const id = line.steamId || line.steamid;
+  if (!id || (playerIdFilter && id.toLowerCase() !== playerIdFilter.toLowerCase())) {
+    return false;
+  }
+
+  const key = id.toLowerCase();
+  const current = aggregates.get(key) ?? {
+    id,
+    name: line.name || id,
+    matches: new Set<string>(),
+    wins: new Set<string>(),
+    kills: 0,
+    deaths: 0,
+    assists: 0,
+    headshots: 0,
+    flashAssists: 0,
+    enemiesFlashed: 0,
+    utilityDamage: 0,
+    mvps: 0,
+    score: 0,
+    totalDamage: 0,
+    roundsPlayed: 0,
+    kastRounds: 0,
+  };
+
+  current.name = line.name || current.name;
+  current.matches.add(matchSlug);
+  if (wonMatch) current.wins.add(matchSlug);
+
+  const roundsPlayed = numberValue(line.roundsPlayed ?? line.rounds_played);
+  current.kills += numberValue(line.kills);
+  current.deaths += numberValue(line.deaths);
+  current.assists += numberValue(line.assists);
+  current.headshots += numberValue(line.headshotKills ?? line.headshots);
+  current.flashAssists += numberValue(line.flashAssists);
+  current.enemiesFlashed += numberValue(line.enemiesFlashed);
+  current.utilityDamage += numberValue(line.utilityDamage);
+  current.mvps += numberValue(line.mvps ?? line.mvp);
+  current.score += numberValue(line.score);
+  current.totalDamage += numberValue(line.damage);
+  current.roundsPlayed += roundsPlayed;
+  current.kastRounds += numberValue(line.kast) * roundsPlayed;
+  aggregates.set(key, current);
+  return true;
+}
+
 /**
  * GET /api/players/stats
  * Aggregate completed-series statistics for the public player leaderboard.
@@ -235,125 +351,172 @@ router.get('/stats', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Invalid playerId' });
     }
 
-    const filters = ["m.status = 'completed'", 'm.completed_at IS NOT NULL'];
+    const matchFilters = ["m.status = 'completed'", 'm.completed_at IS NOT NULL'];
     const params: unknown[] = [];
 
     if (from !== undefined) {
-      filters.push('m.completed_at >= ?');
+      matchFilters.push('m.completed_at >= ?');
       params.push(from);
     }
     if (to !== undefined) {
-      filters.push('m.completed_at < ?');
+      matchFilters.push('m.completed_at < ?');
       params.push(to);
     }
     if (tournamentId !== undefined) {
-      filters.push('m.tournament_id = ?');
+      matchFilters.push('m.tournament_id = ?');
       params.push(Number(tournamentId));
     }
     if (teamId !== undefined) {
-      filters.push("((pms.team = 'team1' AND m.team1_id = ?) OR (pms.team = 'team2' AND m.team2_id = ?))");
+      matchFilters.push('(m.team1_id = ? OR m.team2_id = ?)');
       params.push(teamId, teamId);
     }
-    if (playerId !== undefined) {
-      filters.push('LOWER(pms.player_id) = LOWER(?)');
-      params.push(playerId);
-    }
-
-    const rows = await db.queryAsync<{
-      player_id: string;
-      name: string;
-      avatar_url?: string | null;
-      current_elo?: number | null;
-      matches_played: number | string;
-      wins: number | string;
-      kills: number | string;
-      deaths: number | string;
-      assists: number | string;
-      headshots: number | string;
-      flash_assists: number | string;
-      enemies_flashed: number | string;
-      utility_damage: number | string;
-      mvps: number | string;
-      score: number | string;
-      total_damage: number | string;
-      rounds_played: number | string;
-      kast_rounds: number | string;
-    }>(
-      `WITH deduped AS (
-        SELECT pms.*,
-               ROW_NUMBER() OVER (
-                 PARTITION BY LOWER(pms.player_id), pms.match_slug
-                 ORDER BY pms.created_at DESC, pms.id DESC
-               ) AS row_number
-        FROM player_match_stats pms
-        JOIN matches m ON m.slug = pms.match_slug
-        WHERE ${filters.join(' AND ')}
-      )
-      SELECT
-        d.player_id,
-        p.name,
-        p.avatar_url,
-        p.current_elo,
-        COUNT(*)::int AS matches_played,
-        SUM(CASE WHEN d.won_match THEN 1 ELSE 0 END)::int AS wins,
-        COALESCE(SUM(d.kills), 0)::int AS kills,
-        COALESCE(SUM(d.deaths), 0)::int AS deaths,
-        COALESCE(SUM(d.assists), 0)::int AS assists,
-        COALESCE(SUM(d.headshots), 0)::int AS headshots,
-        COALESCE(SUM(d.flash_assists), 0)::int AS flash_assists,
-        COALESCE(SUM(d.enemies_flashed), 0)::int AS enemies_flashed,
-        COALESCE(SUM(d.utility_damage), 0)::int AS utility_damage,
-        COALESCE(SUM(d.mvps), 0)::int AS mvps,
-        COALESCE(SUM(d.score), 0)::int AS score,
-        COALESCE(SUM(d.total_damage), 0)::int AS total_damage,
-        COALESCE(SUM(d.rounds_played), 0)::int AS rounds_played,
-        COALESCE(SUM(COALESCE(d.kast, 0) * COALESCE(d.rounds_played, 0)), 0)::real AS kast_rounds
-      FROM deduped d
-      JOIN players p ON LOWER(p.id) = LOWER(d.player_id)
-      WHERE d.row_number = 1
-      GROUP BY d.player_id, p.name, p.avatar_url, p.current_elo
-      ORDER BY kills DESC, deaths ASC, p.name ASC`,
+    type MapStatsRow = {
+      match_slug: string;
+      team1_id: string | null;
+      team2_id: string | null;
+      winner_id: string | null;
+      player_stats: string | null;
+    };
+    const mapRows = await db.queryAsync<MapStatsRow>(
+      `SELECT r.match_slug, m.team1_id, m.team2_id, m.winner_id, r.player_stats
+       FROM match_map_results r
+       JOIN matches m ON m.slug = r.match_slug
+       WHERE ${matchFilters.join(' AND ')}`,
       params
     );
 
-    const stats = rows.map((row) => {
-      const matchesPlayed = Number(row.matches_played);
-      const wins = Number(row.wins);
-      const kills = Number(row.kills);
-      const deaths = Number(row.deaths);
-      const assists = Number(row.assists);
-      const roundsPlayed = Number(row.rounds_played);
-      const totalDamage = Number(row.total_damage);
-      const headshots = Number(row.headshots);
+    const aggregates = new Map<string, PlayerStatsAggregate>();
+    const matchesWithMapStats = new Set<string>();
+    for (const row of mapRows) {
+      const playerStats = parseStoredPlayerStats(row.player_stats);
+      if (!playerStats) continue;
 
-      return {
-        id: row.player_id,
-        name: row.name,
-        avatar: row.avatar_url || `/api/players/${row.player_id}/avatar.svg`,
-        currentElo: row.current_elo == null ? undefined : Number(row.current_elo),
-        matchesPlayed,
-        wins,
-        losses: matchesPlayed - wins,
-        winRate: matchesPlayed > 0 ? wins / matchesPlayed : 0,
-        kills,
-        deaths,
-        assists,
-        kdRatio: deaths > 0 ? kills / deaths : kills > 0 ? null : 0,
-        kdaRatio: deaths > 0 ? (kills + assists) / deaths : kills + assists > 0 ? null : 0,
-        plusMinus: kills - deaths,
-        adr: roundsPlayed > 0 ? totalDamage / roundsPlayed : 0,
-        kast: roundsPlayed > 0 ? Number(row.kast_rounds) / roundsPlayed : 0,
-        headshots,
-        headshotPercent: kills > 0 ? (headshots / kills) * 100 : 0,
-        flashAssists: Number(row.flash_assists),
-        enemiesFlashed: Number(row.enemies_flashed),
-        utilityDamage: Number(row.utility_damage),
-        mvps: Number(row.mvps),
-        score: Number(row.score),
-        totalDamage,
-        roundsPlayed,
-      };
-    });
+      let hasStats = false;
+      for (const [team, players] of [
+        ['team1', playerStats.team1],
+        ['team2', playerStats.team2],
+      ] as const) {
+        const rowTeamId = team === 'team1' ? row.team1_id : row.team2_id;
+        if (teamId && rowTeamId?.toLowerCase() !== teamId.toLowerCase()) continue;
+        const wonMatch =
+          (team === 'team1' && row.winner_id === row.team1_id) ||
+          (team === 'team2' && row.winner_id === row.team2_id);
+        for (const player of players) {
+          hasStats =
+            addPlayerStats(aggregates, player, row.match_slug, wonMatch, playerId) || hasStats;
+        }
+      }
+      if (hasStats) matchesWithMapStats.add(row.match_slug);
+    }
+
+    // Older matches may have no JSON map snapshots. Keep their existing series
+    // row as a fallback, but never mix it with map snapshots from the same match.
+    const fallbackRows = await db.queryAsync<{
+      player_id: string;
+      match_slug: string;
+      team: 'team1' | 'team2';
+      team1_id: string | null;
+      team2_id: string | null;
+      won_match: boolean;
+      name: string;
+      kills: number | null;
+      deaths: number | null;
+      assists: number | null;
+      headshots: number | null;
+      flash_assists: number | null;
+      enemies_flashed: number | null;
+      utility_damage: number | null;
+      mvps: number | null;
+      score: number | null;
+      total_damage: number | null;
+      rounds_played: number | null;
+      kast: number | null;
+    }>(
+      `SELECT pms.player_id, pms.match_slug, pms.team, m.team1_id, m.team2_id,
+              pms.won_match, p.name,
+              pms.kills, pms.deaths, pms.assists, pms.headshots,
+              pms.flash_assists, pms.enemies_flashed, pms.utility_damage,
+              pms.mvps, pms.score, pms.total_damage, pms.rounds_played, pms.kast
+       FROM player_match_stats pms
+       JOIN matches m ON m.slug = pms.match_slug
+       JOIN players p ON LOWER(p.id) = LOWER(pms.player_id)
+       WHERE ${matchFilters.join(' AND ')}
+       ORDER BY pms.created_at DESC, pms.id DESC`,
+      params
+    );
+    const fallbackSeen = new Set<string>();
+    for (const row of fallbackRows) {
+      if (matchesWithMapStats.has(row.match_slug)) continue;
+      const rowTeamId = row.team === 'team1' ? row.team1_id : row.team2_id;
+      if (teamId && rowTeamId?.toLowerCase() !== teamId.toLowerCase()) continue;
+      const key = `${row.match_slug}:${row.player_id.toLowerCase()}`;
+      if (fallbackSeen.has(key)) continue;
+      fallbackSeen.add(key);
+      addPlayerStats(
+        aggregates,
+        {
+          steamId: row.player_id,
+          name: row.name,
+          kills: row.kills,
+          deaths: row.deaths,
+          assists: row.assists,
+          headshots: row.headshots,
+          flashAssists: row.flash_assists,
+          enemiesFlashed: row.enemies_flashed,
+          utilityDamage: row.utility_damage,
+          mvps: row.mvps,
+          score: row.score,
+          damage: row.total_damage,
+          rounds_played: row.rounds_played,
+          kast: row.kast,
+        },
+        row.match_slug,
+        row.won_match,
+        playerId
+      );
+    }
+
+    const players = await playerService.getPlayersByIds([...aggregates.values()].map((row) => row.id));
+    const playerById = new Map(players.map((player) => [player.id.toLowerCase(), player]));
+    const stats = [...aggregates.values()]
+      .map((row) => {
+        const player = playerById.get(row.id.toLowerCase());
+        if (!player) return null;
+        const matchesPlayed = row.matches.size;
+        const wins = row.wins.size;
+        const kills = row.kills;
+        const deaths = row.deaths;
+        const roundsPlayed = row.roundsPlayed;
+        return {
+          id: player.id,
+          name: player.name,
+          avatar: player.avatar_url || `/api/players/${player.id}/avatar.svg`,
+          currentElo: player.current_elo,
+          matchesPlayed,
+          wins,
+          losses: matchesPlayed - wins,
+          winRate: matchesPlayed > 0 ? wins / matchesPlayed : 0,
+          kills,
+          deaths,
+          assists: row.assists,
+          kdRatio: deaths > 0 ? kills / deaths : kills > 0 ? null : 0,
+          kdaRatio: deaths > 0 ? (kills + row.assists) / deaths : kills + row.assists > 0 ? null : 0,
+          plusMinus: kills - deaths,
+          adr: roundsPlayed > 0 ? row.totalDamage / roundsPlayed : 0,
+          kast: roundsPlayed > 0 ? row.kastRounds / roundsPlayed : 0,
+          headshots: row.headshots,
+          headshotPercent: kills > 0 ? (row.headshots / kills) * 100 : 0,
+          flashAssists: row.flashAssists,
+          enemiesFlashed: row.enemiesFlashed,
+          utilityDamage: row.utilityDamage,
+          mvps: row.mvps,
+          score: row.score,
+          totalDamage: row.totalDamage,
+          roundsPlayed,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null)
+      .sort((a, b) => b.kills - a.kills || a.deaths - b.deaths || a.name.localeCompare(b.name));
 
     const teamFilters = ["m.status = 'completed'", 'm.completed_at IS NOT NULL'];
     const teamParams: unknown[] = [];
