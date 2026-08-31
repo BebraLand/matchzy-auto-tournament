@@ -213,8 +213,14 @@ class HudProjectionService {
       })
       .sort((left, right) => right.overlap - left.overlap || right.match.id - left.match.id);
 
-    const best = ranked[0];
-    const second = ranked[1];
+    // An automatic HUD follows the current game. Completed matches are kept
+    // only for demo/replay sessions, so they must not make a live match look
+    // ambiguous when both have the same roster.
+    const eligible = ranked.some(({ match }) => match.status !== 'completed')
+      ? ranked.filter(({ match }) => match.status !== 'completed')
+      : ranked;
+    const best = eligible[0];
+    const second = eligible[1];
     // ponytail: SteamID overlap is deterministic and cheap; ambiguous matches stay empty.
     if (!best || best.overlap < 2 || (second && second.overlap === best.overlap)) return null;
     return best.match;
