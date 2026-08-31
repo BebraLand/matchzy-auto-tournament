@@ -39,7 +39,7 @@ export interface CreateTeamInput {
   name: string;
   tag?: string;
   countryCode?: string;
-  logoUrl?: string;
+  logoUrl?: string | null;
   discordRoleId?: string;
   players: Player[];
 }
@@ -48,7 +48,7 @@ export interface UpdateTeamInput {
   name?: string;
   tag?: string;
   countryCode?: string;
-  logoUrl?: string;
+  logoUrl?: string | null;
   discordRoleId?: string;
   players?: Player[];
 }

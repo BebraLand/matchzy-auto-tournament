@@ -206,6 +206,7 @@
     },
     "buttons": {
       "deleteTeam": "Delete Team",
+      "deleteLogo": "Delete team logo",
       "cancel": "Cancel",
       "saving": "Saving...",
       "saveChanges": "Save Changes",

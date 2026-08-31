@@ -183,6 +183,7 @@
     },
     "buttons": {
       "deleteTeam": "删除战队",
+      "deleteLogo": "删除战队标志",
       "cancel": "取消",
       "saving": "正在保存…",
       "saveChanges": "保存更改",

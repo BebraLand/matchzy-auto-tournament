@@ -78,6 +78,7 @@
     },
     "buttons": {
       "deleteTeam": "Slett lag",
+      "deleteLogo": "Slett laglogo",
       "cancel": "Avbryt",
       "saving": "Lagrer...",
       "saveChanges": "Lagre endringer",

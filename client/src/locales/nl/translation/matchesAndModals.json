@@ -183,6 +183,7 @@
     },
     "buttons": {
       "deleteTeam": "Team verwijderen",
+      "deleteLogo": "Teamlogo verwijderen",
       "cancel": "Annuleren",
       "saving": "Opslaan...",
       "saveChanges": "Wijzigingen opslaan",

@@ -359,7 +359,7 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
         name: name.trim(),
         tag: tag.trim() || undefined,
         countryCode: countryCode.trim().toUpperCase() || undefined,
-        logoUrl: logoUrl.trim() || undefined,
+        logoUrl: logoUrl.trim() || null,
         discordRoleId: undefined, // Discord notifications not yet implemented
         players,
       };
@@ -539,6 +539,20 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
                   onChange={(event) => handleLogoFile(event.target.files?.[0])}
                 />
               </Button>
+              {(pendingLogoData || logoUrl) && (
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => {
+                    setPendingLogoData(null);
+                    setLogoUrl('');
+                  }}
+                  data-testid="team-logo-remove-button"
+                >
+                  {t('teamModal.buttons.deleteLogo')}
+                </Button>
+              )}
             </Box>
 
             <Divider sx={{ my: 1 }} />

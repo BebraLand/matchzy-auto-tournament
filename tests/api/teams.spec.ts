@@ -81,5 +81,36 @@ test.describe.serial('Teams API', () => {
     await deleteTeam(request, team1.id);
     await deleteTeam(request, team2.id);
   });
+
+  test('should clear an uploaded team logo', {
+    tag: ['@api', '@teams', '@assets'],
+  }, async ({ request }) => {
+    const timestamp = Date.now();
+    const team = await createTeam(request, {
+      id: `api-logo-team-${timestamp}`,
+      name: `API Logo Team ${timestamp}`,
+      players: [{ steamId: `7656119800000${timestamp % 100000}`, name: 'Logo Player' }],
+    });
+    expect(team).toBeTruthy();
+
+    const tinyPng =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=';
+    const uploadResponse = await request.post(`/api/teams/${team!.id}/logo`, {
+      headers: getAuthHeader(),
+      data: { imageData: tinyPng },
+    });
+    expect(uploadResponse.ok(), await uploadResponse.text()).toBeTruthy();
+    const uploaded = await uploadResponse.json();
+
+    const clearResponse = await request.put(`/api/teams/${team!.id}`, {
+      headers: getAuthHeader(),
+      data: { logoUrl: null },
+    });
+    expect(clearResponse.ok(), await clearResponse.text()).toBeTruthy();
+    expect((await clearResponse.json()).team.logoUrl).toBeNull();
+
+    expect((await request.get(uploaded.logoUrl)).status()).toBe(404);
+    await deleteTeam(request, team!.id);
+  });
 });
 

@@ -3,6 +3,7 @@ import { Team, CreateTeamInput, UpdateTeamInput, TeamResponse, Player } from '..
 import { log } from '../utils/logger';
 import { steamService } from './steamService';
 import { playerService } from './playerService';
+import { deleteBroadcastAsset } from './broadcastAssetService';
 
 class TeamService {
   private normalizeCountryCode(value: string | undefined): string | undefined {
@@ -220,13 +221,18 @@ class TeamService {
     const updateData: Record<string, unknown> = {
       updated_at: Math.floor(Date.now() / 1000),
     };
+    let shouldDeleteLogoAsset = false;
 
     if (input.name !== undefined) updateData.name = input.name;
     if (input.tag !== undefined) updateData.tag = input.tag || null;
     if (input.countryCode !== undefined) {
       updateData.country_code = this.normalizeCountryCode(input.countryCode) || null;
     }
-    if (input.logoUrl !== undefined) updateData.logo_url = input.logoUrl.trim() || null;
+    if (input.logoUrl !== undefined) {
+      const logoUrl = input.logoUrl?.trim() || null;
+      updateData.logo_url = logoUrl;
+      shouldDeleteLogoAsset = Boolean(existing.logoUrl && !logoUrl);
+    }
     if (input.discordRoleId !== undefined) updateData.discord_role_id = input.discordRoleId || null;
     if (input.players !== undefined) {
       // Enrich players with avatars from Steam API. For test/dev teams created
@@ -250,6 +256,10 @@ class TeamService {
     }
 
     await db.updateAsync('teams', updateData, 'id = ?', [id]);
+
+    if (shouldDeleteLogoAsset) {
+      deleteBroadcastAsset({ kind: 'teams', entityId: id });
+    }
 
     log.success(`Team updated: ${input.name || existing.name} (${id})`, { id });
     const result = await this.getTeamById(id);

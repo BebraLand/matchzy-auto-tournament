@@ -183,6 +183,7 @@
     },
     "buttons": {
       "deleteTeam": "Usuń drużynę",
+      "deleteLogo": "Usuń logo drużyny",
       "cancel": "Anuluj",
       "saving": "Zapisywanie...",
       "saveChanges": "Zapisz zmiany",

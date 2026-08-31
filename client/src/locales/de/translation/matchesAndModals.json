@@ -183,6 +183,7 @@
     },
     "buttons": {
       "deleteTeam": "Teammitglied löschen",
+      "deleteLogo": "Teamlogo löschen",
       "cancel": "Abbrechen",
       "saving": "Der Speichervorgang läuft...",
       "saveChanges": "Änderungen speichern",

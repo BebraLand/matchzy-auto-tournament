@@ -183,6 +183,7 @@
     },
     "buttons": {
       "deleteTeam": "Eliminar equipa",
+      "deleteLogo": "Eliminar logótipo da equipa",
       "cancel": "Cancelar",
       "saving": "A guardar...",
       "saveChanges": "Guardar alterações",
