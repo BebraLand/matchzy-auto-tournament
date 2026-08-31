@@ -693,10 +693,10 @@ export default function Settings() {
     }
   };
 
-  const saveBranding = useCallback(async () => {
-    if (JSON.stringify(branding) === JSON.stringify(initialBranding)) return;
+  const saveBranding = useCallback(async (nextBranding = branding) => {
+    if (JSON.stringify(nextBranding) === JSON.stringify(initialBranding)) return;
     try {
-      const response: SettingsResponse = await api.put('/api/settings', { branding });
+      const response: SettingsResponse = await api.put('/api/settings', { branding: nextBranding });
       const saved = response.settings.branding ?? DEFAULT_BRANDING;
       setBranding(saved);
       setInitialBranding(saved);
@@ -1796,6 +1796,50 @@ export default function Settings() {
                         slotProps={{ htmlInput: { 'data-testid': 'settings-brand-secondary-input' } }}
                       />
                     </Stack>
+                    <Stack spacing={0.5}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={branding.showGitHubLink}
+                            onChange={(event) => {
+                              const next = { ...branding, showGitHubLink: event.target.checked };
+                              setBranding(next);
+                              void saveBranding(next);
+                            }}
+                            size="small"
+                          />
+                        }
+                        label={t('settingsPage.branding.showGitHub', 'Show GitHub link on login page')}
+                      />
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={branding.showDocumentationLink}
+                            onChange={(event) => {
+                              const next = { ...branding, showDocumentationLink: event.target.checked };
+                              setBranding(next);
+                              void saveBranding(next);
+                            }}
+                            size="small"
+                          />
+                        }
+                        label={t('settingsPage.branding.showDocumentation', 'Show Documentation link on login page')}
+                      />
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={branding.showVersion}
+                            onChange={(event) => {
+                              const next = { ...branding, showVersion: event.target.checked };
+                              setBranding(next);
+                              void saveBranding(next);
+                            }}
+                            size="small"
+                          />
+                        }
+                        label={t('settingsPage.branding.showVersion', 'Show version on login page')}
+                      />
+                    </Stack>
                     <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
                       <BrandLogo size={64} />
                       <Button
@@ -2020,6 +2064,9 @@ export default function Settings() {
                         logoUrl: null;
                         primaryColor: null;
                         secondaryColor: null;
+                        showGitHubLink: null;
+                        showDocumentationLink: null;
+                        showVersion: null;
                       };
                       matchzyKnifeEnabledDefault: null;
                       matchzyDebugChatEnabled?: boolean;
@@ -2065,6 +2112,9 @@ export default function Settings() {
                         logoUrl: null,
                         primaryColor: null,
                         secondaryColor: null,
+                        showGitHubLink: null,
+                        showDocumentationLink: null,
+                        showVersion: null,
                       },
                       matchzyKnifeEnabledDefault: null,
                       matchzyDebugChatEnabled: false,

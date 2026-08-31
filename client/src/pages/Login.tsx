@@ -8,10 +8,12 @@ import { useTranslation } from 'react-i18next';
 import { SteamIcon } from '../components/icons/SteamIcon';
 import { TopNavBar } from '../components/layout/TopNavBar';
 import { BrandLogo } from '../components/common/BrandLogo';
+import { useBranding } from '../contexts/BrandingContext';
 
 export default function Login() {
   const { t } = useTranslation();
   const { loginWithSteam } = useAuth();
+  const { branding } = useBranding();
   const [providers, setProviders] = useState<
     Array<{
       id: string;
@@ -286,40 +288,42 @@ export default function Login() {
               </Stack>
             </Stack>
 
-            <Stack spacing={1.5} alignItems="center" sx={{ width: '100%' }}>
-              <Stack direction="row" spacing={2}>
-                <Link
-                  href="https://github.com/sivert-io/matchzy-auto-tournament"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                  }}
-                >
-                  {t('login.github')}
-                  <OpenInNewIcon sx={{ fontSize: '1rem' }} />
-                </Link>
-                <Link
-                  href="https://docs.sivert.io/docs/mat"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                  }}
-                >
-                  {t('login.documentation')}
-                  <OpenInNewIcon sx={{ fontSize: '1rem' }} />
-                </Link>
-              </Stack>
+            {(branding.showGitHubLink || branding.showDocumentationLink || branding.showVersion) && (
+              <Stack spacing={1.5} alignItems="center" sx={{ width: '100%' }}>
+                {(branding.showGitHubLink || branding.showDocumentationLink) && (
+                  <Stack direction="row" spacing={2}>
+                    {branding.showGitHubLink && (
+                      <Link
+                        href="https://github.com/sivert-io/matchzy-auto-tournament"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+                      >
+                        {t('login.github')}
+                        <OpenInNewIcon sx={{ fontSize: '1rem' }} />
+                      </Link>
+                    )}
+                    {branding.showDocumentationLink && (
+                      <Link
+                        href="https://docs.sivert.io/docs/mat"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+                      >
+                        {t('login.documentation')}
+                        <OpenInNewIcon sx={{ fontSize: '1rem' }} />
+                      </Link>
+                    )}
+                  </Stack>
+                )}
 
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                {t('login.version')} {appVersion || 'Unknown'}
-              </Typography>
-            </Stack>
+                {branding.showVersion && (
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                    {t('login.version')} {appVersion || 'Unknown'}
+                  </Typography>
+                )}
+              </Stack>
+            )}
           </Stack>
         </Card>
       </Container>

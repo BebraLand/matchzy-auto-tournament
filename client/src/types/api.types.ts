@@ -328,6 +328,9 @@ export interface BrandingSettings {
   logoUrl: string;
   primaryColor: string;
   secondaryColor: string;
+  showGitHubLink: boolean;
+  showDocumentationLink: boolean;
+  showVersion: boolean;
 }
 
 export interface SettingsResponse extends ApiResponse {

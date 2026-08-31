@@ -13,6 +13,9 @@ test.describe.serial('Custom branding', () => {
       logoUrl: expect.any(String),
       primaryColor: expect.stringMatching(/^#[0-9A-F]{6}$/),
       secondaryColor: expect.stringMatching(/^#[0-9A-F]{6}$/),
+      showGitHubLink: expect.any(Boolean),
+      showDocumentationLink: expect.any(Boolean),
+      showVersion: expect.any(Boolean),
     });
   });
 
@@ -27,6 +30,9 @@ test.describe.serial('Custom branding', () => {
       logoUrl: original.logoUrl,
       primaryColor: '#112233',
       secondaryColor: '#445566',
+      showGitHubLink: false,
+      showDocumentationLink: true,
+      showVersion: false,
     };
 
     try {

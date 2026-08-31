@@ -190,13 +190,30 @@ router.put('/', async (req: Request, res: Response) => {
         logoUrl: 'branding_logo_url',
         primaryColor: 'branding_primary_color',
         secondaryColor: 'branding_secondary_color',
+        showGitHubLink: 'branding_show_github',
+        showDocumentationLink: 'branding_show_documentation',
+        showVersion: 'branding_show_version',
       } as const;
+      const brandingBooleanFields = new Set(['showGitHubLink', 'showDocumentationLink', 'showVersion']);
       if (Object.keys(values).some((key) => !(key in brandingKeyMap))) {
         return res.status(400).json({ success: false, error: 'Unknown branding field' });
       }
       for (const field of Object.keys(brandingKeyMap) as Array<keyof typeof brandingKeyMap>) {
         if (values[field] !== undefined) {
           const value = values[field];
+          if (brandingBooleanFields.has(field)) {
+            if (value !== null && typeof value !== 'boolean') {
+              return res.status(400).json({
+                success: false,
+                error: `branding.${field} must be a boolean or null`,
+              });
+            }
+            await settingsService.setSetting(
+              brandingKeyMap[field],
+              value === null ? null : value ? '1' : '0'
+            );
+            continue;
+          }
           if (value !== null && typeof value !== 'string') {
             return res.status(400).json({
               success: false,

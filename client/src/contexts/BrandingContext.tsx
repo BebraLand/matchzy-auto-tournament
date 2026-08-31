@@ -6,6 +6,9 @@ export const DEFAULT_BRANDING: BrandingSettings = {
   logoUrl: '/icon.svg',
   primaryColor: '#D0BCFF',
   secondaryColor: '#CCC2DC',
+  showGitHubLink: true,
+  showDocumentationLink: true,
+  showVersion: true,
 };
 
 const BrandingContext = createContext<{

@@ -15,6 +15,9 @@ export type AppSettingKey =
   | 'branding_logo_url'
   | 'branding_primary_color'
   | 'branding_secondary_color'
+  | 'branding_show_github'
+  | 'branding_show_documentation'
+  | 'branding_show_version'
   // MatchZy core defaults (persisted convars)
   | 'matchzy_autostart_mode'
   | 'matchzy_minimum_ready_required'
@@ -65,6 +68,9 @@ const ALLOWED_KEYS: AppSettingKey[] = [
   'branding_logo_url',
   'branding_primary_color',
   'branding_secondary_color',
+  'branding_show_github',
+  'branding_show_documentation',
+  'branding_show_version',
   // MatchZy core defaults (persisted convars)
   'matchzy_autostart_mode',
   'matchzy_minimum_ready_required',
@@ -260,6 +266,23 @@ class SettingsService {
         return;
       }
 
+      if (
+        key === 'branding_show_github' ||
+        key === 'branding_show_documentation' ||
+        key === 'branding_show_version'
+      ) {
+        const normalized = trimmed.toLowerCase();
+        const isEnabled =
+          normalized === '1' ||
+          normalized === 'true' ||
+          normalized === 'yes' ||
+          normalized === 'on' ||
+          normalized === 'enabled';
+        await db.setAppSettingAsync(key, isEnabled ? '1' : '0');
+        log.success(`${key} ${isEnabled ? 'enabled' : 'disabled'}`);
+        return;
+      }
+
       // MatchZy core boolean settings (0/1)
       if (
         key === 'matchzy_allow_force_ready' ||
@@ -446,19 +469,31 @@ class SettingsService {
     logoUrl: string;
     primaryColor: string;
     secondaryColor: string;
+    showGitHubLink: boolean;
+    showDocumentationLink: boolean;
+    showVersion: boolean;
   }> {
-    const [name, logoUrl, primaryColor, secondaryColor] = await Promise.all([
+    const [name, logoUrl, primaryColor, secondaryColor, showGitHub, showDocumentation, showVersion] = await Promise.all([
       this.getSetting('branding_name'),
       this.getSetting('branding_logo_url'),
       this.getSetting('branding_primary_color'),
       this.getSetting('branding_secondary_color'),
+      this.getSetting('branding_show_github'),
+      this.getSetting('branding_show_documentation'),
+      this.getSetting('branding_show_version'),
     ]);
+
+    const isEnabled = (value: string | null) =>
+      value === null || ['1', 'true', 'yes', 'on', 'enabled'].includes(value.trim().toLowerCase());
 
     return {
       displayName: name?.trim() || 'Matchzy Auto Tournament',
       logoUrl: logoUrl?.trim() && this.isSafeBrandingUrl(logoUrl.trim()) ? logoUrl.trim() : '/icon.svg',
       primaryColor: this.normalizeBrandColor(primaryColor, '#D0BCFF'),
       secondaryColor: this.normalizeBrandColor(secondaryColor, '#CCC2DC'),
+      showGitHubLink: isEnabled(showGitHub),
+      showDocumentationLink: isEnabled(showDocumentation),
+      showVersion: isEnabled(showVersion),
     };
   }
 
