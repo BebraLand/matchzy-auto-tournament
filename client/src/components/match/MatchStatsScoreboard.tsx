@@ -236,20 +236,23 @@ export function MatchStatsScoreboard({
 
   const selectedTeam1 = selectedLive?.team1 ?? selectedResult?.playerStats?.team1;
   const selectedTeam2 = selectedLive?.team2 ?? selectedResult?.playerStats?.team2;
-  const seriesTeam1 = team1Players.length
-    ? team1Players.map(withAvatar)
-    : aggregatePlayers(
+  const hasMapPlayerStats = mapResults.some(
+    (result) => (result.playerStats?.team1.length ?? 0) > 0 || (result.playerStats?.team2.length ?? 0) > 0
+  );
+  const seriesTeam1 = hasMapPlayerStats
+    ? aggregatePlayers(
         mapResults.filter((result) => result.mapNumber !== liveMapNumber),
         'team1',
         livePlayerStats?.team1
-      ).map(withAvatar);
-  const seriesTeam2 = team2Players.length
-    ? team2Players.map(withAvatar)
-    : aggregatePlayers(
+      ).map(withAvatar)
+    : team1Players.map(withAvatar);
+  const seriesTeam2 = hasMapPlayerStats
+    ? aggregatePlayers(
         mapResults.filter((result) => result.mapNumber !== liveMapNumber),
         'team2',
         livePlayerStats?.team2
-      ).map(withAvatar);
+      ).map(withAvatar)
+    : team2Players.map(withAvatar);
   const displayTeam1 = selectedTeam1?.map(withAvatar) ?? seriesTeam1;
   const displayTeam2 = selectedTeam2?.map(withAvatar) ?? seriesTeam2;
   const hasStats = displayTeam1.length > 0 || displayTeam2.length > 0;
