@@ -239,16 +239,19 @@ export function MatchStatsScoreboard({
   const hasMapPlayerStats = mapResults.some(
     (result) => (result.playerStats?.team1.length ?? 0) > 0 || (result.playerStats?.team2.length ?? 0) > 0
   );
+  const finishedMapResults = livePlayerStats && liveMapNumber !== null
+    ? mapResults.filter((result) => result.mapNumber !== liveMapNumber)
+    : mapResults;
   const seriesTeam1 = hasMapPlayerStats
     ? aggregatePlayers(
-        mapResults.filter((result) => result.mapNumber !== liveMapNumber),
+        finishedMapResults,
         'team1',
         livePlayerStats?.team1
       ).map(withAvatar)
     : team1Players.map(withAvatar);
   const seriesTeam2 = hasMapPlayerStats
     ? aggregatePlayers(
-        mapResults.filter((result) => result.mapNumber !== liveMapNumber),
+        finishedMapResults,
         'team2',
         livePlayerStats?.team2
       ).map(withAvatar)
