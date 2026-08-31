@@ -143,6 +143,35 @@ test.describe.serial('Operator-controlled execution queue', () => {
     expect(serverAllocationTracker.getState(serverId)?.state).toBe('idle');
   });
 
+  test('rejects completed matches as manual HUD broadcasts', async ({ request }) => {
+    const slug = `completed-hud-broadcast-${Date.now()}`;
+    await request.post('/api/test/login-admin', {
+      data: { steamId: '76561198000000001' },
+    });
+    await db.insertAsync('matches', {
+      slug,
+      round: 0,
+      match_number: 1,
+      config: JSON.stringify({
+        team1: { name: 'Completed Team 1' },
+        team2: { name: 'Completed Team 2' },
+      }),
+      status: 'completed',
+      completed_at: Math.floor(Date.now() / 1000),
+    });
+
+    try {
+      const response = await request.put('/api/integrations/jts-hud/broadcast-match', {
+        data: { slug },
+      });
+      expect(response.status()).toBe(409);
+      expect((await response.json()).error).toContain('cannot be selected');
+    } finally {
+      await db.deleteAsync('matches', 'slug = ?', [slug]);
+      await request.put('/api/integrations/jts-hud/broadcast-match', { data: { slug: null } });
+    }
+  });
+
   test('keeps bracket order while execution order changes to 1,3,4,2', async ({
     browser,
     page,
