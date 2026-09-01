@@ -67,6 +67,7 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
   const { showSnackbar } = useSnackbar();
 
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const [navMenuAnchorEl, setNavMenuAnchorEl] = React.useState<null | HTMLElement>(null);
   const prevMatchRef = React.useRef<{ status: string; label: string | null } | null>(null);
   const [playerAvatarUrl, setPlayerAvatarUrl] = React.useState<string | undefined>(undefined);
   const [playerName, setPlayerName] = React.useState<string>('Player');
@@ -179,7 +180,16 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
     ctaLabels[matchStatusLabel];
 
   return (
-    <>
+    <Box
+      sx={{
+        display: 'flex',
+        flexGrow: 1,
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        columnGap: 1,
+        rowGap: 0.5,
+      }}
+    >
       {showMenuButton && (
         <IconButton
           color="inherit"
@@ -194,10 +204,10 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
 
       <Box
         sx={{
-          flexGrow: 1,
+          flex: '1 1 auto',
           display: 'flex',
           alignItems: 'center',
-          gap: 3,
+          gap: { xs: 1, lg: 3 },
           minWidth: 0,
         }}
       >
@@ -215,19 +225,19 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
 
         <Box
           sx={{
-            display: 'flex',
+            display: { xs: 'none', sm: 'flex' },
             alignItems: 'center',
-            gap: 1.5,
+            gap: { sm: 0, lg: 1.5 },
             flexShrink: 0,
           }}
         >
-          <Button color="inherit" component={RouterLink} to="/player" size="small">
+          <Button color="inherit" component={RouterLink} to="/player" size="small" sx={{ px: { sm: 0.5, lg: 1.5 } }}>
             {t('nav.players')}
           </Button>
-          <Button color="inherit" component={RouterLink} to="/stats" size="small">
+          <Button color="inherit" component={RouterLink} to="/stats" size="small" sx={{ px: { sm: 0.5, lg: 1.5 } }}>
             {t('nav.playerStats')}
           </Button>
-          <Button color="inherit" component={RouterLink} to="/matches" size="small">
+          <Button color="inherit" component={RouterLink} to="/matches" size="small" sx={{ px: { sm: 0.5, lg: 1.5 } }}>
             {t('nav.matches')}
           </Button>
           <Button
@@ -235,17 +245,42 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
             component={RouterLink}
             to="/tournament/1/leaderboard"
             size="small"
+            sx={{ px: { sm: 0.5, lg: 1.5 } }}
           >
             {t('nav.leaderboard')}
           </Button>
         </Box>
+        <IconButton
+          color="inherit"
+          aria-label="open navigation menu"
+          onClick={(event) => setNavMenuAnchorEl(event.currentTarget)}
+          sx={{ display: { xs: 'inline-flex', sm: 'none' }, ml: 'auto' }}
+        >
+          <MenuIcon />
+        </IconButton>
+        <Menu
+          anchorEl={navMenuAnchorEl}
+          open={Boolean(navMenuAnchorEl)}
+          onClose={() => setNavMenuAnchorEl(null)}
+        >
+          {[
+            ['/player', t('nav.players')],
+            ['/stats', t('nav.playerStats')],
+            ['/matches', t('nav.matches')],
+            ['/tournament/1/leaderboard', t('nav.leaderboard')],
+          ].map(([to, label]) => (
+            <MenuItem key={to} component={RouterLink} to={to} onClick={() => setNavMenuAnchorEl(null)}>
+              {label}
+            </MenuItem>
+          ))}
+        </Menu>
       </Box>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto', flexShrink: 0 }}>
         {/* Reserve space for CTA so match-status changes don't "jump" the header layout */}
         <Box
           sx={{
-            display: { xs: 'none', sm: 'flex' },
+            display: 'flex',
             alignItems: 'center',
             minWidth: 210,
           }}
@@ -359,7 +394,7 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
           </>
         ) : null}
       </Box>
-    </>
+    </Box>
   );
 };
 
