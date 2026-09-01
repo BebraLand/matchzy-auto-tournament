@@ -14,6 +14,25 @@ export interface HudPlayerProjection {
   teamId: string;
 }
 
+export interface HudPlayerStatProjection {
+  steamId: string;
+  name: string;
+  kills: number;
+  deaths: number;
+  assists: number;
+  damage: number;
+  headshotKills: number;
+  kast: number;
+  mvps: number;
+  score: number;
+  roundsPlayed: number;
+}
+
+export interface HudMapPlayerStatsProjection {
+  team1: HudPlayerStatProjection[];
+  team2: HudPlayerStatProjection[];
+}
+
 export interface HudTeamProjection {
   id: string;
   name: string;
@@ -39,6 +58,7 @@ export interface HudMapProjection {
   score: { team1: number; team2: number } | null;
   winnerTeamId: string | null;
   completedAt: string | null;
+  playerStats: HudMapPlayerStatsProjection | null;
 }
 
 export interface HudMatchProjection {

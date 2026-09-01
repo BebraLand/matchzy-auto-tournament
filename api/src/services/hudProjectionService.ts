@@ -385,6 +385,36 @@ class HudProjectionService {
         score: result ? { team1: result.team1Score, team2: result.team2Score } : null,
         winnerTeamId,
         completedAt: result ? new Date(result.completedAt * 1000).toISOString() : null,
+        playerStats: result?.playerStats
+          ? {
+              team1: result.playerStats.team1.map((player) => ({
+                steamId: player.steamId,
+                name: player.name,
+                kills: player.kills,
+                deaths: player.deaths,
+                assists: player.assists,
+                damage: player.damage,
+                headshotKills: player.headshotKills,
+                kast: player.kast,
+                mvps: player.mvps,
+                score: player.score,
+                roundsPlayed: player.roundsPlayed,
+              })),
+              team2: result.playerStats.team2.map((player) => ({
+                steamId: player.steamId,
+                name: player.name,
+                kills: player.kills,
+                deaths: player.deaths,
+                assists: player.assists,
+                damage: player.damage,
+                headshotKills: player.headshotKills,
+                kast: player.kast,
+                mvps: player.mvps,
+                score: player.score,
+                roundsPlayed: player.roundsPlayed,
+              })),
+            }
+          : null,
       };
     });
   }
