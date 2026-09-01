@@ -48,6 +48,7 @@ import type {
   TeamMatchInfo,
   MatchConnectionStatus,
   MatchMapResult,
+  MatchLiveStats,
   Player as TeamPlayer,
 } from '../types';
 
@@ -210,6 +211,30 @@ function normalizeMatchForPlayerView(rawMatch: TeamMatchInfo, steamId: string): 
     liveStats: swappedLiveStats,
     mapResults: swappedMapResults,
     config: swappedConfig,
+  };
+}
+
+function normalizeLiveStatsForPlayerView(
+  liveStats: MatchLiveStats,
+  steamId: string
+): MatchLiveStats {
+  const playerId = steamId.toLowerCase();
+  const playerStats = liveStats.playerStats;
+
+  if (!playerStats || !playerStats.team2.some((p) => p.steamId.toLowerCase() === playerId)) {
+    return liveStats;
+  }
+
+  return {
+    ...liveStats,
+    team1Score: liveStats.team2Score,
+    team2Score: liveStats.team1Score,
+    team1SeriesScore: liveStats.team2SeriesScore,
+    team2SeriesScore: liveStats.team1SeriesScore,
+    playerStats: {
+      team1: [...playerStats.team2],
+      team2: [...playerStats.team1],
+    },
   };
 }
 
@@ -451,7 +476,7 @@ export default function PlayerProfile() {
           const yourTeam = normalizedMatch.team1 || null;
           const configPlayers =
             normalizedMatch.config?.team1?.players?.map(
-              (p): TeamPlayer => ({ steamId: p.steamid, name: p.name })
+              (p): TeamPlayer => ({ steamId: p.steamid, name: p.name, avatar: p.avatar })
             ) || [];
 
           setCurrentTeam(
@@ -653,10 +678,28 @@ export default function PlayerProfile() {
 
     const socket = socketRef.current;
 
-    const handleUpdate = (data: { slug?: string }) => {
+    const handleUpdate = (data: {
+      slug?: string;
+      status?: TeamMatchInfo['status'];
+      liveStats?: MatchLiveStats;
+    }) => {
       if (!data.slug || data.slug !== slug) return;
-      // Re‑fetch player data so currentMatch (and its nested server/veto/live
-      // info) stay in lockstep with the team view.
+
+      const liveStats = data.liveStats;
+      if (liveStats && steamId) {
+        setCurrentMatch((prev) =>
+          prev?.slug === slug
+            ? {
+                ...prev,
+                status: data.status ?? prev.status,
+                liveStats: normalizeLiveStatsForPlayerView(liveStats, steamId),
+              }
+            : prev
+        );
+        return;
+      }
+
+      // Non-telemetry updates still need the full match projection.
       scheduleSilentRefresh();
     };
 
@@ -675,7 +718,28 @@ export default function PlayerProfile() {
       // disconnected when there is no active match above.
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMatch?.slug]);
+  }, [currentMatch?.slug, steamId]);
+
+  // Fill the scoreboard when the profile opens after the match already went live.
+  useEffect(() => {
+    const slug = currentMatch?.slug;
+    if (!slug || !steamId || !['loaded', 'live'].includes(currentMatch.status)) return;
+
+    let cancelled = false;
+    void api.get<(MatchLiveStats & { success: boolean })>(`/api/events/live/${slug}`).then((data) => {
+      if (!cancelled && data?.success) {
+        setCurrentMatch((prev) =>
+          prev?.slug === slug
+            ? { ...prev, liveStats: normalizeLiveStatsForPlayerView(data, steamId) }
+            : prev
+        );
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentMatch?.slug, currentMatch?.status, steamId]);
 
   // Poll allocation status periodically so players can see when the next servers
   // will be assigned for upcoming rounds/matches.

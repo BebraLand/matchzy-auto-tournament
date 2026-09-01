@@ -248,14 +248,14 @@ export function MatchStatsScoreboard({
         'team1',
         livePlayerStats?.team1
       ).map(withAvatar)
-    : team1Players.map(withAvatar);
+    : (livePlayerStats?.team1 ?? team1Players).map(withAvatar);
   const seriesTeam2 = hasMapPlayerStats
     ? aggregatePlayers(
         finishedMapResults,
         'team2',
         livePlayerStats?.team2
       ).map(withAvatar)
-    : team2Players.map(withAvatar);
+    : (livePlayerStats?.team2 ?? team2Players).map(withAvatar);
   const displayTeam1 = selectedTeam1?.map(withAvatar) ?? seriesTeam1;
   const displayTeam2 = selectedTeam2?.map(withAvatar) ?? seriesTeam2;
   const hasStats = displayTeam1.length > 0 || displayTeam2.length > 0;
