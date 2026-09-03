@@ -74,6 +74,27 @@ export class MatchAllocationService {
   }
 
   /**
+   * Validate an explicitly selected server before a manual match is persisted.
+   * Keep this on the allocator so creation and allocation use the same live
+   * status checks instead of letting the UI be the only guard.
+   */
+  async isServerAvailableForManualMatch(serverId: string): Promise<boolean> {
+    const [availableServers, activeMatch] = await Promise.all([
+      this.getAvailableServers(),
+      db.queryOneAsync<{ slug: string }>(
+        `SELECT slug
+          FROM matches
+          WHERE server_id = ?
+            AND status IN ('pending', 'ready', 'live')
+          LIMIT 1`,
+        [serverId]
+      ),
+    ]);
+
+    return !activeMatch && availableServers.some((server) => server.id === serverId);
+  }
+
+  /**
    * Get high-level allocation status for UI:
    * - availableServerCount: number of servers that can be allocated *right now*
    * - gracePeriodSeconds: the effective grace period currently in use
@@ -148,6 +169,7 @@ export class MatchAllocationService {
     // purely on the DB view. This avoids servers getting "stuck" as busy in
     // the UI after manual restarts when the plugin reports them as idle.
     const dbBusyRows = await db.queryAsync<{ 
+      id: number;
       server_id: string; 
       slug: string;
       match_number: number;
@@ -155,13 +177,14 @@ export class MatchAllocationService {
       loaded_at: number | null;
       status: string;
     }>(
-      `SELECT server_id, slug, match_number, round, loaded_at, status
+      `SELECT id, server_id, slug, match_number, round, loaded_at, status
          FROM matches
         WHERE server_id IS NOT NULL
           AND server_id != ''
           AND status IN ('loaded', 'live')`
     );
     const dbBusyByServer = new Map<string, { 
+      id: number;
       slug: string;
       matchNumber: number;
       round: number;
@@ -171,6 +194,7 @@ export class MatchAllocationService {
     for (const row of dbBusyRows) {
       if (row.server_id && !dbBusyByServer.has(row.server_id)) {
         dbBusyByServer.set(row.server_id, { 
+          id: row.id,
           slug: row.slug,
           matchNumber: row.match_number,
           round: row.round,
@@ -259,7 +283,14 @@ export class MatchAllocationService {
         (dbBusy.loadedAt === null ||
           now - dbBusy.loadedAt < MatchAllocationService.STALE_LOADED_SECONDS);
       const dbRecordIsStale =
-        dbSaysBusy && pluginSaysIdle && !dbBusyIsRecent && dbBusy?.status === 'loaded';
+        dbSaysBusy &&
+        pluginSaysIdle &&
+        !dbBusyIsRecent &&
+        dbBusy?.status === 'loaded' &&
+        // MatchZy keeps the current match id in its convar during warmup. Do
+        // not release a loaded row when the plugin still identifies that same
+        // match, even if its status briefly reads idle.
+        matchSlug?.trim() !== String(dbBusy.id);
 
       if (dbRecordIsStale) {
         log.warn(
@@ -461,15 +492,25 @@ export class MatchAllocationService {
       : MatchAllocationService.ALLOCATION_GRACE_PERIOD_SECONDS;
     const now = Math.floor(Date.now() / 1000);
 
-    // Check database for matches that are currently loaded/live on servers
-    const dbBusyRows = await db.queryAsync<{ server_id: string; slug: string }>(
-      `SELECT server_id, slug
+    // Check database for matches that are currently loaded/live on servers.
+    // Keep the match id so a stale-looking idle response can be distinguished
+    // from MatchZy still reporting the same loaded match during warmup.
+    const dbBusyRows = await db.queryAsync<{
+      id: number;
+      server_id: string;
+      slug: string;
+      loaded_at: number | null;
+      status: string;
+    }>(
+      `SELECT id, server_id, slug, loaded_at, status
          FROM matches
         WHERE server_id IS NOT NULL
           AND server_id != ''
           AND status IN ('loaded', 'live')`
     );
-    const dbBusyServers = new Set(dbBusyRows.map((row) => row.server_id));
+    const dbBusyByServer = new Map(
+      dbBusyRows.map((row) => [row.server_id, row] as const)
+    );
 
     // Filter servers based on MatchZy tournament status
     const availableServers: ServerResponse[] = [];
@@ -501,11 +542,23 @@ export class MatchAllocationService {
         continue;
       }
 
-      // Also check database - if DB shows a loaded/live match, don't allocate
-      // even if plugin says idle (prevents race conditions during warmup)
-      if (dbBusyServers.has(server.id)) {
+      const dbBusy = dbBusyByServer.get(server.id);
+      const dbBusyIsRecent =
+        dbBusy !== undefined &&
+        (dbBusy.loaded_at === null || now - dbBusy.loaded_at < MatchAllocationService.STALE_LOADED_SECONDS);
+      const dbRecordIsStale =
+        dbBusy !== undefined &&
+        dbBusy.status === 'loaded' &&
+        !dbBusyIsRecent &&
+        matchSlug?.trim() !== String(dbBusy.id);
+
+      // A loaded/live DB row blocks allocation, except for the same narrow
+      // stale-loaded case exposed by getAllocationStatus. A matching MatchZy
+      // match id always wins: the server may still be in warmup even when the
+      // status convar briefly reads idle.
+      if (dbBusy !== undefined && !dbRecordIsStale) {
         log.debug(
-          `Server ${server.id} (${server.name}) not available: database shows loaded/live match`
+          `Server ${server.id} (${server.name}) not available: database shows ${dbBusy.status} match`
         );
         continue;
       }
@@ -1205,21 +1258,32 @@ export class MatchAllocationService {
         this.allocatingServers.add(candidate.id);
         allocatedServerId = candidate.id;
 
-        // Defensive DB‑level guard: avoid assigning a server that already has
-        // another active (non‑completed) match attached in our own records.
-        const existingActive = await db.queryOneAsync<{ count: number }>(
+        // Defensive DB-level guard: avoid assigning a server that already has
+        // another active match attached in our own records. A stale loaded row
+        // is the one exception already handled by getAvailableServers().
+        const existingActive = await db.queryAsync<{
+          status: string;
+          loaded_at: number | null;
+        }>(
           `
-            SELECT COUNT(*) as count
+            SELECT status, loaded_at
               FROM matches
              WHERE server_id = ?
                AND status IN ('pending', 'ready', 'loaded', 'live')
           `,
           [candidate.id]
         );
-        if ((existingActive?.count ?? 0) > 0) {
+        const allocationNow = Math.floor(Date.now() / 1000);
+        const hasBlockingMatch = existingActive.some(
+          (row) =>
+            row.status !== 'loaded' ||
+            row.loaded_at === null ||
+            allocationNow - row.loaded_at < MatchAllocationService.STALE_LOADED_SECONDS
+        );
+        if (hasBlockingMatch) {
           log.debug(
             `[ALLOCATION] Skipping server ${candidate.id} for single-match allocation because it already has an active match in the database`,
-            { serverId: candidate.id, activeMatchCount: existingActive?.count, matchSlug }
+            { serverId: candidate.id, activeMatchCount: existingActive.length, matchSlug }
           );
           // Release reservation and try the next candidate.
           this.allocatingServers.delete(candidate.id);

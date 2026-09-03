@@ -33,6 +33,9 @@ class MatchService {
       if (!server.enabled) {
         throw new Error(`Server '${input.serverId}' is disabled`);
       }
+      if (!(await matchAllocationService.isServerAvailableForManualMatch(input.serverId))) {
+        throw new Error(`Server '${input.serverId}' is not available`);
+      }
     }
 
     // Normalize config and apply global simulation + round-limit settings so

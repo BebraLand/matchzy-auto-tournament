@@ -101,6 +101,60 @@ test.describe.serial('Stale loaded match', () => {
       expect(whileFresh.notAllocatableReason).toBe('busy');
       expect(whileFresh.staleMatchSlug).toBeNull();
 
+      // Manual creation must not succeed just because the UI selection was
+      // made before the server became busy. The backend owns this guard.
+      const blockedManual = await request.post('/api/matches', {
+        headers: getAuthHeader(),
+        data: {
+          slug: `occupied-server-${Date.now()}`,
+          serverId: server.id,
+          config: {
+            team1: { name: 'Manual Team 1', players: {} },
+            team2: { name: 'Manual Team 2', players: {} },
+          },
+        },
+      });
+      expect(blockedManual.status()).toBe(409);
+      expect(await blockedManual.json()).toMatchObject({
+        success: false,
+        error: `Server '${server.id}' is not available`,
+      });
+
+      // A stale-looking idle response is still unsafe when MatchZy identifies
+      // the same match. This is the active-warmup shape from the report.
+      const matchDetails = await (await request.get(`/api/matches/${slug}`)).json();
+      const matchId = matchDetails.match?.id as number;
+      const sameMatchIdle = await request.post('/api/test/server-status', {
+        headers: getAuthHeader(),
+        data: {
+          serverId: server.id,
+          status: 'idle',
+          online: true,
+          updatedAt: 1,
+          matchSlug: String(matchId),
+        },
+      });
+      expect(sameMatchIdle.ok()).toBe(true);
+
+      const sameMatchOldRow = await request.post('/api/test/match-state', {
+        headers: getAuthHeader(),
+        data: { slug, loadedAt: now - 3600 },
+      });
+      expect(sameMatchOldRow.ok()).toBe(true);
+
+      const whileSameMatchIsReported = await serverEntry(request, server.id);
+      expect(whileSameMatchIsReported.allocatable).toBe(false);
+      expect(whileSameMatchIsReported.notAllocatableReason).toBe('busy');
+      expect(whileSameMatchIsReported.staleMatchSlug).toBeNull();
+
+      // With no active MatchZy match id, the existing stale-row recovery still
+      // releases an abandoned loaded record.
+      const noMatchId = await request.post('/api/test/server-status', {
+        headers: getAuthHeader(),
+        data: { serverId: server.id, status: 'idle', online: true, updatedAt: 1 },
+      });
+      expect(noMatchId.ok()).toBe(true);
+
       // --- Loaded long ago with the plugin idle: the row is stale ---
       const stale = await request.post('/api/test/match-state', {
         headers: getAuthHeader(),

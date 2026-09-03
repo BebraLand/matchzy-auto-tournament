@@ -1499,7 +1499,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create match';
-    const statusCode = message.includes('already exists')
+    const statusCode = message.includes('already exists') || message.includes('not available')
       ? 409
       : message.includes('not found')
       ? 404
