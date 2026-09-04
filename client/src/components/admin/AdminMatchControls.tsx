@@ -129,6 +129,7 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
         swap: '/api/rcon/swap-teams',
         skipVeto: '/api/rcon/skip-veto',
         restartRound: '/api/rcon/restart-round',
+        restartMap: '/api/rcon/restart-map',
         endMatch: '/api/rcon/end-match',
         endWarmup: '/api/rcon/end-warmup',
         startMatch: '/api/rcon/start-match',
@@ -162,6 +163,7 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
         swap: 'Teams swapped successfully',
         skipVeto: 'Veto phase skipped',
         restartRound: 'Round restarted',
+        restartMap: 'Current map restarted',
         endMatch: 'Match ended successfully',
         endWarmup: 'Warmup ended',
         startMatch: 'Match started',
@@ -440,6 +442,31 @@ const AdminMatchControls: React.FC<AdminMatchControlsProps> = ({
                   </span>
                 </Tooltip>
               </Grid>
+              {matchSlug && (
+                <Grid size={{ xs: 6, sm: 4 }}>
+                  <Tooltip title="Reload the current map without resetting the rest of the series" arrow>
+                    <span>
+                      <Button
+                        fullWidth
+                        variant="outlined"
+                        color="warning"
+                        startIcon={<RestartAltIcon />}
+                        onClick={() =>
+                          handleActionClick(
+                            'restartMap',
+                            'Restart Current Map',
+                            'This will reload only the current map. The match series and current map index will be kept.',
+                            'warning'
+                          )
+                        }
+                        disabled={executing}
+                      >
+                        Restart Map
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </Grid>
+              )}
               <Grid size={{ xs: 6, sm: 4 }}>
                 <Tooltip title="Skip map veto phase and load first map immediately" arrow>
                   <span>

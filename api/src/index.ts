@@ -269,6 +269,7 @@ app.get('/', (_req: Request, res: Response) => {
         pauseMatch: 'POST /api/rcon/pause-match',
         unpauseMatch: 'POST /api/rcon/unpause-match',
         restartMatch: 'POST /api/rcon/restart-match',
+        restartMap: 'POST /api/rcon/restart-map',
         endWarmup: 'POST /api/rcon/end-warmup',
         reloadAdmins: 'POST /api/rcon/reload-admins',
         say: 'POST /api/rcon/say',

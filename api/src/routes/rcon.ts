@@ -772,6 +772,34 @@ router.post('/restart-round', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/rcon/restart-map
+ * Reload the current map without resetting the MatchZy series
+ */
+router.post('/restart-map', async (req: Request, res: Response) => {
+  try {
+    const { serverId } = req.body;
+
+    if (!serverId) {
+      return res.status(400).json({
+        success: false,
+        error: 'serverId is required',
+      });
+    }
+
+    const result = await rconService.sendCommand(serverId, 'css_rmap');
+    const statusCode = result.success ? 200 : 400;
+
+    return res.status(statusCode).json(result);
+  } catch (error) {
+    console.error('Error restarting current map:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to restart current map',
+    });
+  }
+});
+
+/**
  * POST /api/rcon/add-time
  * Add time to the current round
  */
