@@ -7,6 +7,8 @@
   
   <p>Complete tournament automation for Counter-Strike 2 using the enhanced MatchZy plugin. Zero manual server configuration.</p>
 
+<div align="left">
+
 ## ✨ What's Enhanced in the BebraLand fork
 
 The original platform already automates brackets, vetoes, and server loading. The BebraLand fork adds the admin ecosystem around the match: MAT becomes the single source of truth for tournament state and assets, while MatchZy and JTs Hud consume the same data automatically.
@@ -35,7 +37,7 @@ This is the part that makes the fork different: the admin configures the tournam
 
 This is the practical difference from upstream: the fork treats the tournament as one live system shared by operators, servers, statistics, and broadcast output.
 
-![BebraLand map motion and veto preview](design/assets/mirage-motion.gif)
+</div>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](docker/docker-compose.yml)
