@@ -14,6 +14,7 @@ import {
   SIMULATION_VETO_STEP_DELAY_MS,
 } from './vetoSimulationService';
 import { operatorControlService } from './operatorControlService';
+import { matchLiveStatsService } from './matchLiveStatsService';
 import type { ServerResponse } from '../types/server.types';
 import type { DbMatchRow } from '../types/database.types';
 import type { BracketMatch } from '../types/tournament.types';
@@ -282,11 +283,14 @@ export class MatchAllocationService {
         dbBusy !== null &&
         (dbBusy.loadedAt === null ||
           now - dbBusy.loadedAt < MatchAllocationService.STALE_LOADED_SECONDS);
+      const activeLiveStats = dbBusy ? matchLiveStatsService.getStats(dbBusy.slug) : null;
+      const matchIsStillActive = activeLiveStats !== null && activeLiveStats.status !== 'postgame';
       const dbRecordIsStale =
         dbSaysBusy &&
         pluginSaysIdle &&
         !dbBusyIsRecent &&
         dbBusy?.status === 'loaded' &&
+        !matchIsStillActive &&
         // MatchZy keeps the current match id in its convar during warmup. Do
         // not release a loaded row when the plugin still identifies that same
         // match, even if its status briefly reads idle.
@@ -546,10 +550,13 @@ export class MatchAllocationService {
       const dbBusyIsRecent =
         dbBusy !== undefined &&
         (dbBusy.loaded_at === null || now - dbBusy.loaded_at < MatchAllocationService.STALE_LOADED_SECONDS);
+      const activeLiveStats = dbBusy ? matchLiveStatsService.getStats(dbBusy.slug) : null;
+      const matchIsStillActive = activeLiveStats !== null && activeLiveStats.status !== 'postgame';
       const dbRecordIsStale =
         dbBusy !== undefined &&
         dbBusy.status === 'loaded' &&
         !dbBusyIsRecent &&
+        !matchIsStillActive &&
         matchSlug?.trim() !== String(dbBusy.id);
 
       // A loaded/live DB row blocks allocation, except for the same narrow
