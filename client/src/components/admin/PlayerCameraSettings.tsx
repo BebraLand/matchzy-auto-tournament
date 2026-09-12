@@ -156,7 +156,11 @@ export function PlayerCameraSettings() {
           <Typography variant="subtitle2" gutterBottom>Administrator-blocked</Typography>
           <Box display="flex" gap={1} flexWrap="wrap">
             {status.blockedSteamIds.map((id) => (
-              <Chip key={id} label={id} onDelete={() => void block(id, false).catch((caught) => setError(String(caught)))} />
+              <Chip
+                key={id}
+                label={playerNames[id] ? `${playerNames[id]} · ${id}` : id}
+                onDelete={() => void block(id, false).catch((caught) => setError(String(caught)))}
+              />
             ))}
           </Box>
         </Box>
