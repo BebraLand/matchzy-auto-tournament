@@ -14,6 +14,7 @@ interface MatchStatusResult {
   matchSlug: string | null;
   label: string | null;
   loading: boolean;
+  initialized: boolean;
   refetch: () => void;
 }
 
@@ -26,6 +27,7 @@ export function useCurrentMatchStatus(
   const [matchSlug, setMatchSlug] = useState<string | null>(null);
   const [label, setLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
 
@@ -34,6 +36,7 @@ export function useCurrentMatchStatus(
       setStatus('none');
       setMatchSlug(null);
       setLabel(null);
+      setLoadedFor(null);
       return;
     }
 
@@ -58,6 +61,7 @@ export function useCurrentMatchStatus(
       setMatchSlug(null);
       setLabel(null);
     } finally {
+      setLoadedFor(playerSteamId);
       if (!options?.silent) {
         setLoading(false);
       }
@@ -126,6 +130,7 @@ export function useCurrentMatchStatus(
     matchSlug,
     label,
     loading,
+    initialized: !playerSteamId || loadedFor === playerSteamId,
     refetch: () => fetchStatus(),
   };
 }

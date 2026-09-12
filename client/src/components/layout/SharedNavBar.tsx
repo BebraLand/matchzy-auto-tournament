@@ -62,13 +62,24 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
   } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { status: matchStatus, label: matchStatusLabel, loading: matchStatusLoading } =
+  const {
+    status: matchStatus,
+    matchSlug,
+    label: matchStatusLabel,
+    loading: matchStatusLoading,
+    initialized: matchStatusInitialized,
+  } =
     useCurrentMatchStatus(playerSteamId ?? null);
   const { showSnackbar } = useSnackbar();
 
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [navMenuAnchorEl, setNavMenuAnchorEl] = React.useState<null | HTMLElement>(null);
-  const prevMatchRef = React.useRef<{ status: string; label: string | null } | null>(null);
+  const prevMatchRef = React.useRef<{
+    playerSteamId: string;
+    matchSlug: string | null;
+    status: string;
+    label: string | null;
+  } | null>(null);
   const [playerAvatarUrl, setPlayerAvatarUrl] = React.useState<string | undefined>(undefined);
   const [playerName, setPlayerName] = React.useState<string>('Player');
   const [isLoadingPlayer, setIsLoadingPlayer] = React.useState(false);
@@ -144,10 +155,14 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
       prevMatchRef.current = null;
       return;
     }
-    if (matchStatusLoading) return;
+    if (!matchStatusInitialized || matchStatusLoading) return;
     const prev = prevMatchRef.current;
-    const now = { status: matchStatus, label: matchStatusLabel };
-    if (prev && (prev.status !== now.status || prev.label !== now.label)) {
+    const now = { playerSteamId, matchSlug, status: matchStatus, label: matchStatusLabel };
+    if (
+      prev &&
+      prev.playerSteamId === playerSteamId &&
+      (prev.matchSlug !== now.matchSlug || prev.status !== now.status || prev.label !== now.label)
+    ) {
       const msg =
         now.label === 'your_turn_veto'
           ? t('nav.matchStatus.yourTurnVeto')
@@ -165,7 +180,7 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
       }
     }
     prevMatchRef.current = now;
-  }, [playerSteamId, matchStatusLoading, matchStatus, matchStatusLabel, showSnackbar, t]);
+  }, [playerSteamId, matchSlug, matchStatusInitialized, matchStatusLoading, matchStatus, matchStatusLabel, showSnackbar, t]);
 
   const ctaLabels: Record<string, string> = {
     your_turn_veto: t('nav.matchStatus.yourTurnVeto'),

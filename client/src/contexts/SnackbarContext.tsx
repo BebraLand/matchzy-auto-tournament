@@ -230,6 +230,7 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
       />
       <NotistackProvider
         maxSnack={5}
+        preventDuplicate
         anchorOrigin={{
           vertical: 'bottom',
           horizontal: 'right',
