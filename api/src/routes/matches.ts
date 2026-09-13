@@ -34,9 +34,20 @@ import { validateServerToken } from '../middleware/serverAuth';
 
 const router = Router();
 
-// Live reallocation uses a short-lived in-memory checkpoint. The payload is
-// downloaded by the target MatchZy server immediately after it is captured.
+// Live reallocation uses short-lived in-memory data. The target server downloads
+// both the active checkpoint and the prior round backups before players move.
 const liveReallocationStates = new Map<string, { payload: Buffer; receivedAt: number }>();
+const liveReallocationBackups = new Map<string, Map<string, Buffer>>();
+const liveReallocationImports = new Set<string>();
+// ponytail: bounded in-memory handoff; move this to shared durable storage if deployments become multi-instance or bundles outgrow 25 MB.
+const LIVE_REALLOCATION_MAX_BACKUPS = 256;
+const LIVE_REALLOCATION_MAX_BACKUP_BYTES = 25 * 1024 * 1024;
+
+function clearLiveReallocation(slug: string): void {
+  liveReallocationStates.delete(slug);
+  liveReallocationBackups.delete(slug);
+  liveReallocationImports.delete(slug);
+}
 
 function stripMatchServerAccess(match: MatchListItem): MatchListItem {
   const safeMatch = { ...match };
@@ -1842,11 +1853,12 @@ router.post('/:slug/live-reallocate', requireAuth, async (req: Request, res: Res
       }
       targetServerId = target.id;
       serverAllocationTracker.markAllocated(targetServerId, slug);
-      liveReallocationStates.delete(slug);
+      clearLiveReallocation(slug);
 
       const captureUrl = `${baseUrl}/api/matches/${encodeURIComponent(slug)}/live-reallocation-state`;
+      const backupsUrl = `${baseUrl}/api/matches/${encodeURIComponent(slug)}/live-reallocation-backups`;
       const captureCommand =
-        `matchzy_live_reallocate_capture "${captureUrl}" "X-MatchZy-Token" "${serverToken}"`;
+        `matchzy_live_reallocate_capture "${captureUrl}" "X-MatchZy-Token" "${serverToken}" "${backupsUrl}"`;
       const capture = await rconService.sendCommand(oldServerId, captureCommand);
       if (!capture.success) {
         serverAllocationTracker.markIdle(targetServerId);
@@ -1879,7 +1891,7 @@ router.post('/:slug/live-reallocate', requireAuth, async (req: Request, res: Res
         await db.updateAsync('matches', { server_id: oldServerId, status: 'live' }, 'slug = ?', [slug]);
         await rconService.sendCommand(targetServerId, 'css_restart');
         serverAllocationTracker.markIdle(targetServerId);
-        liveReallocationStates.delete(slug);
+        clearLiveReallocation(slug);
         return res.status(400).json({ success: false, error: load.error || 'Failed to prepare target server.' });
       }
 
@@ -1892,8 +1904,38 @@ router.post('/:slug/live-reallocate', requireAuth, async (req: Request, res: Res
         await db.updateAsync('matches', { server_id: oldServerId, status: 'live' }, 'slug = ?', [slug]);
         await rconService.sendCommand(targetServerId, 'css_restart');
         serverAllocationTracker.markIdle(targetServerId);
-        liveReallocationStates.delete(slug);
+        clearLiveReallocation(slug);
         return res.status(400).json({ success: false, error: restore.error || 'Target server rejected the live checkpoint.' });
+      }
+
+      const importCallbackUrl = `${baseUrl}/api/matches/${encodeURIComponent(
+        slug
+      )}/live-reallocation-backups/imported`;
+      const backupImport = await rconService.sendCommand(
+        targetServerId,
+        `matchzy_live_reallocate_import_backups "${backupsUrl}" "X-MatchZy-Token" "${serverToken}" "${importCallbackUrl}"`
+      );
+      if (!backupImport.success) {
+        await db.updateAsync('matches', { server_id: oldServerId, status: 'live' }, 'slug = ?', [slug]);
+        await rconService.sendCommand(targetServerId, 'css_restart');
+        serverAllocationTracker.markIdle(targetServerId);
+        clearLiveReallocation(slug);
+        return res.status(400).json({ success: false, error: backupImport.error || 'Target server could not import round backups.' });
+      }
+
+      const importDeadline = Date.now() + 20_000;
+      while (Date.now() < importDeadline && !liveReallocationImports.has(slug)) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      if (!liveReallocationImports.has(slug)) {
+        await db.updateAsync('matches', { server_id: oldServerId, status: 'live' }, 'slug = ?', [slug]);
+        await rconService.sendCommand(targetServerId, 'css_restart');
+        serverAllocationTracker.markIdle(targetServerId);
+        clearLiveReallocation(slug);
+        return res.status(504).json({
+          success: false,
+          error: 'Target server did not confirm round-backup import in time.',
+        });
       }
 
       const targetAddress = `${target.host}:${target.port}`;
@@ -1905,7 +1947,7 @@ router.post('/:slug/live-reallocate', requireAuth, async (req: Request, res: Res
         await db.updateAsync('matches', { server_id: oldServerId, status: 'live' }, 'slug = ?', [slug]);
         await rconService.sendCommand(targetServerId, 'css_restart');
         serverAllocationTracker.markIdle(targetServerId);
-        liveReallocationStates.delete(slug);
+        clearLiveReallocation(slug);
         return res.status(502).json({
           success: false,
           error: announce.error || 'Source server could not announce the replacement server.',
@@ -1926,7 +1968,7 @@ router.post('/:slug/live-reallocate', requireAuth, async (req: Request, res: Res
       serverAllocationTracker.markIdle(oldServerId);
 
       migrationCommitted = true;
-      liveReallocationStates.delete(slug);
+      clearLiveReallocation(slug);
 
       const updatedMatch = await matchService.getMatchBySlug(slug, baseUrl);
       if (updatedMatch) {
@@ -1951,7 +1993,7 @@ router.post('/:slug/live-reallocate', requireAuth, async (req: Request, res: Res
         }
       }
       if (targetServerId) serverAllocationTracker.markIdle(targetServerId);
-      liveReallocationStates.delete(slug);
+      clearLiveReallocation(slug);
       log.error(`Error live-reallocating match`, error);
       return res.status(500).json({ success: false, error: 'Failed to live-reallocate match' });
     }
@@ -1987,10 +2029,98 @@ router.post(
 router.get('/:slug/live-reallocation-state', validateServerToken, (req: Request, res: Response) => {
   const state = liveReallocationStates.get(req.params.slug);
   if (!state || Date.now() - state.receivedAt > 60000) {
-    liveReallocationStates.delete(req.params.slug);
+    clearLiveReallocation(req.params.slug);
     return res.status(404).json({ success: false, error: 'Live checkpoint is no longer available' });
   }
   return res.type('application/json').send(state.payload);
+});
+
+/** MatchZy source upload endpoint for historical round backups during live relocation. */
+router.post(
+  '/:slug/live-reallocation-backups',
+  validateServerToken,
+  express.raw({ type: 'application/octet-stream', limit: '10mb' }),
+  async (req: Request, res: Response) => {
+    const { slug } = req.params;
+    const match = await db.queryOneAsync<{ id: number }>('SELECT id FROM matches WHERE slug = ?', [slug]);
+    if (!match) return res.status(404).json({ success: false, error: 'Match not found' });
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ success: false, error: 'Expected a non-empty backup file' });
+    }
+
+    const fileNameHeader = req.headers['matchzy-filename'];
+    const fileName = Array.isArray(fileNameHeader) ? fileNameHeader[0] : fileNameHeader;
+    const expectedFileName = new RegExp(`^matchzy_${match.id}_\\d+_round\\d+\\.json$`);
+    if (!fileName || !expectedFileName.test(fileName)) {
+      return res.status(400).json({ success: false, error: 'Invalid round-backup filename' });
+    }
+
+    try {
+      const parsed = JSON.parse(req.body.toString('utf8')) as { matchid?: number | string };
+      if (String(parsed.matchid) !== String(match.id)) {
+        return res.status(400).json({ success: false, error: 'Round backup does not belong to this match' });
+      }
+    } catch {
+      return res.status(400).json({ success: false, error: 'Round backup is not valid JSON' });
+    }
+
+    const backups = liveReallocationBackups.get(slug) ?? new Map<string, Buffer>();
+    const previous = backups.get(fileName);
+    const totalBytes =
+      Array.from(backups.values()).reduce((total, backup) => total + backup.length, 0) -
+      (previous?.length ?? 0) +
+      req.body.length;
+    if (
+      (!previous && backups.size >= LIVE_REALLOCATION_MAX_BACKUPS) ||
+      totalBytes > LIVE_REALLOCATION_MAX_BACKUP_BYTES
+    ) {
+      return res.status(413).json({ success: false, error: 'Live reallocation backup bundle is too large' });
+    }
+
+    backups.set(fileName, req.body);
+    liveReallocationBackups.set(slug, backups);
+    return res.status(200).json({ success: true, fileName, count: backups.size });
+  }
+);
+
+/** MatchZy target download endpoint for the historical round-backup bundle. */
+router.get('/:slug/live-reallocation-backups', validateServerToken, async (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const state = liveReallocationStates.get(slug);
+  const backups = liveReallocationBackups.get(slug);
+  if (!state || Date.now() - state.receivedAt > 60000 || !backups || backups.size === 0) {
+    clearLiveReallocation(slug);
+    return res.status(404).json({ success: false, error: 'Live round backups are no longer available' });
+  }
+
+  const match = await db.queryOneAsync<{ id: number }>('SELECT id FROM matches WHERE slug = ?', [slug]);
+  if (!match) return res.status(404).json({ success: false, error: 'Match not found' });
+
+  return res.json({
+    success: true,
+    matchid: match.id,
+    backups: Array.from(backups, ([fileName, payload]) => ({ fileName, content: payload.toString('utf8') })),
+  });
+});
+
+/** MatchZy target acknowledgement after it has written every transferred backup locally. */
+router.post('/:slug/live-reallocation-backups/imported', validateServerToken, async (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const match = await db.queryOneAsync<{ id: number }>('SELECT id FROM matches WHERE slug = ?', [slug]);
+  const backups = liveReallocationBackups.get(slug);
+  const imported = Number(req.body?.imported);
+  if (
+    !match ||
+    !backups ||
+    String(req.body?.matchid) !== String(match.id) ||
+    !Number.isInteger(imported) ||
+    imported !== backups.size
+  ) {
+    return res.status(400).json({ success: false, error: 'Invalid live round-backup import confirmation' });
+  }
+
+  liveReallocationImports.add(slug);
+  return res.status(200).json({ success: true, imported });
 });
 
 /**
