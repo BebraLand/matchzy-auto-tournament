@@ -21,6 +21,7 @@ export interface PlayerRecord {
   openskill_mu: number;
   openskill_sigma: number;
   match_count: number;
+  is_test_data?: boolean | number;
   created_at: number;
   updated_at: number;
 }
@@ -36,6 +37,7 @@ export interface CreatePlayerInput {
   elo?: number; // Optional - defaults to 1500 Skill Rating (OpenSkill baseline)
   isAdmin?: boolean;
   isSpectator?: boolean;
+  isTestData?: boolean;
 }
 
 export interface UpdatePlayerInput {
@@ -65,6 +67,7 @@ export interface PlayerResponse {
   updatedAt: number;
   isAdmin?: boolean;
   isSpectator?: boolean;
+  isTestData?: boolean;
 }
 
 class PlayerService {
@@ -106,6 +109,9 @@ class PlayerService {
       updatedAt: player.updated_at,
       isAdmin: (player as unknown as { is_admin?: number | boolean }).is_admin === 1,
       isSpectator: (player as unknown as { is_spectator?: number | boolean }).is_spectator === 1,
+      isTestData:
+        (player as unknown as { is_test_data?: number | boolean }).is_test_data === true ||
+        (player as unknown as { is_test_data?: number | boolean }).is_test_data === 1,
     };
   }
 
@@ -196,6 +202,7 @@ class PlayerService {
       openskill_mu: openskillRating.mu,
       openskill_sigma: openskillRating.sigma,
       match_count: 0,
+      is_test_data: Boolean(input.isTestData),
       created_at: now,
       updated_at: now,
     };
@@ -347,7 +354,8 @@ class PlayerService {
     steamId: string,
     name: string,
     avatar?: string,
-    elo?: number
+    elo?: number,
+    isTestData = false
   ): Promise<PlayerRecord> {
     const existing = await db.getOneAsync<PlayerRecord>('players', 'id = ?', [steamId]);
     if (existing) {
@@ -368,6 +376,7 @@ class PlayerService {
       openskill_mu: openskillRating.mu,
       openskill_sigma: openskillRating.sigma,
       match_count: 0,
+      is_test_data: isTestData,
       created_at: now,
       updated_at: now,
     });

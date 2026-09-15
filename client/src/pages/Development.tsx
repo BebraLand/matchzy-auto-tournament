@@ -207,6 +207,7 @@ const Development: React.FC = () => {
       const players: Array<{
         id: string; // Steam ID
         name: string;
+        isTestData: boolean;
       }> = [];
 
       // Generate unique Steam IDs
@@ -230,6 +231,7 @@ const Development: React.FC = () => {
         players.push({
           id: steamId,
           name,
+          isTestData: true,
         });
       }
 
@@ -285,16 +287,55 @@ const Development: React.FC = () => {
     try {
       // Delete all teams that start with 'test-team-'
       const teamsResponse = await globalThis.fetch('/api/teams');
+      const testPlayerIds = new Set<string>();
+      const realTeamPlayerIds = new Set<string>();
 
       if (teamsResponse.ok) {
         const teamsData = await teamsResponse.json();
-        const testTeams =
-          teamsData.teams?.filter((t: { id: string }) => t.id.startsWith('test-team-')) || [];
+        const allTeams = Array.isArray(teamsData.teams) ? teamsData.teams : [];
+        const testTeams = allTeams.filter((t: { id: string }) => t.id.startsWith('test-team-'));
+
+        for (const team of allTeams) {
+          const playerIds = Array.isArray(team.players)
+            ? team.players
+                .map((player: { steamId?: string }) => player.steamId)
+                .filter((id: string | undefined): id is string => Boolean(id))
+            : [];
+          const destination = team.id.startsWith('test-team-')
+            ? testPlayerIds
+            : realTeamPlayerIds;
+          playerIds.forEach((id: string) => destination.add(id));
+        }
 
         for (const team of testTeams) {
           await globalThis.fetch(`/api/teams/${team.id}`, {
             method: 'DELETE',
           });
+        }
+      }
+
+      const playersResponse = await globalThis.fetch('/api/players');
+      if (!playersResponse.ok) {
+        throw new Error('Failed to load players');
+      }
+      const playersData = await playersResponse.json();
+      for (const player of Array.isArray(playersData.players) ? playersData.players : []) {
+        if (player.isTestData && !player.isAdmin) {
+          testPlayerIds.add(player.id);
+        }
+      }
+
+      const playersToDelete = [...testPlayerIds].filter(
+        (id) => !realTeamPlayerIds.has(id)
+      );
+      if (playersToDelete.length > 0) {
+        const deletePlayersResponse = await globalThis.fetch('/api/players/bulk-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: playersToDelete }),
+        });
+        if (!deletePlayersResponse.ok) {
+          throw new Error('Failed to delete test players');
         }
       }
 

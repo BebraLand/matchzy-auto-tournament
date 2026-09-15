@@ -160,7 +160,8 @@ class TeamService {
           player.steamId,
           player.name,
           player.avatar,
-          player.elo
+          player.elo,
+          input.id.startsWith('test-team-')
         );
       } catch (error) {
         // Log but don't fail team creation if player creation fails
@@ -245,7 +246,13 @@ class TeamService {
       // Auto-create players in players table (for shuffle tournaments)
       for (const player of enrichedPlayers) {
         try {
-          await playerService.getOrCreatePlayer(player.steamId, player.name, player.avatar);
+          await playerService.getOrCreatePlayer(
+            player.steamId,
+            player.name,
+            player.avatar,
+            undefined,
+            id.startsWith('test-team-')
+          );
         } catch (error) {
           // Log but don't fail team update if player creation fails
           log.warn(`Failed to create player ${player.steamId} in players table`, { error });
