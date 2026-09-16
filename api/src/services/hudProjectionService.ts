@@ -5,6 +5,7 @@ import type { PlayerRecord } from './playerService';
 import type { VetoState } from '../types/veto.types';
 import type { MatchConfig, MatchTeam } from '../types/match.types';
 import { normalizeConfigPlayers } from '../utils/playerTransform';
+import { getTournamentStageLabel } from '../utils/tournamentHelpers';
 import type {
   HudCurrentResponseV1,
   HudMapProjection,
@@ -47,6 +48,7 @@ type TournamentRow = {
   type: string;
   format: string;
   status: string;
+  team_ids?: string | null;
   settings?: string | null;
 };
 
@@ -84,7 +86,12 @@ function absoluteUrl(value: string | null | undefined, publicBaseUrl: string): s
   }
 }
 
-function getRoundLabel(match: MatchRow): string {
+function getRoundLabel(match: MatchRow, tournament?: TournamentRow | null): string {
+  const teamIds = parseJson<unknown[]>(tournament?.team_ids, []);
+  const stage = tournament
+    ? getTournamentStageLabel(tournament.type, match.bracket, match.round, teamIds.length)
+    : null;
+  if (stage) return stage;
   const bracket = match.bracket?.toUpperCase();
   if (bracket === 'GF') return 'Grand Final';
   if (bracket === 'GF_RESET') return 'Grand Final Reset';
@@ -479,7 +486,7 @@ class HudProjectionService {
       numericId: match.id,
       slug: match.slug,
       round: match.round,
-      roundLabel: getRoundLabel(match),
+      roundLabel: getRoundLabel(match, tournament),
       bracket: match.bracket || null,
       format: getFormat(match, tournament, veto),
       status: getStatus(match, veto),
@@ -548,15 +555,18 @@ class HudProjectionService {
   }
 
   async getTournamentMatches(tournamentId: number): Promise<Array<Record<string, unknown>>> {
-    const rows = await db.queryAsync<MatchRow>(
-      `SELECT * FROM matches WHERE tournament_id = ? ORDER BY round, match_number, id`,
-      [tournamentId]
-    );
+    const [rows, tournament] = await Promise.all([
+      db.queryAsync<MatchRow>(
+        `SELECT * FROM matches WHERE tournament_id = ? ORDER BY round, match_number, id`,
+        [tournamentId]
+      ),
+      db.queryOneAsync<TournamentRow>('SELECT * FROM tournament WHERE id = ?', [tournamentId]),
+    ]);
     return rows.map((match) => ({
       id: String(match.id),
       slug: match.slug,
       round: match.round,
-      roundLabel: getRoundLabel(match),
+      roundLabel: getRoundLabel(match, tournament),
       bracket: match.bracket || null,
       team1Id: match.team1_id || null,
       team2Id: match.team2_id || null,

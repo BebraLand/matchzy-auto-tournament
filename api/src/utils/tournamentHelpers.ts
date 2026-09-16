@@ -21,6 +21,47 @@ export const calculateTotalRounds = (teamCount: number, type: TournamentType): n
   }
 };
 
+export const getSingleEliminationStageLabel = (round: number, teamCount: number): string | null => {
+  const totalRounds = Math.ceil(Math.log2(teamCount));
+  if (!Number.isInteger(round) || round < 1 || teamCount < 2 || round > totalRounds) return null;
+  if (round === totalRounds) return 'Final';
+  if (round === totalRounds - 1) return 'Semi-Finals';
+  if (round === totalRounds - 2) return 'Quarter-Finals';
+  return `Round of ${2 ** (totalRounds - round + 1)}`;
+};
+
+export const getTournamentStageLabel = (
+  type: string,
+  bracket: string | null | undefined,
+  round: number,
+  teamCount: number
+): string | null => {
+  if (!Number.isInteger(round) || round < 1) return null;
+  const normalizedBracket = bracket?.toUpperCase();
+
+  if (type === 'single_elimination') return getSingleEliminationStageLabel(round, teamCount);
+  if (type === 'double_elimination') {
+    if (normalizedBracket === 'GF') return 'Grand Final';
+    if (normalizedBracket === 'GF_RESET') return 'Grand Final Reset';
+    if (normalizedBracket === 'WB') {
+      const stage = getSingleEliminationStageLabel(round, teamCount);
+      return stage ? `Upper Bracket ${stage}` : null;
+    }
+    if (normalizedBracket === 'LB') {
+      const lowerBracketRounds = 2 * Math.ceil(Math.log2(teamCount)) - 2;
+      if (teamCount < 4 || round > lowerBracketRounds) return null;
+      if (round === lowerBracketRounds) return 'Lower Bracket Final';
+      if (round === lowerBracketRounds - 1) return 'Lower Bracket Semi-Final';
+      return `Lower Bracket Round ${round}`;
+    }
+    return `Double Elimination · Round ${round}`;
+  }
+  if (type === 'round_robin') return `Round Robin · Round ${round}`;
+  if (type === 'swiss') return `Swiss Stage · Round ${round}`;
+  if (type === 'shuffle') return `Shuffle · Round ${round}`;
+  return null;
+};
+
 export const isPowerOfTwo = (n: number): boolean => {
   return n > 0 && (n & (n - 1)) === 0;
 };
