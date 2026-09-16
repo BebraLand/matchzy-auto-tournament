@@ -69,6 +69,7 @@ interface MatchDetailsModalProps {
   onClose: () => void;
   onDeleted?: (slug: string) => void;
   readOnly?: boolean;
+  publicPage?: boolean;
 }
 
 /**
@@ -90,6 +91,7 @@ const InnerMatchDetailsModal: React.FC<InnerMatchDetailsModalProps> = ({
   onClose,
   onDeleted,
   readOnly,
+  publicPage,
 }) => {
   const { t } = useTranslation();
   const [matchTimer, setMatchTimer] = useState<number>(0);
@@ -128,7 +130,7 @@ const InnerMatchDetailsModal: React.FC<InnerMatchDetailsModalProps> = ({
     match?.slug && match?.status !== 'completed' ? match.slug : null
   );
 
-  const { status: tournamentStatus } = useTournamentStatus();
+  const { status: tournamentStatus } = useTournamentStatus(publicPage);
   const isManualMatch = match?.round === 0;
   // Manual matches are independent of the global tournament lifecycle. For them
   // we pass `undefined` as tournamentStarted so status copy stays neutral and

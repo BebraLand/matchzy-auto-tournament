@@ -12,6 +12,7 @@ import LoginIcon from '@mui/icons-material/Login';
 import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { io } from 'socket.io-client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { useCurrentMatchStatus } from '../../hooks/useCurrentMatchStatus';
@@ -83,6 +84,27 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
   const [playerAvatarUrl, setPlayerAvatarUrl] = React.useState<string | undefined>(undefined);
   const [playerName, setPlayerName] = React.useState<string>('Player');
   const [isLoadingPlayer, setIsLoadingPlayer] = React.useState(false);
+  const [hasPublicBracket, setHasPublicBracket] = React.useState(false);
+
+  React.useEffect(() => {
+    if (isAuthenticated) return;
+
+    const loadPublicBracket = async () => {
+      try {
+        const response = await api.get<{ success: boolean }>('/api/tournament/public-bracket');
+        setHasPublicBracket(response.success);
+      } catch {
+        setHasPublicBracket(false);
+      }
+    };
+
+    void loadPublicBracket();
+    const socket = io();
+    socket.on('tournament:update', loadPublicBracket);
+    return () => {
+      socket.disconnect();
+    };
+  }, [isAuthenticated]);
 
   const handleAvatarMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -255,6 +277,11 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
           <Button color="inherit" component={RouterLink} to="/matches" size="small" sx={{ px: { sm: 0.5, lg: 1.5 } }}>
             {t('nav.matches')}
           </Button>
+          {hasPublicBracket && (
+            <Button color="inherit" component={RouterLink} to="/bracket" size="small" sx={{ px: { sm: 0.5, lg: 1.5 } }}>
+              {t('nav.bracket')}
+            </Button>
+          )}
           <Button
             color="inherit"
             component={RouterLink}
@@ -282,6 +309,7 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
             ['/player', t('nav.players')],
             ['/stats', t('nav.playerStats')],
             ['/matches', t('nav.matches')],
+            ...(hasPublicBracket ? [['/bracket', t('nav.bracket')]] : []),
             ['/tournament/1/leaderboard', t('nav.leaderboard')],
           ].map(([to, label]) => (
             <MenuItem key={to} component={RouterLink} to={to} onClick={() => setNavMenuAnchorEl(null)}>

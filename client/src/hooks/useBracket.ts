@@ -50,7 +50,7 @@ function pruneLiveStatsCache(
   return cache;
 }
 
-export const useBracket = () => {
+export const useBracket = (publicPage = false) => {
   const { showSuccess, showError, showSnackbar } = useSnackbar();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -83,7 +83,7 @@ export const useBracket = () => {
         tournament?: Tournament;
         matches?: Match[];
         totalRounds?: number;
-      } = await api.get('/api/tournament/bracket');
+      } = await api.get(publicPage ? '/api/tournament/public-bracket' : '/api/tournament/bracket');
 
       if (response.success && response.tournament) {
         setTournament(response.tournament);
@@ -128,7 +128,7 @@ export const useBracket = () => {
         setLoading(false);
       }
     }
-  }, []);
+  }, [publicPage]);
 
   const startTournament = async () => {
     setStarting(true);

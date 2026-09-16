@@ -363,6 +363,41 @@ router.get('/allocation-status', async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * Public, read-only tournament bracket. Keep operator-only fields such as
+ * server IDs and MatchZy configuration out of the response.
+ */
+router.get('/public-bracket', async (_req: Request, res: Response) => {
+  try {
+    const bracket = await tournamentService.getBracket();
+
+    if (!bracket || (bracket.tournament.status !== 'in_progress' && bracket.tournament.status !== 'completed')) {
+      return res.status(404).json({ success: false, error: 'No active tournament bracket exists' });
+    }
+
+    const { tournament, matches, totalRounds } = bracket;
+    return res.json({
+      success: true,
+      tournament: {
+        id: tournament.id,
+        name: tournament.name,
+        type: tournament.type,
+        format: tournament.format,
+        status: tournament.status,
+        maps: tournament.maps,
+        mapSequence: tournament.mapSequence,
+        maxRounds: tournament.maxRounds,
+        teams: tournament.teams,
+      },
+      matches: matches.map(({ config, serverId, nextMatchId, ...match }) => match),
+      totalRounds,
+    });
+  } catch (error) {
+    log.error('Error fetching public bracket', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch bracket' });
+  }
+});
+
 // Protect all routes
 router.use(requireAuth);
 

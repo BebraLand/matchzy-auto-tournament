@@ -11,7 +11,7 @@ interface UseTournamentStatusResult {
   refresh: () => Promise<void>;
 }
 
-export const useTournamentStatus = (): UseTournamentStatusResult => {
+export const useTournamentStatus = (publicPage = false): UseTournamentStatusResult => {
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [status, setStatus] = useState<Tournament['status'] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -23,7 +23,7 @@ export const useTournamentStatus = (): UseTournamentStatusResult => {
 
     try {
       const response = await api.get<TournamentResponse & { tournament?: Tournament }>(
-        '/api/tournament'
+        publicPage ? '/api/tournament/public-bracket' : '/api/tournament'
       );
 
       if (response.success && response.tournament) {
@@ -41,7 +41,7 @@ export const useTournamentStatus = (): UseTournamentStatusResult => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [publicPage]);
 
   useEffect(() => {
     void fetchTournament();

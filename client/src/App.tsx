@@ -204,6 +204,18 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/bracket"
+        element={
+          isAuthenticated ? (
+            <ProtectedRoute>
+              <Layout><Bracket /></Layout>
+            </ProtectedRoute>
+          ) : (
+            <Bracket publicPage />
+          )
+        }
+      />
+      <Route
         path="/player"
         element={
           <ProtectedRoute adminOnly={false}>
@@ -232,7 +244,6 @@ function AppRoutes() {
         <Route path="players" element={<Players />} />
         <Route path="servers" element={<Servers />} />
         <Route path="tournament" element={<Tournament />} />
-        <Route path="bracket" element={<Bracket />} />
         <Route path="admin" element={<AdminTools />} />
         <Route path="settings" element={<Settings />} />
         <Route path="maps" element={<Maps />} />

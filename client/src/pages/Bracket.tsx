@@ -31,12 +31,13 @@ import { getRoundLabel } from '../utils/matchUtils';
 import { useBracket } from '../hooks/useBracket';
 import { api } from '../utils/api';
 import { StartTournamentButton } from '../components/dashboard';
+import { TopNavBar } from '../components/layout/TopNavBar';
 import type { Match } from '../types';
 import { useTranslation } from 'react-i18next';
 
 // Interfaces are now imported from useBracket hook
 
-export default function Bracket() {
+export default function Bracket({ publicPage = false }: { publicPage?: boolean }) {
   const navigate = useNavigate();
   const {
     loading,
@@ -46,7 +47,7 @@ export default function Bracket() {
     totalRounds,
     // starting handled by StartTournamentButton
     loadBracket,
-  } = useBracket();
+  } = useBracket(publicPage);
 
   const [viewMode, setViewMode] = useState<'visual' | 'list'>('visual');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -161,6 +162,8 @@ export default function Bracket() {
   // Poll allocation status globally so all tournament types can show the
   // "next servers in Xs" countdown on the Bracket page.
   useEffect(() => {
+    if (publicPage) return;
+
     const loadAllocationStatus = async () => {
       try {
         const availability = await api.get<{
@@ -213,7 +216,7 @@ export default function Bracket() {
       void loadAllocationStatus();
     }, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [publicPage]);
 
   // Local per‑second countdown tick for "next allocation in" display
   useEffect(() => {
@@ -324,15 +327,19 @@ export default function Bracket() {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-        <CircularProgress />
+      <Box minHeight={publicPage ? '100vh' : undefined} bgcolor={publicPage ? 'background.default' : undefined}>
+        {publicPage && <TopNavBar />}
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+          <CircularProgress />
+        </Box>
       </Box>
     );
   }
 
   if (error) {
     return (
-      <Box sx={{ width: '100%', height: '100%' }}>
+      <Box minHeight={publicPage ? '100vh' : undefined} bgcolor={publicPage ? 'background.default' : undefined} sx={{ width: '100%', height: '100%' }}>
+        {publicPage && <TopNavBar />}
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -340,14 +347,15 @@ export default function Bracket() {
 
   if (!tournament) {
     return (
-      <Box>
+      <Box minHeight={publicPage ? '100vh' : undefined} bgcolor={publicPage ? 'background.default' : undefined}>
+        {publicPage && <TopNavBar />}
         <EmptyState
           icon={AccountTreeOutlinedIcon}
           title={t('bracket.empty.noBracketTitle')}
           description={t('bracket.empty.noBracketDescription')}
-          actionLabel={t('tournament.common.createTournament')}
-          actionIcon={AddIcon}
-          onAction={() => navigate('/tournament')}
+          actionLabel={publicPage ? undefined : t('tournament.common.createTournament')}
+          actionIcon={publicPage ? undefined : AddIcon}
+          onAction={publicPage ? undefined : () => navigate('/tournament')}
         />
       </Box>
     );
@@ -443,9 +451,11 @@ export default function Bracket() {
           <Typography variant="body2" color="text.secondary" mb={3}>
             Generate the bracket to create matches for {tournament.name}
           </Typography>
-          <Button variant="contained" onClick={() => navigate('/tournament')}>
-            Go to Tournament Settings
-          </Button>
+          {!publicPage && (
+            <Button variant="contained" onClick={() => navigate('/tournament')}>
+              Go to Tournament Settings
+            </Button>
+          )}
         </Card>
       </Box>
     );
@@ -545,6 +555,7 @@ export default function Bracket() {
         overflow: isFullscreen ? 'hidden' : 'visible',
       }}
     >
+      {publicPage && !isFullscreen && <TopNavBar />}
       {/* Header - hidden in fullscreen mode */}
       {!isFullscreen && (
         <>
@@ -569,7 +580,7 @@ export default function Bracket() {
               </Box>
             </Box>
             <Box display="flex" gap={2} alignItems="center">
-              {tournament.status === 'setup' && (
+              {!publicPage && tournament.status === 'setup' && (
                 <StartTournamentButton variant="contained" size="medium" onSuccess={loadBracket} />
               )}
               <ToggleButtonGroup
@@ -625,7 +636,7 @@ export default function Bracket() {
       )}
 
       {/* Allocation / cooldown status helper */}
-      {!isFullscreen && renderAllocationBanner()}
+      {!publicPage && !isFullscreen && renderAllocationBanner()}
 
       {/* Fullscreen exit button - only visible in fullscreen */}
       {isFullscreen && (
@@ -800,6 +811,8 @@ export default function Bracket() {
               ? `Round ${selectedMatch.round}`
               : getRoundLabel(selectedMatch.round, totalRounds)
           }
+          readOnly={publicPage}
+          publicPage={publicPage}
           onClose={handleCloseMatchModal}
         />
       )}

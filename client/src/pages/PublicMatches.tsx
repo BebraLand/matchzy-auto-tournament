@@ -362,6 +362,7 @@ export default function PublicMatches() {
         matchNumber={selectedMatch ? matchNumber(selectedMatch) : 0}
         roundLabel={selectedMatch ? getRoundLabel(selectedMatch.round) : ''}
         readOnly
+        publicPage
         onClose={() => setSelectedMatch(null)}
       />
     </Box>
