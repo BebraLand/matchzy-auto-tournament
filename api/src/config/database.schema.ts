@@ -56,6 +56,7 @@ export function getSchemaSQL(): string {
       country_code TEXT,
       logo_url TEXT,
       discord_role_id TEXT,
+      captain_steam_id TEXT,
       players TEXT NOT NULL,
       created_at INTEGER NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::INTEGER,
       updated_at INTEGER NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::INTEGER

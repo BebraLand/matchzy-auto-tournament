@@ -11,6 +11,7 @@ export type AppSettingKey =
   | 'matchzy_debug_chat'
   | 'ratings_enabled'
   | 'allow_self_register'
+  | 'veto_access_mode'
   | 'branding_name'
   | 'branding_logo_url'
   | 'branding_primary_color'
@@ -64,6 +65,7 @@ const ALLOWED_KEYS: AppSettingKey[] = [
   'matchzy_debug_chat',
   'ratings_enabled',
   'allow_self_register',
+  'veto_access_mode',
   'branding_name',
   'branding_logo_url',
   'branding_primary_color',
@@ -212,6 +214,15 @@ class SettingsService {
           normalized === 'enabled';
         await db.setAppSettingAsync(key, isEnabled ? '1' : '0');
         log.success(`Player rating updates ${isEnabled ? 'enabled' : 'disabled'}`);
+        return;
+      }
+
+      if (key === 'veto_access_mode') {
+        if (trimmed !== 'all_players' && trimmed !== 'captain_only') {
+          throw new Error('veto_access_mode must be all_players or captain_only');
+        }
+        await db.setAppSettingAsync(key, trimmed);
+        log.success(`Veto access mode updated to ${trimmed}`);
         return;
       }
 
@@ -527,6 +538,12 @@ class SettingsService {
 
     const normalized = value.toLowerCase();
     return normalized === '1' || normalized === 'true' || normalized === 'yes';
+  }
+
+  async getVetoAccessMode(): Promise<'all_players' | 'captain_only'> {
+    return (await this.getSetting('veto_access_mode')) === 'captain_only'
+      ? 'captain_only'
+      : 'all_players';
   }
 
   /**

@@ -33,11 +33,13 @@ test.describe.serial('Teams API', () => {
     const team = await createTeam(request, {
       id: `api-test-team-${timestamp}`,
       name: `API Test Team ${timestamp}`,
+      captainSteamId: players[0].steamId,
       players,
     });
     expect(team).toBeTruthy();
     expect(team?.id).toBeTruthy();
     expect(team?.name).toBeTruthy();
+    expect(team?.captainSteamId).toBe(players[0].steamId);
     createdTeam = team;
 
     // Step 2: Verify team exists via API
@@ -56,6 +58,12 @@ test.describe.serial('Teams API', () => {
     });
     expect(updatedTeam).toBeTruthy();
     expect(updatedTeam?.name).toBe(updatedName);
+
+    const invalidCaptain = await request.put(`/api/teams/${team!.id}`, {
+      headers: getAuthHeader(),
+      data: { captainSteamId: '76561198000000999' },
+    });
+    expect(invalidCaptain.status()).toBe(400);
 
     // Step 4: Delete team
     const deleteResult = await deleteTeam(request, team!.id);
@@ -80,6 +88,19 @@ test.describe.serial('Teams API', () => {
     // Cleanup
     await deleteTeam(request, team1.id);
     await deleteTeam(request, team2.id);
+  });
+
+  test('should automatically make the only player captain', {
+    tag: ['@api', '@teams'],
+  }, async ({ request }) => {
+    const steamId = `7656119800000${Date.now() % 100000}`;
+    const team = await createTeam(request, {
+      id: `single-player-team-${Date.now()}`,
+      name: 'Single Player Team',
+      players: [{ steamId, name: 'Solo Player' }],
+    });
+    expect(team?.captainSteamId).toBe(steamId);
+    await deleteTeam(request, team!.id);
   });
 
   test('should clear an uploaded team logo', {

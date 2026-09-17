@@ -19,6 +19,7 @@ class TeamService {
    * Convert database team to response format
    */
   private toResponse(team: Team): TeamResponse {
+    const players = JSON.parse(team.players) as Player[];
     return {
       id: team.id,
       name: team.name,
@@ -26,7 +27,9 @@ class TeamService {
       countryCode: team.country_code,
       logoUrl: team.logo_url,
       discordRoleId: team.discord_role_id,
-      players: JSON.parse(team.players) as Player[],
+      captainSteamId:
+        team.captain_steam_id || (players.length === 1 ? players[0].steamId : null),
+      players,
       createdAt: team.created_at,
       updatedAt: team.updated_at,
     };
@@ -57,6 +60,12 @@ class TeamService {
 
     if (steamIds.length !== uniqueSteamIds.size) {
       throw new Error('Team cannot have duplicate Steam IDs');
+    }
+  }
+
+  private validateCaptain(captainSteamId: string | null | undefined, players: Player[]): void {
+    if (captainSteamId && !players.some((player) => player.steamId === captainSteamId)) {
+      throw new Error('Captain must be a player on the team');
     }
   }
 
@@ -143,6 +152,7 @@ class TeamService {
 
     // Validate no duplicate Steam IDs
     this.validateNoDuplicatePlayers(input.players);
+    this.validateCaptain(input.captainSteamId, input.players);
 
     // Enrich players with avatars from Steam API.
     // For dev/test teams created via the Development tools (IDs prefixed with
@@ -179,6 +189,7 @@ class TeamService {
           countryCode: input.countryCode,
           logoUrl: input.logoUrl,
           discordRoleId: input.discordRoleId,
+          captainSteamId: input.captainSteamId,
           players: enrichedPlayers,
         });
       }
@@ -193,6 +204,8 @@ class TeamService {
       country_code: this.normalizeCountryCode(input.countryCode) || null,
       logo_url: input.logoUrl?.trim() || null,
       discord_role_id: input.discordRoleId || null,
+      captain_steam_id:
+        input.captainSteamId || (enrichedPlayers.length === 1 ? enrichedPlayers[0].steamId : null),
       players: JSON.stringify(enrichedPlayers),
     });
 
@@ -218,6 +231,21 @@ class TeamService {
     if (input.players && input.players.length > 0) {
       this.validateNoDuplicatePlayers(input.players);
     }
+    if (
+      input.players &&
+      input.captainSteamId === undefined &&
+      existing.captainSteamId &&
+      !input.players.some((player) => player.steamId === existing.captainSteamId)
+    ) {
+      input.captainSteamId = null;
+    }
+    if ((input.players ?? existing.players).length === 1 && !input.captainSteamId) {
+      input.captainSteamId = (input.players ?? existing.players)[0].steamId;
+    }
+    this.validateCaptain(
+      input.captainSteamId === undefined ? existing.captainSteamId : input.captainSteamId,
+      input.players ?? existing.players
+    );
 
     const updateData: Record<string, unknown> = {
       updated_at: Math.floor(Date.now() / 1000),
@@ -235,6 +263,7 @@ class TeamService {
       shouldDeleteLogoAsset = Boolean(existing.logoUrl && !logoUrl);
     }
     if (input.discordRoleId !== undefined) updateData.discord_role_id = input.discordRoleId || null;
+    if (input.captainSteamId !== undefined) updateData.captain_steam_id = input.captainSteamId || null;
     if (input.players !== undefined) {
       // Enrich players with avatars from Steam API. For test/dev teams created
       // from the Dev Tools page (IDs starting with "test-team-"), skip Steam

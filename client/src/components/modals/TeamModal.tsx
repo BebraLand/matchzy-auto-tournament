@@ -17,6 +17,7 @@ import {
   ListItemAvatar,
   Tooltip,
   CircularProgress,
+  MenuItem,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
@@ -93,6 +94,7 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
   const [logoUrl, setLogoUrl] = useState('');
   const [pendingLogoData, setPendingLogoData] = useState<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [captainSteamId, setCaptainSteamId] = useState('');
   const [newPlayerSteamId, setNewPlayerSteamId] = useState('');
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerAvatar, setNewPlayerAvatar] = useState<string | undefined>(undefined);
@@ -115,6 +117,7 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
       setLogoUrl(team.logoUrl || '');
       setPendingLogoData(null);
       setPlayers(team.players || []);
+      setCaptainSteamId(team.captainSteamId || '');
     } else {
       resetForm();
     }
@@ -128,6 +131,7 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
     setLogoUrl('');
     setPendingLogoData(null);
     setPlayers([]);
+    setCaptainSteamId('');
     setNewPlayerSteamId('');
     setNewPlayerName('');
     setNewPlayerAvatar(undefined);
@@ -218,6 +222,7 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
     };
 
     setPlayers([...players, playerToAdd]);
+    if (players.length === 0) setCaptainSteamId(playerToAdd.steamId);
     setNewPlayerSteamId('');
     setNewPlayerName('');
     setNewPlayerAvatar(undefined);
@@ -228,6 +233,7 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
 
   const handleRemovePlayer = (steamId: string) => {
     setPlayers(players.filter((p) => p.steamId !== steamId));
+    if (captainSteamId === steamId) setCaptainSteamId('');
   };
 
   const handleSelectPlayers = (selectedPlayerIds: string[]) => {
@@ -284,6 +290,7 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
           const next = [...players];
           next[replaceIndex] = replacement;
           setPlayers(next);
+          if (captainSteamId === replacePlayerSteamId) setCaptainSteamId(replacement.steamId);
           showSuccess(t('teamModal.success.playerReplaced'));
         } catch {
           const next = [...players];
@@ -293,6 +300,7 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
             avatar: undefined,
           };
           setPlayers(next);
+          if (captainSteamId === replacePlayerSteamId) setCaptainSteamId(replacementId);
           showSuccess(t('teamModal.success.playerReplaced'));
         } finally {
           setReplacePlayerSteamId(null);
@@ -362,6 +370,7 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
         logoUrl: logoUrl.trim() || null,
         discordRoleId: undefined, // Discord notifications not yet implemented
         players,
+        captainSteamId: captainSteamId || null,
       };
 
       let newTeamId: string | undefined;
@@ -380,6 +389,7 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
             logoUrl: payload.logoUrl,
             discordRoleId: undefined, // Discord notifications not yet implemented
             players: payload.players,
+            captainSteamId: payload.captainSteamId,
           }
         );
         warnings = response.warnings ?? [];
@@ -573,8 +583,28 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
             </Box>
 
             {players.length > 0 ? (
-              <List sx={{ bgcolor: 'background.paper' }}>
-                {players.map((player) => (
+              <>
+                <TextField
+                  select
+                  label={t('teamModal.captainLabel', 'Captain')}
+                  value={captainSteamId}
+                  onChange={(event) => setCaptainSteamId(event.target.value)}
+                  helperText={t(
+                    'teamModal.captainHelper',
+                    'Only affects Captain-only veto. A one-player team uses its only player automatically.'
+                  )}
+                  fullWidth
+                  data-testid="team-captain-select"
+                >
+                  <MenuItem value="">{t('teamModal.noCaptain', 'No captain assigned')}</MenuItem>
+                  {players.map((player) => (
+                    <MenuItem key={player.steamId} value={player.steamId}>
+                      {player.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <List sx={{ bgcolor: 'background.paper' }}>
+                  {players.map((player) => (
                   <ListItem
                     key={player.steamId}
                     secondaryAction={
@@ -640,8 +670,9 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
                       primaryTypographyProps={{ fontWeight: 500 }}
                     />
                   </ListItem>
-                ))}
-              </List>
+                  ))}
+                </List>
+              </>
             ) : (
               <Alert data-testid="team-no-players-alert" severity="info">
                 {t('teamModal.noPlayersInfo')}

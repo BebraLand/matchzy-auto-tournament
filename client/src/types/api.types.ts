@@ -347,6 +347,7 @@ export interface SettingsResponse extends ApiResponse {
     matchzyKnifeEnabledDefault?: boolean;
     matchzyDebugChatEnabled?: boolean;
     ratingsEnabled?: boolean;
+    vetoAccessMode?: 'all_players' | 'captain_only';
     allowSelfRegister?: boolean;
     branding?: BrandingSettings;
     // MatchZy core defaults

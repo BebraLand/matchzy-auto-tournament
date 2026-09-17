@@ -90,6 +90,48 @@ test.describe.serial('Veto API', () => {
     expect(vetoState.pickedMaps[0].sideTeam1).toBe('T'); // Team A gets opposite
   });
 
+  test('should allow only the assigned captain when captain-only veto is enabled', {
+    tag: ['@api', '@veto', '@security'],
+  }, async ({ request }) => {
+    const captain = team1.players[0].steamId;
+    const nonCaptain = team1.players[1].steamId;
+    expect(await updateTeam(request, team1Id, { captainSteamId: captain })).toBeTruthy();
+
+    const tournament = await createAndStartTournament(request, {
+      name: `Captain Veto Test ${Date.now()}`,
+      type: 'single_elimination',
+      format: 'bo1',
+      maps,
+      teamIds: [team1Id, team2Id],
+    });
+    expect(tournament).toBeTruthy();
+    const match = await findMatchByTeams(request, team1Id, team2Id);
+    expect(match).toBeTruthy();
+
+    const firstAction = getCSMajorBO1Actions(team1, team2)[0];
+    const settingsResponse = await request.put('/api/settings', {
+      data: { vetoAccessMode: 'captain_only' },
+    });
+    expect(settingsResponse.ok(), await settingsResponse.text()).toBeTruthy();
+    try {
+      expect(await impersonatePlayer(request, nonCaptain)).toBe(true);
+      const blocked = await request.post(`/api/veto/${match!.slug}/action`, {
+        data: firstAction,
+      });
+      expect(blocked.status()).toBe(403);
+      expect((await blocked.json()).error).toContain('captain');
+
+      expect(await impersonatePlayer(request, captain)).toBe(true);
+      const allowed = await request.post(`/api/veto/${match!.slug}/action`, {
+        data: firstAction,
+      });
+      expect(allowed.ok(), await allowed.text()).toBeTruthy();
+    } finally {
+      await stopImpersonating(request);
+      await request.put('/api/settings', { data: { vetoAccessMode: 'all_players' } });
+    }
+  });
+
   test('should complete CS Major BO3 veto with multiple side picks', {
     tag: ['@api', '@veto', '@cs-major', '@bo3'],
   }, async ({ request }) => {

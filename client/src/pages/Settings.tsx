@@ -22,6 +22,7 @@ import {
   DialogContent,
   DialogActions,
   Slider,
+  MenuItem,
 } from '@mui/material';
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -93,6 +94,9 @@ export default function Settings() {
   const [initialMatchzyKnifeEnabledDefault, setInitialMatchzyKnifeEnabledDefault] = useState(true);
   const [ratingsEnabled, setRatingsEnabled] = useState(true);
   const [initialRatingsEnabled, setInitialRatingsEnabled] = useState(true);
+  const [vetoAccessMode, setVetoAccessMode] = useState<'all_players' | 'captain_only'>(
+    'all_players'
+  );
   const [matchzyDebugChatEnabled, setMatchzyDebugChatEnabled] = useState(false);
   const [initialMatchzyDebugChatEnabled, setInitialMatchzyDebugChatEnabled] = useState(false);
   const [allowSelfRegister, setAllowSelfRegister] = useState(false);
@@ -238,6 +242,7 @@ export default function Settings() {
           : true;
       const ratingsEnabledValue =
         response.settings.ratingsEnabled !== undefined ? response.settings.ratingsEnabled : true;
+      const savedVetoAccessMode = response.settings.vetoAccessMode ?? 'all_players';
       const debugChatEnabled =
         response.settings.matchzyDebugChatEnabled !== undefined
           ? response.settings.matchzyDebugChatEnabled
@@ -301,6 +306,7 @@ export default function Settings() {
       setInitialBranding(savedBranding);
       setRatingsEnabled(ratingsEnabledValue);
       setInitialRatingsEnabled(ratingsEnabledValue);
+      setVetoAccessMode(savedVetoAccessMode);
       setMatchzyAutostartMode(autostartMode);
       setInitialMatchzyAutostartMode(autostartMode);
       setMatchzyMinimumReadyRequired(minimumReadyRequired);
@@ -363,6 +369,21 @@ export default function Settings() {
       setLoading(false);
     }
   }, [showError, t]);
+
+  const handleVetoAccessModeChange = async (mode: 'all_players' | 'captain_only') => {
+    const previous = vetoAccessMode;
+    setVetoAccessMode(mode);
+    try {
+      const response = await api.put<SettingsResponse>('/api/settings', {
+        vetoAccessMode: mode,
+      });
+      setVetoAccessMode(response.settings.vetoAccessMode ?? 'all_players');
+      showSuccess(t('settingsPage.success.saveSettings'));
+    } catch (err) {
+      setVetoAccessMode(previous);
+      showError(err instanceof Error ? err.message : t('settingsPage.errors.saveSettings'));
+    }
+  };
 
   useEffect(() => {
     document.title = t('settingsPage.title');
@@ -1104,6 +1125,47 @@ export default function Settings() {
             {/* Match behavior and rating rules */}
             <TabPanel value={tabIndex} index={2}>
               <Stack spacing={3}>
+                <Accordion defaultExpanded sx={ACCORDION_SX}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={ACCORDION_SUMMARY_SX}>
+                    <Box>
+                      <Typography variant="h6" fontWeight={600}>
+                        {t('settingsPage.matchRating.vetoAccess.title', 'Veto access')}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {t(
+                          'settingsPage.matchRating.vetoAccess.description',
+                          'Choose who can ban, pick maps, and select sides during map veto.'
+                        )}
+                      </Typography>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails sx={ACCORDION_DETAILS_SX}>
+                    <TextField
+                      select
+                      label={t('settingsPage.matchRating.vetoAccess.label', 'Who can control veto')}
+                      value={vetoAccessMode}
+                      onChange={(event) =>
+                        void handleVetoAccessModeChange(
+                          event.target.value as 'all_players' | 'captain_only'
+                        )
+                      }
+                      helperText={t(
+                        'settingsPage.matchRating.vetoAccess.helper',
+                        'One-player teams use their only player automatically. Larger teams need an assigned captain.'
+                      )}
+                      fullWidth
+                      data-testid="veto-access-mode-select"
+                    >
+                      <MenuItem value="all_players">
+                        {t('settingsPage.matchRating.vetoAccess.allPlayers', 'All players')}
+                      </MenuItem>
+                      <MenuItem value="captain_only">
+                        {t('settingsPage.matchRating.vetoAccess.captainOnly', 'Captain only')}
+                      </MenuItem>
+                    </TextField>
+                  </AccordionDetails>
+                </Accordion>
+
                 <Accordion defaultExpanded sx={ACCORDION_SX}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={ACCORDION_SUMMARY_SX}>
                     <Box>

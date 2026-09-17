@@ -18,6 +18,7 @@ export interface Team {
   countryCode?: string;
   logoUrl?: string;
   discordRoleId?: string;
+  captainSteamId?: string | null;
   players?: Player[];
   createdAt?: number;
   updatedAt?: number;

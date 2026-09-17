@@ -489,6 +489,27 @@ router.post('/:matchSlug/action', async (req: Request, res: Response) => {
       });
     }
 
+    if (await settingsService.getVetoAccessMode() === 'captain_only') {
+      const teamId = viewerTeam === 'team1' ? match.team1_id : match.team2_id;
+      const team = teamId
+        ? await db.queryOneAsync<{ captain_steam_id: string | null; players: string }>(
+            'SELECT captain_steam_id, players FROM teams WHERE id = ?',
+            [teamId]
+          )
+        : null;
+      const roster = normalizeTeamRosterPlayers(team?.players);
+      const captainSteamId = team?.captain_steam_id ||
+        (roster.length === 1 ? roster[0].steamid : null);
+      if (!captainSteamId || captainSteamId !== viewerSteamId) {
+        return res.status(403).json({
+          success: false,
+          error: captainSteamId
+            ? 'Only your team captain can perform veto actions.'
+            : 'Captain-only veto is enabled, but this team has no captain assigned.',
+        });
+      }
+    }
+
     const isManualMatch = match.round === 0 || match.tournament_id == null;
     let team1Id: string | null = match.team1_id ?? null;
     let team2Id: string | null = match.team2_id ?? null;

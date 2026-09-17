@@ -8,12 +8,14 @@ import { getAuthHeader } from './auth';
 export interface CreateTeamInput {
   id: string;
   name: string;
+  captainSteamId?: string | null;
   players: Array<{ steamId: string; name: string }>;
 }
 
 export interface Team {
   id: string;
   name: string;
+  captainSteamId?: string | null;
   players: Array<{ steamId: string; name: string }>;
 }
 

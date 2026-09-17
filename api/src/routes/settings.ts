@@ -34,6 +34,7 @@ const mapSettingsResponse = async () => {
   const matchzyAdminChatPrefix = await settingsService.getMatchzyAdminChatPrefix();
   const matchzyKnifeEnabledDefault = await settingsService.isKnifeRoundEnabledByDefault();
   const ratingsEnabled = await settingsService.areRatingsEnabled();
+  const vetoAccessMode = await settingsService.getVetoAccessMode();
   const matchzyDebugChatEnabled = await settingsService.isMatchzyDebugChatEnabled();
   const allowSelfRegister = await settingsService.isSelfRegistrationAllowed();
   const matchzyCore = await settingsService.getMatchzyCoreDefaults();
@@ -54,6 +55,7 @@ const mapSettingsResponse = async () => {
     matchzyAdminChatPrefix,
     matchzyKnifeEnabledDefault,
     ratingsEnabled,
+    vetoAccessMode,
     matchzyDebugChatEnabled,
     allowSelfRegister,
     branding,
@@ -105,6 +107,7 @@ router.put('/', async (req: Request, res: Response) => {
     matchzyAdminChatPrefix,
     matchzyKnifeEnabledDefault,
     ratingsEnabled,
+    vetoAccessMode,
     matchzyDebugChatEnabled,
     allowSelfRegister,
     branding,
@@ -145,6 +148,7 @@ router.put('/', async (req: Request, res: Response) => {
     matchzyAdminChatPrefix?: unknown;
     matchzyKnifeEnabledDefault?: unknown;
     ratingsEnabled?: unknown;
+    vetoAccessMode?: unknown;
     matchzyDebugChatEnabled?: unknown;
     allowSelfRegister?: unknown;
     branding?: unknown;
@@ -338,6 +342,19 @@ router.put('/', async (req: Request, res: Response) => {
         ratingsEnabled === null ? null : ratingsEnabled === true ? '1' : '0';
 
       await settingsService.setSetting('ratings_enabled', value);
+    }
+
+    if (vetoAccessMode !== undefined) {
+      if (
+        typeof vetoAccessMode !== 'string' ||
+        !['all_players', 'captain_only'].includes(vetoAccessMode)
+      ) {
+        return res.status(400).json({
+          success: false,
+          error: 'vetoAccessMode must be all_players or captain_only',
+        });
+      }
+      await settingsService.setSetting('veto_access_mode', vetoAccessMode);
     }
 
     if (matchzyDebugChatEnabled !== undefined) {
