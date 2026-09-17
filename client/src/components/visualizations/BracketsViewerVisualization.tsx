@@ -18,6 +18,10 @@ interface BracketsViewerVisualizationProps {
   tournamentType: string;
   isFullscreen?: boolean;
   onMatchClick?: (match: Match) => void;
+  onSeedSlotSwap?: (
+    source: { matchId: number; side: 'team1' | 'team2' },
+    target: { matchId: number; side: 'team1' | 'team2' }
+  ) => void;
 }
 
 export default function BracketsViewerVisualization({
@@ -25,6 +29,7 @@ export default function BracketsViewerVisualization({
   tournamentType,
   isFullscreen = false,
   onMatchClick,
+  onSeedSlotSwap,
 }: BracketsViewerVisualizationProps) {
   const theme = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -104,12 +109,98 @@ export default function BracketsViewerVisualization({
       if (!matchId) return;
 
       const originalMatch = findOriginalMatch(matchId as Id);
-      const hasTeams = Boolean(originalMatch?.team1?.id && originalMatch?.team2?.id);
+      const hasTeams =
+        !onSeedSlotSwap && Boolean(originalMatch?.team1?.id && originalMatch?.team2?.id);
 
       element.style.cursor = hasTeams ? 'pointer' : 'default';
       element.classList.toggle('match--clickable', hasTeams);
     });
-  }, [findOriginalMatch]);
+  }, [findOriginalMatch, onSeedSlotSwap]);
+
+  const updateSeedDragTargets = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || !onSeedSlotSwap) return;
+
+    const clearDropPreview = () => {
+      container.querySelectorAll<HTMLElement>('[data-seed-drop-preview]').forEach((element) => {
+        element.removeAttribute('data-seed-drop-preview');
+        element.style.backgroundColor = '';
+        element.style.boxShadow = '';
+        element.style.outline = `1px dashed ${alpha(theme.palette.primary.main, 0.45)}`;
+      });
+    };
+
+    container.querySelectorAll<HTMLElement>('.match[data-match-id]').forEach((matchElement) => {
+      const matchId = Number(matchElement.getAttribute('data-match-id'));
+      const match = findOriginalMatch(matchId as Id);
+      if (!match || match.round !== 1 || match.slug.startsWith('lb-')) return;
+
+      const participants = matchElement.querySelectorAll<HTMLElement>('.participant');
+      (['team1', 'team2'] as const).forEach((side, index) => {
+        const participant = participants[index];
+        if (!participant || !match[side]?.id) return;
+
+        const slot = { matchId: match.id, side };
+        participant.draggable = true;
+        participant.title = 'Drag to another first-round slot';
+        participant.setAttribute('aria-label', `${participant.textContent?.trim() || 'Team'}. Drag to reseed`);
+        participant.style.cursor = 'grab';
+        participant.style.outline = `1px dashed ${alpha(theme.palette.primary.main, 0.45)}`;
+        participant.style.outlineOffset = '-1px';
+        participant.style.transition = 'background-color 120ms ease, box-shadow 120ms ease';
+
+        participant.addEventListener('dragstart', (event) => {
+          clearDropPreview();
+          event.dataTransfer?.setData('application/x-mat-seed-slot', JSON.stringify(slot));
+          if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+          participant.style.cursor = 'grabbing';
+          participant.style.opacity = '0.55';
+        });
+        participant.addEventListener('dragend', () => {
+          participant.style.cursor = 'grab';
+          participant.style.opacity = '';
+          clearDropPreview();
+        });
+        participant.addEventListener('dragenter', (event) => {
+          event.preventDefault();
+          clearDropPreview();
+          participant.setAttribute('data-seed-drop-preview', 'true');
+          participant.style.backgroundColor = alpha(theme.palette.primary.main, 0.2);
+          participant.style.boxShadow = `inset 4px 0 0 ${theme.palette.primary.main}, 0 0 0 2px ${alpha(
+            theme.palette.primary.main,
+            0.45
+          )}`;
+          participant.style.outline = `2px solid ${theme.palette.primary.main}`;
+        });
+        participant.addEventListener('dragleave', (event) => {
+          if (
+            event.relatedTarget instanceof globalThis.Node &&
+            participant.contains(event.relatedTarget)
+          )
+            return;
+          clearDropPreview();
+        });
+        participant.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+        });
+        participant.addEventListener('drop', (event) => {
+          event.preventDefault();
+          clearDropPreview();
+          const raw = event.dataTransfer?.getData('application/x-mat-seed-slot');
+          if (!raw) return;
+          try {
+            const source = JSON.parse(raw) as typeof slot;
+            if (source.matchId !== slot.matchId || source.side !== slot.side) {
+              onSeedSlotSwap(source, slot);
+            }
+          } catch {
+            // Ignore drops not initiated by this bracket.
+          }
+        });
+      });
+    });
+  }, [findOriginalMatch, onSeedSlotSwap, theme.palette.primary.main]);
 
   const updateLiveRoundStyles = useCallback(() => {
     const container = containerRef.current;
@@ -538,7 +629,7 @@ export default function BracketsViewerVisualization({
             if (hasTeam1 && hasTeam2) {
               centerMatch(match.id);
             }
-            if (originalMatch && hasTeam1 && hasTeam2 && onMatchClick) {
+            if (originalMatch && hasTeam1 && hasTeam2 && onMatchClick && !onSeedSlotSwap) {
               onMatchClick(originalMatch);
             }
           },
@@ -601,6 +692,7 @@ export default function BracketsViewerVisualization({
         }
 
         updateMatchClickTargets();
+        updateSeedDragTargets();
         updateLiveRoundStyles();
         updateMatchStatusStyles();
       } catch (error) {
@@ -621,9 +713,11 @@ export default function BracketsViewerVisualization({
     viewerData,
     theme,
     onMatchClick,
+    onSeedSlotSwap,
     centerMatch,
     findOriginalMatch,
     updateMatchClickTargets,
+    updateSeedDragTargets,
     updateLiveRoundStyles,
     updateMatchStatusStyles,
   ]);
@@ -649,7 +743,11 @@ export default function BracketsViewerVisualization({
         wheel={{ step: 0.1 }}
         doubleClick={{ disabled: true }}
         pinch={{ step: 5 }}
-        panning={{ velocityDisabled: true, allowLeftClickPan: true }}
+        panning={{
+          velocityDisabled: true,
+          allowLeftClickPan: true,
+          excluded: onSeedSlotSwap ? ['participant'] : [],
+        }}
         limitToBounds
         centerZoomedOut
         centerOnInit

@@ -20,6 +20,7 @@ import ViewListIcon from '@mui/icons-material/ViewList';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { useNavigate } from 'react-router-dom';
 import BracketsViewerVisualization from '../components/visualizations/BracketsViewerVisualization';
 import SwissView from '../components/visualizations/SwissView';
@@ -34,11 +35,13 @@ import { StartTournamentButton } from '../components/dashboard';
 import { TopNavBar } from '../components/layout/TopNavBar';
 import type { Match } from '../types';
 import { useTranslation } from 'react-i18next';
+import { useSnackbar } from '../contexts/SnackbarContext';
 
 // Interfaces are now imported from useBracket hook
 
 export default function Bracket({ publicPage = false }: { publicPage?: boolean }) {
   const navigate = useNavigate();
+  const { showSuccess, showError } = useSnackbar();
   const {
     loading,
     error,
@@ -62,6 +65,8 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
     map: string;
   } | null>(null);
   const [shuffleTotalRounds, setShuffleTotalRounds] = useState<number | null>(null);
+  const [seedingDraft, setSeedingDraft] = useState<Match[] | null>(null);
+  const [savingSeeding, setSavingSeeding] = useState(false);
   const fullscreenRef = useRef<globalThis.HTMLDivElement>(null);
   const selectedMatchIdRef = useRef<number | null>(null);
   const [allocationCountdown, setAllocationCountdown] = useState<{
@@ -87,6 +92,12 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
     servers: [],
   });
   const { t } = useTranslation();
+
+  useEffect(() => {
+    if (tournament?.status !== 'setup') {
+      setSeedingDraft(null);
+    }
+  }, [tournament?.status]);
 
   // Derive the current match from matches array (keeps status/score in sync with
   // live websocket updates), and optionally merge in richer fields (e.g.
@@ -461,6 +472,74 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
     );
   }
 
+  const openingMatches = matches
+    .filter((match) => match.round === 1 && !match.slug.startsWith('lb-'))
+    .sort((a, b) => a.matchNumber - b.matchNumber);
+  const isPowerOfTwo =
+    tournament.teamIds.length > 1 &&
+    (tournament.teamIds.length & (tournament.teamIds.length - 1)) === 0;
+  const canReseedFromBracket =
+    !publicPage &&
+    tournament.status === 'setup' &&
+    (tournament.type === 'single_elimination' || tournament.type === 'double_elimination') &&
+    isPowerOfTwo &&
+    openingMatches.length * 2 === tournament.teamIds.length &&
+    openingMatches.every((match) => match.team1?.id && match.team2?.id);
+  const bracketMatches = seedingDraft ?? matches;
+  const getOpeningTeamIds = (source: Match[]) =>
+    source
+      .filter((match) => match.round === 1 && !match.slug.startsWith('lb-'))
+      .sort((a, b) => a.matchNumber - b.matchNumber)
+      .flatMap((match) => [match.team1?.id, match.team2?.id])
+      .filter((id): id is string => Boolean(id));
+  const openingTeamIds = getOpeningTeamIds(matches);
+  const draftTeamIds = getOpeningTeamIds(bracketMatches);
+  const seedingChanged =
+    Boolean(seedingDraft) &&
+    openingTeamIds.length === draftTeamIds.length &&
+    openingTeamIds.some((id, index) => id !== draftTeamIds[index]);
+
+  const handleSeedSlotSwap = (
+    source: { matchId: number; side: 'team1' | 'team2' },
+    target: { matchId: number; side: 'team1' | 'team2' }
+  ) => {
+    if (!canReseedFromBracket) return;
+
+    setSeedingDraft((current) => {
+      const base = current ?? matches;
+      const sourceIndex = base.findIndex((match) => match.id === source.matchId);
+      const targetIndex = base.findIndex((match) => match.id === target.matchId);
+      if (sourceIndex < 0 || targetIndex < 0) return current;
+
+      const sourceTeam = base[sourceIndex][source.side];
+      const targetTeam = base[targetIndex][target.side];
+      if (!sourceTeam || !targetTeam) return current;
+
+      const next = base.map((match, index) =>
+        index === sourceIndex || index === targetIndex ? { ...match } : match
+      );
+      next[sourceIndex][source.side] = targetTeam;
+      next[targetIndex][target.side] = sourceTeam;
+      return next;
+    });
+  };
+
+  const saveSeeding = async () => {
+    if (!canReseedFromBracket || !seedingChanged) return;
+
+    try {
+      setSavingSeeding(true);
+      await api.put('/api/tournament', { teamIds: draftTeamIds });
+      setSeedingDraft(null);
+      await loadBracket({ silent: true });
+      showSuccess('Seeding saved. The bracket has been updated.');
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to save seeding');
+    } finally {
+      setSavingSeeding(false);
+    }
+  };
+
   // Group matches by round
   const matchesByRound: { [round: number]: Match[] } = {};
   matches.forEach((match) => {
@@ -580,9 +659,32 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
               </Box>
             </Box>
             <Box display="flex" gap={2} alignItems="center">
-              {!publicPage && tournament.status === 'setup' && (
-                <StartTournamentButton variant="contained" size="medium" onSuccess={loadBracket} />
+              {canReseedFromBracket && (
+                <Chip
+                  icon={<DragIndicatorIcon />}
+                  label={seedingChanged ? 'Seeding preview — not saved' : 'Drag Round 1 teams to reseed'}
+                  color={seedingChanged ? 'warning' : 'default'}
+                  variant="outlined"
+                  size="small"
+                />
               )}
+              {seedingChanged ? (
+                <Stack direction="row" spacing={1}>
+                  <Button size="small" onClick={() => setSeedingDraft(null)} disabled={savingSeeding}>
+                    Discard
+                  </Button>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={saveSeeding}
+                    disabled={savingSeeding}
+                  >
+                    {savingSeeding ? 'Saving…' : 'Save seeding'}
+                  </Button>
+                </Stack>
+              ) : !publicPage && tournament.status === 'setup' ? (
+                <StartTournamentButton variant="contained" size="medium" onSuccess={loadBracket} />
+              ) : null}
               <ToggleButtonGroup
                 value={effectiveViewMode}
                 exclusive
@@ -618,7 +720,7 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
               <Button
                 variant="outlined"
                 startIcon={<RefreshIcon />}
-                onClick={loadBracket}
+                onClick={() => void loadBracket()}
                 size="small"
               >
                 Refresh
@@ -743,10 +845,11 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
           ) : (
             // All bracket-manager types: single_elimination, double_elimination, round_robin
             <BracketsViewerVisualization
-              matches={matches}
+              matches={bracketMatches}
               tournamentType={tournament.type}
               isFullscreen={isFullscreen}
               onMatchClick={handleMatchClick}
+              onSeedSlotSwap={canReseedFromBracket ? handleSeedSlotSwap : undefined}
             />
           )}
         </Box>

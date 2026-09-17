@@ -183,6 +183,10 @@ class TournamentService {
     const { name, type, format, maps, teamIds, settings, maxRounds, overtimeMode, overtimeSegments } =
       input;
 
+    if (teamIds && existing.status !== 'setup') {
+      throw new Error('Cannot change bracket seeding after tournament has started');
+    }
+
     // Validate team count if changing teams or type
     if (type || teamIds) {
       validateTeamCount(type || existing.type, (teamIds || existing.teamIds).length);
