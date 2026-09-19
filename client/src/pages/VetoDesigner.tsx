@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type PointerEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useBranding } from '../contexts/BrandingContext';
-import { VetoDesignCanvas, defaultTeamFallback, defaultVetoDesign, previewVeto, type VetoBinding, type VetoDesign, type VetoElement, type VetoElementKind, type VetoMapMetadata, type VetoScreen, type VetoTeamFallback } from '../components/veto/VetoDesignCanvas';
+import { VetoDesignCanvas, defaultTeamFallback, defaultVetoDesign, previewVeto, restoreImageAspectRatio, type VetoBinding, type VetoDesign, type VetoElement, type VetoElementKind, type VetoMapMetadata, type VetoScreen, type VetoTeamFallback } from '../components/veto/VetoDesignCanvas';
 import { api } from '../utils/api';
 import type { VetoState } from '../types/veto.types';
 
@@ -197,6 +197,21 @@ export default function VetoDesigner() {
     } catch { setStatus('Could not upload image'); }
   };
 
+  const restoreAspectRatio = () => {
+    if (!current || current.kind !== 'image' || !current.imageUrl) return;
+    const image = new window.Image();
+    image.onload = () => {
+      const size = restoreImageAspectRatio(current, image.naturalWidth, image.naturalHeight);
+      if (!size) { setStatus('Could not read image dimensions'); return; }
+      commit((next) => {
+        const element = next.screens[screen].elements.find((item) => item.id === current.id);
+        if (element) Object.assign(element, size);
+      });
+    };
+    image.onerror = () => setStatus('Could not read image dimensions');
+    image.src = current.imageUrl;
+  };
+
   const resetAllChanges = () => {
     if (!dirty || !window.confirm('Discard all unsaved changes and restore the last saved draft?')) return;
     setHistory((items) => [...items.slice(-29), design]);
@@ -225,7 +240,7 @@ export default function VetoDesigner() {
         {current.kind === 'text' && <>{field('Text', current.text || '', (value) => updateElement({ text: value }))}<div className="vd-grid">{numeric('Size', 'fontSize', current.fontSize)}<label className="vd-field"><span>Alignment</span><select value={current.align || 'left'} onChange={(event) => updateElement({ align: event.target.value as VetoElement['align'] })}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label></div><div className="vd-grid"><label className="vd-field"><span>Font</span><select value={current.fontFamily || 'Inter'} onChange={(event) => updateElement({ fontFamily: event.target.value as VetoElement['fontFamily'] })}>{['Inter', 'Arial', 'Impact', 'Georgia', 'monospace'].map((font) => <option key={font}>{font}</option>)}</select></label><label className="vd-field"><span>Weight</span><select value={current.weight || 700} onChange={(event) => updateElement({ weight: Number(event.target.value) as VetoElement['weight'] })}>{[400, 500, 600, 700, 800, 900].map((weight) => <option key={weight} value={weight}>{weight}</option>)}</select></label></div>{field('Text color', current.color || '#FFFFFF', (value) => updateElement({ color: value }), 'color')}</>}
         {(current.kind === 'shape' || current.kind === 'text' || current.kind === 'maps') && field('Fill', current.background || '#0F1B29', (value) => updateElement({ background: value }), 'color')}
         {(current.kind === 'shape' || current.kind === 'maps') && field('Border color', current.borderColor || '#536A83', (value) => updateElement({ borderColor: value }), 'color')}
-        {(current.kind === 'image') && <>{field('Image URL', current.imageUrl || '', (value) => updateElement({ imageUrl: value }))}<label className="vd-upload">Upload image<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) void upload(file, 'element'); }} /></label></>}
+        {(current.kind === 'image') && <>{field('Image URL', current.imageUrl || '', (value) => updateElement({ imageUrl: value }))}<label className="vd-upload">Upload image<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) void upload(file, 'element'); }} /></label><button onClick={restoreAspectRatio} disabled={!current.imageUrl}>Restore aspect ratio</button><p className="vd-hint">Fits width and height to the uploaded image while keeping the block centered.</p></>}
         {current.kind === 'maps' && <><div className="vd-grid">{numeric('Columns', 'columns', current.columns)}{numeric('Gap', 'gap', current.gap)}</div><p className="vd-hint">Map images · blank fields use the catalog image</p>{mock?.allMaps?.map((name) => <div key={name} className="vd-map-image"><strong>{name}</strong><input aria-label={`Image for ${name}`} value={current.mapImages?.[name] || ''} placeholder="Image URL" onChange={(event) => { const images = { ...current.mapImages }; if (event.target.value) images[name] = event.target.value; else delete images[name]; updateElement({ mapImages: images }); }} /><label className="vd-upload">Upload<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) void upload(file, 'map', name); }} /></label></div>)}</>}
         {(current.kind === 'shape' || current.kind === 'maps' || current.kind === 'text') && numeric('Radius', 'radius', current.radius)}
         <label className="vd-field"><span>Opacity {Math.round((current.opacity ?? 1) * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={current.opacity ?? 1} onChange={(event) => updateElement({ opacity: Number(event.target.value) })} /></label>

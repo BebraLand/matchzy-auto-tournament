@@ -17,6 +17,18 @@ export type VetoElement = {
   mapImages?: Record<string, string>;
   fontFamily?: 'Inter' | 'Arial' | 'Impact' | 'Georgia' | 'monospace';
 };
+
+export function restoreImageAspectRatio(element: Pick<VetoElement, 'x' | 'y' | 'w' | 'h'>, naturalWidth: number, naturalHeight: number): Pick<VetoElement, 'x' | 'y' | 'w' | 'h'> | null {
+  if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight) || naturalWidth <= 0 || naturalHeight <= 0) return null;
+  const ratio = naturalWidth / naturalHeight;
+  let w = Math.min(1920, Math.max(1, element.w));
+  let h = w / ratio;
+  if (h > 1080) { h = 1080; w = h * ratio; }
+  const x = Math.max(0, Math.min(1920 - w, element.x + element.w / 2 - w / 2));
+  const y = Math.max(0, Math.min(1080 - h, element.y + element.h / 2 - h / 2));
+  return { x: Math.round(x), y: Math.round(y), w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
+}
+
 export type VetoLayout = { background: string; backgroundImage?: string; elements: VetoElement[] };
 export type VetoDesign = { version: 1; screens: Record<VetoScreen, VetoLayout>; teamFallback?: VetoTeamFallback };
 export type VetoMapMetadata = Map<string, { displayName: string; imageUrl: string | null }>;

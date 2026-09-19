@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { defaultTeamFallback, defaultVetoDesign, previewVeto } from '../../client/src/components/veto/VetoDesignCanvas';
+import { defaultTeamFallback, defaultVetoDesign, previewVeto, restoreImageAspectRatio } from '../../client/src/components/veto/VetoDesignCanvas';
 import { validDesign } from '../../api/src/routes/broadcastVetoDesign';
 
 const design = defaultVetoDesign();
 assert.equal(validDesign(design), true);
 assert.equal(validDesign({ ...design, teamFallback: { ...defaultTeamFallback, mode: 'initials' } }), true);
 assert.equal(validDesign({ ...design, teamFallback: { ...defaultTeamFallback, background: 'transparent' } }), false);
+assert.deepEqual(restoreImageAspectRatio({ x: 700, y: 400, w: 480, h: 110 }, 1000, 1000), { x: 700, y: 215, w: 480, h: 480 });
+assert.deepEqual(restoreImageAspectRatio({ x: 700, y: 400, w: 480, h: 110 }, 1600, 900), { x: 700, y: 320, w: 480, h: 270 });
 assert.equal(validDesign({ ...design, screens: { ...design.screens, live: { ...design.screens.live, backgroundImage: 'javascript:alert(1)' } } }), false);
 assert.deepEqual(Object.keys(design.screens).sort(), ['completed', 'live', 'standby']);
 for (const screen of Object.values(design.screens)) {
