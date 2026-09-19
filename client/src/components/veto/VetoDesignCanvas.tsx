@@ -92,7 +92,7 @@ export function measureElementGaps(element: VetoSnapPeer, peers: VetoSnapPeer[])
 }
 
 export type VetoLayout = { background: string; backgroundImage?: string; elements: VetoElement[] };
-export type VetoDesign = { version: 1; screens: Record<VetoScreen, VetoLayout>; teamFallback?: VetoTeamFallback; showActionOwnership?: boolean };
+export type VetoDesign = { version: 1; screens: Record<VetoScreen, VetoLayout>; teamFallback?: VetoTeamFallback; showMapSideBadges?: boolean; showTimelineOwnership?: boolean; showActionOwnership?: boolean };
 export type VetoMapMetadata = Map<string, { displayName: string; imageUrl: string | null }>;
 
 export const defaultTeamFallback: VetoTeamFallback = { mode: 'initials', maxLetters: 2, background: '#101A27', color: '#9EB4C8', borderColor: '#64758A', radius: 8 };
@@ -102,7 +102,7 @@ const el = (id: string, kind: VetoElementKind, x: number, y: number, w: number, 
 export function defaultVetoDesign(): VetoDesign {
   const brand = el('brand', 'text', 100, 56, 1050, 54, { binding: 'brand', fontSize: 28, weight: 800, color: '#89CAFF' });
   const logo = el('logo', 'image', 42, 52, 50, 50, { binding: 'brandLogo' });
-  return { version: 1, teamFallback: defaultTeamFallback, showActionOwnership: false, screens: {
+  return { version: 1, teamFallback: defaultTeamFallback, showMapSideBadges: false, showTimelineOwnership: false, screens: {
     standby: { background: '#0B1018', elements: [
       logo, brand,
       el('standby-title', 'text', 270, 390, 1380, 140, { text: 'VETO DESK', fontSize: 114, weight: 900, align: 'center' }),
@@ -203,7 +203,7 @@ function TeamLogoFallback({ name, fallback, map = false }: { name: string; fallb
   return <span className={map ? 'vdc-map-logo vdc-map-logo-fallback' : 'vdc-empty-image vdc-logo-placeholder'} style={{ background: fallback.background, color: fallback.color, borderColor: fallback.borderColor, borderRadius: fallback.radius }}>{text}</span>;
 }
 
-function MapPool({ element, veto, maps, logos, fallback, showActionOwnership }: { element: VetoElement; veto: VetoState | null; maps: VetoMapMetadata; logos: { team1: string | null; team2: string | null }; fallback: VetoTeamFallback; showActionOwnership: boolean }) {
+function MapPool({ element, veto, maps, logos, fallback, showMapSideBadges }: { element: VetoElement; veto: VetoState | null; maps: VetoMapMetadata; logos: { team1: string | null; team2: string | null }; fallback: VetoTeamFallback; showMapSideBadges: boolean }) {
   const names = veto?.allMaps?.length ? veto.allMaps : veto ? [...new Set([...veto.availableMaps, ...veto.bannedMaps, ...veto.pickedMaps.map((map) => map.mapName)])] : [];
   return <div className="vdc-maps" style={{ gridTemplateColumns: `repeat(${element.columns || 7}, minmax(0, 1fr))`, gap: element.gap ?? 12 }}>
     {names.map((name) => {
@@ -213,28 +213,29 @@ function MapPool({ element, veto, maps, logos, fallback, showActionOwnership }: 
       const pickedTeam = picked?.pickedBy === 'team1' ? 'team1' : picked?.pickedBy === 'team2' ? 'team2' : null;
       const logo = pickedTeam === 'team1' ? logos.team1 : pickedTeam === 'team2' ? logos.team2 : null;
       const pickedTeamName = pickedTeam === 'team1' ? veto?.team1Name || 'TEAM 1' : pickedTeam === 'team2' ? veto?.team2Name || 'TEAM 2' : '';
-      const hasMapTag = showActionOwnership && Boolean(picked?.mapNumber);
+      const pickedSide = sideAction?.side && pickedTeam ? (sideAction.team === pickedTeam ? sideAction.side : sideAction.side === 'T' ? 'CT' : 'T') : undefined;
+      const hasMapTag = showMapSideBadges && Boolean(picked?.mapNumber);
       return <div className={`vdc-map ${stage} ${hasMapTag ? 'vdc-map-with-tag' : ''}`} key={name} data-stage={stage} data-testid={`broadcast-veto-map-${name}`} style={{ background: element.background || '#0F1B29', borderColor: element.borderColor || '#536A83', borderRadius: element.radius ?? 16 }}>
         <img className="vdc-map-photo" src={element.mapImages?.[name] || maps.get(name)?.imageUrl || getMapFullImageUrl(name)} alt="" />
         <div className="vdc-map-shade" />
         <strong className="vdc-map-name">{maps.get(name)?.displayName || getMapDisplayName(name)}</strong>
         {logo ? <img className="vdc-map-logo" src={logo} alt="" /> : pickedTeam && <TeamLogoFallback name={pickedTeamName} fallback={fallback} map />}
-        {showActionOwnership && picked?.mapNumber && <span className="vdc-map-map-tag">MAP {picked.mapNumber}</span>}
-        {showActionOwnership && sideAction?.side && <span className={`vdc-map-side-tag vdc-side-${sideAction.side.toLowerCase()}`}>{sideAction.side}</span>}
+        {showMapSideBadges && picked?.mapNumber && <span className="vdc-map-map-tag">MAP {picked.mapNumber}</span>}
+        {showMapSideBadges && pickedSide && <span className={`vdc-map-side-tag vdc-side-${pickedSide.toLowerCase()}`}>{pickedSide}</span>}
         <div className="vdc-map-caption"><b>{stage === 'banned' ? 'BAN' : stage === 'picked' ? 'PICK' : stage === 'decider' ? 'DECIDER' : 'AVAILABLE'}</b></div>
       </div>;
     })}
   </div>;
 }
 
-function Timeline({ element, veto, showActionOwnership }: { element: VetoElement; veto: VetoState | null; showActionOwnership: boolean }) {
+function Timeline({ element, veto, showTimelineOwnership }: { element: VetoElement; veto: VetoState | null; showTimelineOwnership: boolean }) {
   return <div className="vdc-timeline" style={{ color: element.color, fontSize: element.fontSize }}>
     {veto && getVetoOrder(veto.format).map((step) => {
       const action = veto.actions.find((item) => item.step === step.step);
       const state = action || veto.status === 'completed' ? 'done' : step.step === veto.currentStep ? 'current' : 'upcoming';
       const owner = action ? teamName(veto, action.team) : teamName(veto, step.team);
       const ownerLabel = action ? `${teamLabel(owner)}${action.action === 'side_pick' && action.side ? ` · ${action.side}` : ''}` : '';
-      return <div key={step.step} className={`vdc-step ${state} ${showActionOwnership && action ? 'vdc-step-owned' : ''}`}><span>{String(step.step).padStart(2, '0')}</span><b>{step.action.replace('_', ' ').toUpperCase()}</b><small>{action ? getMapDisplayName(action.mapName) : teamLabel(owner)}</small>{showActionOwnership && action && <em className={`vdc-owner-${action.team}`}>{ownerLabel}</em>}</div>;
+      return <div key={step.step} className={`vdc-step ${state} ${showTimelineOwnership && action ? 'vdc-step-owned' : ''}`}><span>{String(step.step).padStart(2, '0')}</span><b>{step.action.replace('_', ' ').toUpperCase()}</b><small>{action ? getMapDisplayName(action.mapName) : teamLabel(owner)}</small>{showTimelineOwnership && action && <em className={`vdc-owner-${action.team}`}>{ownerLabel}</em>}</div>;
     })}
   </div>;
 }
@@ -258,7 +259,9 @@ export function VetoDesignCanvas({ design, screen, veto, branding, tournamentNam
     return () => observer.disconnect();
   }, []);
   const layout = design.screens[screen];
-  const showActionOwnership = design.showActionOwnership === true;
+  const legacyOwnership = design.showActionOwnership === true;
+  const showMapSideBadges = design.showMapSideBadges ?? legacyOwnership;
+  const showTimelineOwnership = design.showTimelineOwnership ?? legacyOwnership;
   const fallback = { ...defaultTeamFallback, ...design.teamFallback };
   return <div className="vdc-viewport" ref={container}>
     <div className="vdc-canvas" data-vdc-screen={screen} style={{ width: 1920, height: 1080, transform: `translate(-50%, -50%) scale(${scale})`, background: layout.background, backgroundImage: layout.backgroundImage ? `url("${layout.backgroundImage}")` : undefined }}>
@@ -274,8 +277,8 @@ export function VetoDesignCanvas({ design, screen, veto, branding, tournamentNam
         return <div key={renderKey} data-vdc-id={element.id} data-vdc-binding={element.binding || undefined} className={`vdc-element vdc-${element.kind} ${activeTeam ? 'vdc-team-active' : ''} ${selectedId === element.id ? 'selected' : ''} ${onElementPointerDown ? 'editable' : ''}`} style={style} onPointerDown={onElementPointerDown ? (event) => onElementPointerDown(element.id, event, 'move') : undefined}>
           {element.kind === 'text' && <span>{renderedText}</span>}
           {element.kind === 'image' && (imageSource(element, branding, logos) ? <img src={imageSource(element, branding, logos)!} alt="" /> : element.binding === 'team1Logo' ? <TeamLogoFallback name={veto?.team1Name || 'TEAM 1'} fallback={fallback} /> : element.binding === 'team2Logo' ? <TeamLogoFallback name={veto?.team2Name || 'TEAM 2'} fallback={fallback} /> : <span className="vdc-empty-image">IMAGE</span>)}
-          {element.kind === 'maps' && <MapPool element={element} veto={veto} maps={maps} logos={logos} fallback={fallback} showActionOwnership={showActionOwnership} />}
-          {element.kind === 'timeline' && <Timeline element={element} veto={veto} showActionOwnership={showActionOwnership} />}
+          {element.kind === 'maps' && <MapPool element={element} veto={veto} maps={maps} logos={logos} fallback={fallback} showMapSideBadges={showMapSideBadges} />}
+          {element.kind === 'timeline' && <Timeline element={element} veto={veto} showTimelineOwnership={showTimelineOwnership} />}
           {onElementPointerDown && selectedId === element.id && <div className="vdc-resize" onPointerDown={(event) => { event.stopPropagation(); onElementPointerDown(element.id, event, 'resize'); }} />}
         </div>;
       })}

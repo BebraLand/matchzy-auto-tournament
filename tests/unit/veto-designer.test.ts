@@ -4,9 +4,10 @@ import { validDesign } from '../../api/src/routes/broadcastVetoDesign';
 
 const design = defaultVetoDesign();
 assert.equal(validDesign(design), true);
-assert.equal(design.showActionOwnership, false);
-assert.equal(validDesign({ ...design, showActionOwnership: true }), true);
-assert.equal(validDesign({ ...design, showActionOwnership: 'true' }), false);
+assert.equal(design.showMapSideBadges, false);
+assert.equal(design.showTimelineOwnership, false);
+assert.equal(validDesign({ ...design, showMapSideBadges: true, showTimelineOwnership: true }), true);
+assert.equal(validDesign({ ...design, showMapSideBadges: 'true' }), false);
 assert.equal(validDesign({ ...design, teamFallback: { ...defaultTeamFallback, mode: 'initials' } }), true);
 assert.equal(validDesign({ ...design, teamFallback: { ...defaultTeamFallback, background: 'transparent' } }), false);
 assert.deepEqual(restoreImageAspectRatio({ x: 700, y: 400, w: 480, h: 110 }, 1000, 1000), { x: 700, y: 215, w: 480, h: 480 });
