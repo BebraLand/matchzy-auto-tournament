@@ -26,7 +26,7 @@ export function ensureBrandingAssetsDirectory(): void {
   fs.mkdirSync(getBrandingAssetsDirectory(), { recursive: true });
 }
 
-export type BroadcastAssetKind = 'players' | 'teams';
+export type BroadcastAssetKind = 'players' | 'teams' | 'veto';
 
 export function getBroadcastAssetsDirectory(): string {
   return path.resolve(
@@ -41,4 +41,5 @@ export function getBroadcastAssetDirectory(kind: BroadcastAssetKind): string {
 export function ensureBroadcastAssetsDirectory(): void {
   fs.mkdirSync(getBroadcastAssetDirectory('players'), { recursive: true });
   fs.mkdirSync(getBroadcastAssetDirectory('teams'), { recursive: true });
+  fs.mkdirSync(getBroadcastAssetDirectory('veto'), { recursive: true });
 }

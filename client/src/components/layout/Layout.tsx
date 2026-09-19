@@ -176,6 +176,7 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
       '/elo-templates': { title: t('layout.pageTitle.eloTemplates'), icon: TrendingUpIcon },
       '/admin': { title: t('layout.pageTitle.adminTools'), icon: CampaignIcon },
       '/settings': { title: t('layout.pageTitle.settings'), icon: SettingsIcon },
+      '/veto-designer': { title: 'Veto Designer', icon: CampaignIcon },
       '/dev': {
         title: t('layout.pageTitle.devTools'),
         icon: BugReportIcon,
@@ -204,6 +205,7 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
     { label: t('nav.templates'), path: '/templates', icon: DescriptionIcon },
     { label: t('nav.eloTemplates'), path: '/elo-templates', icon: TrendingUpIcon },
     { label: t('nav.settings'), path: '/settings', icon: SettingsIcon },
+    { label: 'Veto Designer', path: '/veto-designer', icon: CampaignIcon },
   ];
 
   const systemNavItems = [
@@ -880,7 +882,12 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
             justifyContent: 'center',
           }}
         >
-          <Box sx={{ width: '100%', maxWidth: (theme) => theme.breakpoints.values.lg }}>
+          <Box sx={{
+            width: '100%',
+            ...(location.pathname === '/veto-designer'
+              ? { maxWidth: 'none' }
+              : { maxWidth: (theme) => theme.breakpoints.values.lg }),
+          }}>
             {/* Page Header */}
             {currentPageHeader && (
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>

@@ -48,6 +48,10 @@ export default defineConfig({
         target: apiProxyTarget,
         changeOrigin: true,
       },
+      '/broadcast-assets': {
+        target: apiProxyTarget,
+        changeOrigin: true,
+      },
     },
   },
 });

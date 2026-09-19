@@ -19,6 +19,8 @@ export type AppSettingKey =
   | 'branding_show_github'
   | 'branding_show_documentation'
   | 'branding_show_version'
+  | 'broadcast_veto_draft'
+  | 'broadcast_veto_published'
   // MatchZy core defaults (persisted convars)
   | 'matchzy_autostart_mode'
   | 'matchzy_minimum_ready_required'
@@ -73,6 +75,8 @@ const ALLOWED_KEYS: AppSettingKey[] = [
   'branding_show_github',
   'branding_show_documentation',
   'branding_show_version',
+  'broadcast_veto_draft',
+  'broadcast_veto_published',
   // MatchZy core defaults (persisted convars)
   'matchzy_autostart_mode',
   'matchzy_minimum_ready_required',
@@ -428,6 +432,11 @@ class SettingsService {
         log.success(`matchzy_gg_threshold updated to ${parsed}`);
         return;
       }
+    }
+
+    if (key === 'broadcast_veto_draft' || key === 'broadcast_veto_published') {
+      await db.setAppSettingAsync(key, value);
+      return;
     }
 
     await db.setAppSettingAsync(key, null);

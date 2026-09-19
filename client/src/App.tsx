@@ -28,6 +28,7 @@ import Maps from './pages/Maps';
 import Templates from './pages/Templates';
 import ELOTemplates from './pages/ELOTemplates';
 import BroadcastVeto from './pages/BroadcastVeto';
+import VetoDesigner from './pages/VetoDesigner';
 import Layout from './components/layout/Layout';
 import NotFound from './pages/NotFound';
 import { BrandLogo } from './components/common/BrandLogo';
@@ -146,6 +147,7 @@ function AppRoutes() {
       />
 
       {/* Admin Steam linking flow */}
+      <Route path="/veto-designer" element={<ProtectedRoute><Layout><VetoDesigner /></Layout></ProtectedRoute>} />
       <Route
         path="/connect-steam"
         element={

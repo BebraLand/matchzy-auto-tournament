@@ -41,6 +41,7 @@ import teamStatsRoutes from './routes/teamStats';
 import logsRoutes from './routes/logs';
 import vetoRoutes from './routes/veto';
 import settingsRoutes from './routes/settings';
+import broadcastVetoDesignRoutes from './routes/broadcastVetoDesign';
 import mapsRoutes from './routes/maps';
 import mapPoolsRoutes from './routes/mapPools';
 import recoveryRoutes from './routes/recovery';
@@ -401,6 +402,7 @@ app.use('/api/team', teamMatchRoutes); // Public team match data
 app.use('/api/team', teamStatsRoutes); // Public team stats/history
 app.use('/api/veto', vetoRoutes); // Map veto system
 app.use('/api/settings', settingsRoutes);
+app.use('/api/broadcast-veto-design', broadcastVetoDesignRoutes);
 app.use('/api/maps', mapsRoutes);
 app.use('/api/map-pools', mapPoolsRoutes);
 app.use('/api/templates', templatesRoutes); // Tournament templates
