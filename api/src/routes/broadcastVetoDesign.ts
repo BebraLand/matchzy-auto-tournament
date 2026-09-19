@@ -67,7 +67,7 @@ function validTeamFallback(value: unknown): boolean {
 export function validDesign(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const design = value as Record<string, unknown>;
-  if (design.version !== 1 || !design.screens || typeof design.screens !== 'object' || Array.isArray(design.screens) || !validTeamFallback(design.teamFallback)) return false;
+  if (design.version !== 1 || !design.screens || typeof design.screens !== 'object' || Array.isArray(design.screens) || !validTeamFallback(design.teamFallback) || (design.showActionOwnership !== undefined && typeof design.showActionOwnership !== 'boolean')) return false;
   const layouts = design.screens as Record<string, unknown>;
   return screens.every((screen) => {
     const layout = layouts[screen];
