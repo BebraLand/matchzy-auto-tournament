@@ -49,6 +49,13 @@ export function snapElementPosition(element: Pick<VetoElement, 'w' | 'h'>, desir
   return { x: Math.round(x.position), y: Math.round(y.position), guides };
 }
 
+export function nudgeElementPosition(element: Pick<VetoElement, 'x' | 'y' | 'w' | 'h'>, dx: number, dy: number): Pick<VetoElement, 'x' | 'y'> {
+  return {
+    x: Math.max(0, Math.min(1920 - element.w, element.x + dx)),
+    y: Math.max(0, Math.min(1080 - element.h, element.y + dy)),
+  };
+}
+
 export type VetoDistanceMeasurement = {
   axis: 'x' | 'y'; start: number; end: number; offset: number; value: number;
   side: 'left' | 'right' | 'top' | 'bottom'; source: 'canvas' | 'element';

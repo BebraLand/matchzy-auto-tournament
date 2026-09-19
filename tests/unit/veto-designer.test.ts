@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { defaultTeamFallback, defaultVetoDesign, measureElementGaps, previewVeto, restoreImageAspectRatio, snapElementPosition } from '../../client/src/components/veto/VetoDesignCanvas';
+import { defaultTeamFallback, defaultVetoDesign, measureElementGaps, nudgeElementPosition, previewVeto, restoreImageAspectRatio, snapElementPosition } from '../../client/src/components/veto/VetoDesignCanvas';
 import { validDesign } from '../../api/src/routes/broadcastVetoDesign';
 
 const design = defaultVetoDesign();
@@ -13,6 +13,9 @@ assert.deepEqual(snapElementPosition({ w: 480, h: 270 }, 300, 100), { x: 300, y:
 assert.deepEqual(snapElementPosition({ w: 480, h: 270 }, 8, 810), { x: 0, y: 810, guides: { x: 0, y: 1080 } });
 assert.deepEqual(snapElementPosition({ w: 200, h: 100 }, 294, 196, 16, [{ x: 500, y: 300, w: 200, h: 100 }]), { x: 300, y: 200, guides: { x: 500, y: 300 } });
 assert.deepEqual(snapElementPosition({ w: 480, h: 270 }, 715, 398, 16, [], false), { x: 715, y: 398, guides: {} });
+assert.deepEqual(nudgeElementPosition({ x: 300, y: 200, w: 200, h: 100 }, -1, 1), { x: 299, y: 201 });
+assert.deepEqual(nudgeElementPosition({ x: 0, y: 0, w: 200, h: 100 }, -10, -10), { x: 0, y: 0 });
+assert.deepEqual(nudgeElementPosition({ x: 1800, y: 1000, w: 120, h: 80 }, 10, 10), { x: 1800, y: 1000 });
 assert.deepEqual(measureElementGaps({ x: 300, y: 200, w: 200, h: 100 }, [
   { x: 100, y: 210, w: 100, h: 80 }, { x: 600, y: 220, w: 100, h: 60 },
   { x: 340, y: 50, w: 100, h: 100 }, { x: 350, y: 400, w: 100, h: 100 },

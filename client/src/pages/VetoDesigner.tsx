@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type PointerEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useBranding } from '../contexts/BrandingContext';
-import { VetoDesignCanvas, defaultTeamFallback, defaultVetoDesign, measureElementGaps, previewVeto, restoreImageAspectRatio, snapElementPosition, type VetoBinding, type VetoDesign, type VetoElement, type VetoElementKind, type VetoMapMetadata, type VetoScreen, type VetoSnapGuides, type VetoTeamFallback, type VetoDistanceMeasurement } from '../components/veto/VetoDesignCanvas';
+import { VetoDesignCanvas, defaultTeamFallback, defaultVetoDesign, measureElementGaps, nudgeElementPosition, previewVeto, restoreImageAspectRatio, snapElementPosition, type VetoBinding, type VetoDesign, type VetoElement, type VetoElementKind, type VetoMapMetadata, type VetoScreen, type VetoSnapGuides, type VetoTeamFallback, type VetoDistanceMeasurement } from '../components/veto/VetoDesignCanvas';
 import { api } from '../utils/api';
 import type { VetoState } from '../types/veto.types';
 
@@ -85,6 +85,33 @@ export default function VetoDesigner() {
     setDesign((previous) => { const next = clone(previous); mutate(next); return next; });
     setFuture([]); setDirty(true); setStatus('Unsaved changes');
   }, [design]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!selected || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest('input, select, textarea, [contenteditable="true"]')) return;
+      const direction = event.key === 'ArrowLeft' ? { x: -1, y: 0 } : event.key === 'ArrowRight' ? { x: 1, y: 0 } : event.key === 'ArrowUp' ? { x: 0, y: -1 } : event.key === 'ArrowDown' ? { x: 0, y: 1 } : null;
+      const element = layout.elements.find((item) => item.id === selected);
+      if (!direction || !element) return;
+      event.preventDefault();
+      const step = event.shiftKey ? 10 : 1;
+      const nextPosition = nudgeElementPosition(element, direction.x * step, direction.y * step);
+      if (nextPosition.x === element.x && nextPosition.y === element.y) return;
+      const peers = layout.elements.filter((item) => item.id !== selected && item.visible !== false).map(({ x, y, w, h }) => ({ x, y, w, h }));
+      setSnapGuides({});
+      setDistanceGuides(measureElementGaps({ ...element, ...nextPosition }, peers));
+      const targets: VetoScreen[] = selected === 'brand' || selected === 'logo' ? ['standby', 'live', 'completed'] : [screen];
+      commit((next) => {
+        for (const targetScreen of targets) {
+          const targetElement = next.screens[targetScreen].elements.find((item) => item.id === selected);
+          if (targetElement) Object.assign(targetElement, nudgeElementPosition(targetElement, direction.x * step, direction.y * step));
+        }
+      });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [commit, layout.elements, screen, selected]);
 
   const updateElement = useCallback((patch: Partial<VetoElement>) => {
     if (!selected) return;
@@ -251,7 +278,7 @@ export default function VetoDesigner() {
         <h2>Add block</h2><div className="vd-add">{kinds.map(([kind, label]) => <button key={kind} onClick={() => addElement(kind)}>＋ {label}</button>)}</div>
         <h2>Layers · {screen}</h2><div className="vd-layers">{[...layout.elements].reverse().map((element) => <button key={element.id} className={selected === element.id ? 'active' : ''} onClick={() => { setSelected(element.id); setSnapGuides({}); setDistanceGuides([]); }}><span>{element.kind === 'text' ? element.text || element.binding || 'Text' : kinds.find(([kind]) => kind === element.kind)?.[1]}</span><b>{element.visible === false ? '○' : '●'}</b></button>)}</div>
       </aside>
-      <main className="vd-preview" onPointerDown={(event) => { if (event.target === event.currentTarget || (event.target as HTMLElement).classList.contains('vdc-canvas')) { setSelected(null); setSnapGuides({}); setDistanceGuides([]); } }}><div className="vd-preview-label">PREVIEW · {screen.toUpperCase()} · {published ? 'PUBLISHED DESIGN AVAILABLE' : 'NOT PUBLISHED YET'}</div><div className="vd-stage"><VetoDesignCanvas design={design} screen={screen} veto={mock} branding={branding} tournamentName={tournamentName} maps={scenario === 'real' ? liveMaps : undefined} logos={scenario === 'real' ? liveLogos : undefined} guides={snapGuides} distances={distanceGuides} selectedId={selected} onElementPointerDown={onPointerDown} /></div><div className="vd-preview-foot">Drag a block or its resize handle. Changes appear here immediately and in live output after publishing.</div></main>
+      <main className="vd-preview" onPointerDown={(event) => { if (event.target === event.currentTarget || (event.target as HTMLElement).classList.contains('vdc-canvas')) { setSelected(null); setSnapGuides({}); setDistanceGuides([]); } }}><div className="vd-preview-label">PREVIEW · {screen.toUpperCase()} · {published ? 'PUBLISHED DESIGN AVAILABLE' : 'NOT PUBLISHED YET'}</div><div className="vd-stage"><VetoDesignCanvas design={design} screen={screen} veto={mock} branding={branding} tournamentName={tournamentName} maps={scenario === 'real' ? liveMaps : undefined} logos={scenario === 'real' ? liveLogos : undefined} guides={snapGuides} distances={distanceGuides} selectedId={selected} onElementPointerDown={onPointerDown} /></div><div className="vd-preview-foot">Drag a block or its resize handle. Changes appear here immediately and in live output after publishing. Arrow keys move 1 px · Shift + arrow moves 10 px.</div></main>
       <aside className="vd-panel vd-inspector"><h2>{current ? 'Block properties' : 'Screen background'}</h2>{current ? <>
         <p className="vd-hint">{current.kind.toUpperCase()} · {current.id === 'brand' || current.id === 'logo' ? 'shared across all screens' : screen}</p>
         <div className="vd-grid">{numeric('X', 'x', current.x)}{numeric('Y', 'y', current.y)}{numeric('Width', 'w', current.w)}{numeric('Height', 'h', current.h)}</div>
