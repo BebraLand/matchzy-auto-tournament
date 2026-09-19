@@ -10,6 +10,7 @@ const screens = ['standby', 'live', 'completed'] as const;
 const kinds = ['text', 'image', 'shape', 'line', 'maps', 'timeline'] as const;
 const bindings = ['none', 'brand', 'tournamentName', 'team1', 'team2', 'format', 'status', 'turn', 'step', 'team1Logo', 'team2Logo', 'brandLogo'] as const;
 const fallbackModes = ['initials', 'first-letter', 'first-last', 'full-name', 'hidden'] as const;
+const mapStateStyles = ['outline', 'tint'] as const;
 
 function validImage(value: unknown): boolean {
   return typeof value === 'string' && value.length <= 500 && (
@@ -68,6 +69,8 @@ export function validDesign(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const design = value as Record<string, unknown>;
   if (design.version !== 1 || !design.screens || typeof design.screens !== 'object' || Array.isArray(design.screens) || !validTeamFallback(design.teamFallback) ||
+    (design.mapStateStyle !== undefined && !mapStateStyles.includes(design.mapStateStyle as typeof mapStateStyles[number])) ||
+    (design.mapStateTintOpacity !== undefined && !numberIn(design.mapStateTintOpacity, 0, 0.4)) ||
     (design.showActionOwnership !== undefined && typeof design.showActionOwnership !== 'boolean') ||
     (design.showMapSideBadges !== undefined && typeof design.showMapSideBadges !== 'boolean') ||
     (design.showTimelineOwnership !== undefined && typeof design.showTimelineOwnership !== 'boolean')) return false;
