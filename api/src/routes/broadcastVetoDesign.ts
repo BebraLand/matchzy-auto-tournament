@@ -9,6 +9,7 @@ const router = Router();
 const screens = ['standby', 'live', 'completed'] as const;
 const kinds = ['text', 'image', 'shape', 'line', 'maps', 'timeline'] as const;
 const bindings = ['none', 'brand', 'tournamentName', 'team1', 'team2', 'format', 'status', 'turn', 'step', 'team1Logo', 'team2Logo', 'brandLogo'] as const;
+const fallbackModes = ['initials', 'first-letter', 'first-last', 'full-name', 'hidden'] as const;
 
 function validImage(value: unknown): boolean {
   return typeof value === 'string' && value.length <= 500 && (
@@ -51,10 +52,22 @@ function validElement(value: unknown): boolean {
     (el.visible === undefined || typeof el.visible === 'boolean');
 }
 
+function validTeamFallback(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const fallback = value as Record<string, unknown>;
+  return fallbackModes.includes(fallback.mode as typeof fallbackModes[number]) &&
+    numberIn(fallback.maxLetters, 1, 4) &&
+    validColor(fallback.background) &&
+    validColor(fallback.color) &&
+    validColor(fallback.borderColor) &&
+    numberIn(fallback.radius, 0, 500);
+}
+
 export function validDesign(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const design = value as Record<string, unknown>;
-  if (design.version !== 1 || !design.screens || typeof design.screens !== 'object' || Array.isArray(design.screens)) return false;
+  if (design.version !== 1 || !design.screens || typeof design.screens !== 'object' || Array.isArray(design.screens) || !validTeamFallback(design.teamFallback)) return false;
   const layouts = design.screens as Record<string, unknown>;
   return screens.every((screen) => {
     const layout = layouts[screen];

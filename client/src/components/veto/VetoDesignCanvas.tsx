@@ -7,6 +7,7 @@ import { getVetoOrder } from '../../constants/vetoOrders';
 export type VetoScreen = 'standby' | 'live' | 'completed';
 export type VetoElementKind = 'text' | 'image' | 'shape' | 'line' | 'maps' | 'timeline';
 export type VetoBinding = 'none' | 'brand' | 'tournamentName' | 'team1' | 'team2' | 'format' | 'status' | 'turn' | 'step' | 'team1Logo' | 'team2Logo' | 'brandLogo';
+export type VetoTeamFallback = { mode: 'initials' | 'first-letter' | 'first-last' | 'full-name' | 'hidden'; maxLetters: number; background: string; color: string; borderColor: string; radius: number };
 export type VetoElement = {
   id: string; kind: VetoElementKind; x: number; y: number; w: number; h: number;
   text?: string; imageUrl?: string; binding?: VetoBinding; color?: string;
@@ -17,15 +18,17 @@ export type VetoElement = {
   fontFamily?: 'Inter' | 'Arial' | 'Impact' | 'Georgia' | 'monospace';
 };
 export type VetoLayout = { background: string; backgroundImage?: string; elements: VetoElement[] };
-export type VetoDesign = { version: 1; screens: Record<VetoScreen, VetoLayout> };
+export type VetoDesign = { version: 1; screens: Record<VetoScreen, VetoLayout>; teamFallback?: VetoTeamFallback };
 export type VetoMapMetadata = Map<string, { displayName: string; imageUrl: string | null }>;
+
+export const defaultTeamFallback: VetoTeamFallback = { mode: 'initials', maxLetters: 2, background: '#101A27', color: '#9EB4C8', borderColor: '#64758A', radius: 8 };
 
 const el = (id: string, kind: VetoElementKind, x: number, y: number, w: number, h: number, props: Partial<VetoElement> = {}): VetoElement => ({ id, kind, x, y, w, h, ...props });
 
 export function defaultVetoDesign(): VetoDesign {
   const brand = el('brand', 'text', 100, 56, 1050, 54, { binding: 'brand', fontSize: 28, weight: 800, color: '#89CAFF' });
   const logo = el('logo', 'image', 42, 52, 50, 50, { binding: 'brandLogo' });
-  return { version: 1, screens: {
+  return { version: 1, teamFallback: defaultTeamFallback, screens: {
     standby: { background: '#0B1018', elements: [
       logo, brand,
       el('standby-title', 'text', 270, 390, 1380, 140, { text: 'VETO DESK', fontSize: 114, weight: 900, align: 'center' }),
@@ -100,18 +103,38 @@ function imageSource(element: VetoElement, branding: BrandingSettings, logos: { 
   return element.imageUrl || null;
 }
 
-function MapPool({ element, veto, maps, logos }: { element: VetoElement; veto: VetoState | null; maps: VetoMapMetadata; logos: { team1: string | null; team2: string | null } }) {
+function teamFallbackText(name: string, fallback: VetoTeamFallback): string {
+  if (fallback.mode === 'hidden') return '';
+  const clean = name.trim().replace(/\s+/g, ' ');
+  if (!clean) return '';
+  if (fallback.mode === 'full-name') return clean;
+  const words = clean.split(' ');
+  if (fallback.mode === 'first-letter') return words[0][0].toUpperCase();
+  if (fallback.mode === 'first-last') return `${words[0][0]}${words.at(-1)?.[0] || ''}`.toUpperCase().slice(0, fallback.maxLetters);
+  const initials = words.map((word) => word[0]).join('').toUpperCase();
+  return (initials || clean.slice(0, fallback.maxLetters)).slice(0, fallback.maxLetters);
+}
+
+function TeamLogoFallback({ name, fallback, map = false }: { name: string; fallback: VetoTeamFallback; map?: boolean }) {
+  const text = teamFallbackText(name, fallback);
+  if (!text) return null;
+  return <span className={map ? 'vdc-map-logo vdc-map-logo-fallback' : 'vdc-empty-image vdc-logo-placeholder'} style={{ background: fallback.background, color: fallback.color, borderColor: fallback.borderColor, borderRadius: fallback.radius }}>{text}</span>;
+}
+
+function MapPool({ element, veto, maps, logos, fallback }: { element: VetoElement; veto: VetoState | null; maps: VetoMapMetadata; logos: { team1: string | null; team2: string | null }; fallback: VetoTeamFallback }) {
   const names = veto?.allMaps?.length ? veto.allMaps : veto ? [...new Set([...veto.availableMaps, ...veto.bannedMaps, ...veto.pickedMaps.map((map) => map.mapName)])] : [];
   return <div className="vdc-maps" style={{ gridTemplateColumns: `repeat(${element.columns || 7}, minmax(0, 1fr))`, gap: element.gap ?? 12 }}>
     {names.map((name) => {
       const picked = veto?.pickedMaps.find((entry) => entry.mapName === name);
       const stage = veto?.bannedMaps.includes(name) ? 'banned' : picked?.pickedBy === 'decider' ? 'decider' : picked ? 'picked' : 'available';
-      const logo = picked?.pickedBy === 'team1' ? logos.team1 : picked?.pickedBy === 'team2' ? logos.team2 : null;
+      const pickedTeam = picked?.pickedBy === 'team1' ? 'team1' : picked?.pickedBy === 'team2' ? 'team2' : null;
+      const logo = pickedTeam === 'team1' ? logos.team1 : pickedTeam === 'team2' ? logos.team2 : null;
+      const pickedTeamName = pickedTeam === 'team1' ? veto?.team1Name || 'TEAM 1' : pickedTeam === 'team2' ? veto?.team2Name || 'TEAM 2' : '';
       return <div className={`vdc-map ${stage}`} key={name} data-testid={`broadcast-veto-map-${name}`} style={{ background: element.background || '#0F1B29', borderColor: element.borderColor || '#536A83', borderRadius: element.radius ?? 16 }}>
         <img className="vdc-map-photo" src={element.mapImages?.[name] || maps.get(name)?.imageUrl || getMapFullImageUrl(name)} alt="" />
         <div className="vdc-map-shade" />
         <strong className="vdc-map-name">{maps.get(name)?.displayName || getMapDisplayName(name)}</strong>
-        {logo && <img className="vdc-map-logo" src={logo} alt="" />}
+        {logo ? <img className="vdc-map-logo" src={logo} alt="" /> : pickedTeam && <TeamLogoFallback name={pickedTeamName} fallback={fallback} map />}
         <div className="vdc-map-caption"><b>{stage === 'banned' ? 'BAN' : stage === 'picked' ? 'PICK' : stage === 'decider' ? 'DECIDER' : 'AVAILABLE'}</b></div>
       </div>;
     })}
@@ -145,6 +168,7 @@ export function VetoDesignCanvas({ design, screen, veto, branding, tournamentNam
     return () => observer.disconnect();
   }, []);
   const layout = design.screens[screen];
+  const fallback = { ...defaultTeamFallback, ...design.teamFallback };
   return <div className="vdc-viewport" ref={container}>
     <div className="vdc-canvas" style={{ width: 1920, height: 1080, transform: `translate(-50%, -50%) scale(${scale})`, background: layout.background, backgroundImage: layout.backgroundImage ? `url("${layout.backgroundImage}")` : undefined }}>
       {layout.elements.filter((element) => element.visible !== false).map((element) => {
@@ -155,8 +179,8 @@ export function VetoDesignCanvas({ design, screen, veto, branding, tournamentNam
         const style: CSSProperties = { left: element.x, top: element.y, width: element.w, height: element.h, color: element.color || '#F4F7FB', background: element.kind === 'text' || element.kind === 'shape' ? element.background : undefined, borderColor: element.borderColor, borderRadius: element.radius, opacity: element.opacity ?? 1, textAlign: element.align || 'left', fontSize: element.fontSize || 32, fontWeight: element.weight || 700, fontFamily: element.fontFamily || 'Inter, Arial, sans-serif', ...logoPadding };
         return <div key={element.id} className={`vdc-element vdc-${element.kind} ${selectedId === element.id ? 'selected' : ''} ${onElementPointerDown ? 'editable' : ''}`} style={style} onPointerDown={onElementPointerDown ? (event) => onElementPointerDown(element.id, event, 'move') : undefined}>
           {element.kind === 'text' && <span>{boundText(element, branding, veto, tournamentName)}</span>}
-          {element.kind === 'image' && (imageSource(element, branding, logos) ? <img src={imageSource(element, branding, logos)!} alt="" /> : <span className={`vdc-empty-image ${element.binding?.endsWith('Logo') ? 'vdc-logo-placeholder' : ''}`}>{element.binding === 'team1Logo' ? 'T1' : element.binding === 'team2Logo' ? 'T2' : 'IMAGE'}</span>)}
-          {element.kind === 'maps' && <MapPool element={element} veto={veto} maps={maps} logos={logos} />}
+          {element.kind === 'image' && (imageSource(element, branding, logos) ? <img src={imageSource(element, branding, logos)!} alt="" /> : element.binding === 'team1Logo' ? <TeamLogoFallback name={veto?.team1Name || 'TEAM 1'} fallback={fallback} /> : element.binding === 'team2Logo' ? <TeamLogoFallback name={veto?.team2Name || 'TEAM 2'} fallback={fallback} /> : <span className="vdc-empty-image">IMAGE</span>)}
+          {element.kind === 'maps' && <MapPool element={element} veto={veto} maps={maps} logos={logos} fallback={fallback} />}
           {element.kind === 'timeline' && <Timeline element={element} veto={veto} />}
           {onElementPointerDown && selectedId === element.id && <div className="vdc-resize" onPointerDown={(event) => { event.stopPropagation(); onElementPointerDown(element.id, event, 'resize'); }} />}
         </div>;
@@ -167,5 +191,5 @@ export function VetoDesignCanvas({ design, screen, veto, branding, tournamentNam
 }
 
 const canvasStyles = `
-  .vdc-viewport{width:100%;height:100%;min-height:1px;position:relative;overflow:hidden;background:#080d15}.vdc-canvas{position:absolute;left:50%;top:50%;transform-origin:center;overflow:hidden;background-position:center;background-size:cover;font-family:Inter,Arial,sans-serif;color:#f4f7fb;user-select:none}.vdc-element{position:absolute;box-sizing:border-box;overflow:hidden}.vdc-element.editable{cursor:move}.vdc-element.selected{outline:3px solid #6dc8ff;outline-offset:2px}.vdc-text{display:flex;align-items:center;white-space:pre-wrap;padding:0 12px}.vdc-text span{width:100%;overflow:hidden;text-overflow:ellipsis}.vdc-image{display:flex;align-items:center;justify-content:center;overflow:hidden;contain:paint}.vdc-image img{display:block;max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;object-position:center}.vdc-empty-image{color:#849aaf;border:2px dashed #64758a;padding:20px}.vdc-logo-placeholder{display:grid;place-items:center;width:100%;height:100%;padding:0;border:1px solid #64758a;background:#101a27;color:#9eb4c8;font-size:30px;font-weight:800;letter-spacing:.08em}.vdc-shape{border:1px solid}.vdc-line{background:currentColor}.vdc-resize{position:absolute;right:0;bottom:0;width:28px;height:28px;background:#6dc8ff;border:4px solid #101923;cursor:nwse-resize;z-index:10}.vdc-maps{display:grid;width:100%;height:100%;}.vdc-map{position:relative;min-width:0;min-height:0;overflow:hidden;border:2px solid;box-shadow:0 10px 24px #0008}.vdc-map-photo{position:absolute;width:100%;height:100%;object-fit:cover;opacity:.83}.vdc-map-shade{position:absolute;inset:0;background:linear-gradient(transparent 35%,#060a10e6)}.vdc-map.banned .vdc-map-photo{filter:grayscale(1)}.vdc-map.banned{border-color:#F46C73!important}.vdc-map.picked{border-color:#59C7AB!important}.vdc-map.decider{border-color:#F4C773!important}.vdc-map-name{position:absolute;top:14px;left:14px;right:14px;text-transform:uppercase;font-size:23px;text-shadow:0 2px 5px #000}.vdc-map-logo{position:absolute;width:44%;height:44%;left:28%;top:26%;object-fit:contain;filter:drop-shadow(0 6px 10px #000)}.vdc-map-caption{position:absolute;bottom:16px;left:14px;right:14px;display:flex;justify-content:space-between;font-size:20px;letter-spacing:.07em}.vdc-timeline{display:flex;width:100%;height:100%;align-items:stretch;gap:0;overflow:hidden}.vdc-step{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;border-top:3px solid #557087;position:relative;padding-top:8px}.vdc-step:before{content:'';position:absolute;top:-12px;left:calc(50% - 9px);width:18px;height:18px;border:4px solid currentColor;border-radius:50%;background:#0c1520}.vdc-step.done{color:#efad72;border-top-color:#efad72}.vdc-step.current{color:#6ce3ed;border-top-color:#6ce3ed;text-shadow:0 0 12px #6ce3ed}.vdc-step.upcoming{color:#718ca2}.vdc-step span{opacity:.7}.vdc-step small{font-size:.75em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .vdc-viewport{width:100%;height:100%;min-height:1px;position:relative;overflow:hidden;background:#080d15}.vdc-canvas{position:absolute;left:50%;top:50%;transform-origin:center;overflow:hidden;background-position:center;background-size:cover;font-family:Inter,Arial,sans-serif;color:#f4f7fb;user-select:none}.vdc-element{position:absolute;box-sizing:border-box;overflow:hidden}.vdc-element.editable{cursor:move}.vdc-element.selected{outline:3px solid #6dc8ff;outline-offset:2px}.vdc-text{display:flex;align-items:center;white-space:pre-wrap;padding:0 12px}.vdc-text span{width:100%;overflow:hidden;text-overflow:ellipsis}.vdc-image{display:flex;align-items:center;justify-content:center;overflow:hidden;contain:paint}.vdc-image img{display:block;max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;object-position:center}.vdc-empty-image{color:#849aaf;border:2px dashed #64758a;padding:20px}.vdc-logo-placeholder{display:grid;place-items:center;width:100%;height:100%;padding:0;border:1px solid #64758a;background:#101a27;color:#9eb4c8;font-size:30px;font-weight:800;letter-spacing:.08em}.vdc-shape{border:1px solid}.vdc-line{background:currentColor}.vdc-resize{position:absolute;right:0;bottom:0;width:28px;height:28px;background:#6dc8ff;border:4px solid #101923;cursor:nwse-resize;z-index:10}.vdc-maps{display:grid;width:100%;height:100%;}.vdc-map{position:relative;min-width:0;min-height:0;overflow:hidden;border:2px solid;box-shadow:0 10px 24px #0008}.vdc-map-photo{position:absolute;width:100%;height:100%;object-fit:cover;opacity:.83}.vdc-map-shade{position:absolute;inset:0;background:linear-gradient(transparent 35%,#060a10e6)}.vdc-map.banned .vdc-map-photo{filter:grayscale(1)}.vdc-map.banned{border-color:#F46C73!important}.vdc-map.picked{border-color:#59C7AB!important}.vdc-map.decider{border-color:#F4C773!important}.vdc-map-name{position:absolute;top:14px;left:14px;right:14px;text-transform:uppercase;font-size:23px;text-shadow:0 2px 5px #000}.vdc-map-logo{position:absolute;width:44%;height:44%;left:28%;top:26%;object-fit:contain;filter:drop-shadow(0 6px 10px #000)}.vdc-map-logo-fallback{display:grid;place-items:center;box-sizing:border-box;border:2px solid;font-size:clamp(18px,2.3vw,42px);font-weight:900;letter-spacing:.08em;text-shadow:0 2px 8px #000}.vdc-map-caption{position:absolute;bottom:16px;left:14px;right:14px;display:flex;justify-content:space-between;font-size:20px;letter-spacing:.07em}.vdc-timeline{display:flex;width:100%;height:100%;align-items:stretch;gap:0;overflow:hidden}.vdc-step{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;border-top:3px solid #557087;position:relative;padding-top:8px}.vdc-step:before{content:'';position:absolute;top:-12px;left:calc(50% - 9px);width:18px;height:18px;border:4px solid currentColor;border-radius:50%;background:#0c1520}.vdc-step.done{color:#efad72;border-top-color:#efad72}.vdc-step.current{color:#6ce3ed;border-top-color:#6ce3ed;text-shadow:0 0 12px #6ce3ed}.vdc-step.upcoming{color:#718ca2}.vdc-step span{opacity:.7}.vdc-step small{font-size:.75em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 `;
