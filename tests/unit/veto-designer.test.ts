@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { defaultTeamFallback, defaultVetoDesign, previewVeto, restoreImageAspectRatio, snapElementPosition } from '../../client/src/components/veto/VetoDesignCanvas';
+import { defaultTeamFallback, defaultVetoDesign, measureElementGaps, previewVeto, restoreImageAspectRatio, snapElementPosition } from '../../client/src/components/veto/VetoDesignCanvas';
 import { validDesign } from '../../api/src/routes/broadcastVetoDesign';
 
 const design = defaultVetoDesign();
@@ -13,6 +13,18 @@ assert.deepEqual(snapElementPosition({ w: 480, h: 270 }, 300, 100), { x: 300, y:
 assert.deepEqual(snapElementPosition({ w: 480, h: 270 }, 8, 810), { x: 0, y: 810, guides: { x: 0, y: 1080 } });
 assert.deepEqual(snapElementPosition({ w: 200, h: 100 }, 294, 196, 16, [{ x: 500, y: 300, w: 200, h: 100 }]), { x: 300, y: 200, guides: { x: 500, y: 300 } });
 assert.deepEqual(snapElementPosition({ w: 480, h: 270 }, 715, 398, 16, [], false), { x: 715, y: 398, guides: {} });
+assert.deepEqual(measureElementGaps({ x: 300, y: 200, w: 200, h: 100 }, [
+  { x: 100, y: 210, w: 100, h: 80 }, { x: 600, y: 220, w: 100, h: 60 },
+  { x: 340, y: 50, w: 100, h: 100 }, { x: 350, y: 400, w: 100, h: 100 },
+]).map(({ side, source, value }) => [side, source, value]), [
+  ['left', 'canvas', 300], ['left', 'element', 100], ['right', 'element', 100],
+  ['top', 'canvas', 200], ['top', 'element', 50], ['bottom', 'element', 100],
+]);
+assert.deepEqual(measureElementGaps({ x: 300, y: 200, w: 200, h: 100 }, [
+  { x: 100, y: 210, w: 200, h: 80 }, // touching: snapping already shows alignment
+  { x: 350, y: 300, w: 100, h: 100 }, // touching below
+  { x: 100, y: 400, w: 100, h: 100 }, // no overlap on either axis
+]).filter(({ source }) => source === 'element'), []);
 assert.equal(validDesign({ ...design, screens: { ...design.screens, live: { ...design.screens.live, backgroundImage: 'javascript:alert(1)' } } }), false);
 assert.deepEqual(Object.keys(design.screens).sort(), ['completed', 'live', 'standby']);
 for (const screen of Object.values(design.screens)) {
