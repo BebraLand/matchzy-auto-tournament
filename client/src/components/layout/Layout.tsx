@@ -34,6 +34,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import StorageIcon from '@mui/icons-material/Storage';
 import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
 import CampaignIcon from '@mui/icons-material/Campaign';
+import DesignServicesOutlinedIcon from '@mui/icons-material/DesignServicesOutlined';
 import SettingsIcon from '@mui/icons-material/Settings';
 import BuildIcon from '@mui/icons-material/Build';
 import MapIcon from '@mui/icons-material/Map';
@@ -176,7 +177,7 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
       '/elo-templates': { title: t('layout.pageTitle.eloTemplates'), icon: TrendingUpIcon },
       '/admin': { title: t('layout.pageTitle.adminTools'), icon: CampaignIcon },
       '/settings': { title: t('layout.pageTitle.settings'), icon: SettingsIcon },
-      '/veto-designer': { title: 'Veto Designer', icon: CampaignIcon },
+      '/veto-designer': { title: 'Veto Designer', icon: DesignServicesOutlinedIcon },
       '/dev': {
         title: t('layout.pageTitle.devTools'),
         icon: BugReportIcon,
@@ -205,7 +206,7 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
     { label: t('nav.templates'), path: '/templates', icon: DescriptionIcon },
     { label: t('nav.eloTemplates'), path: '/elo-templates', icon: TrendingUpIcon },
     { label: t('nav.settings'), path: '/settings', icon: SettingsIcon },
-    { label: 'Veto Designer', path: '/veto-designer', icon: CampaignIcon },
+    { label: 'Veto Designer', path: '/veto-designer', icon: DesignServicesOutlinedIcon },
   ];
 
   const systemNavItems = [
