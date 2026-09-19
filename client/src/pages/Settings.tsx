@@ -1837,6 +1837,19 @@ export default function Settings() {
                       fullWidth
                       slotProps={{ htmlInput: { maxLength: 80, 'data-testid': 'settings-brand-name-input' } }}
                     />
+                    <TextField
+                      label={t('settingsPage.matchRating.chatDefaults.chatPrefixLabel')}
+                      value={matchzyChatPrefix}
+                      onChange={(event) => setMatchzyChatPrefix(event.target.value)}
+                      onBlur={handleFieldBlur}
+                      onKeyDown={handleFieldKeyDown}
+                      helperText={t(
+                        'settingsPage.branding.chatPrefixHelper',
+                        'The same Chat prefix used in Matches & Ratings.'
+                      )}
+                      fullWidth
+                      slotProps={{ htmlInput: { 'data-testid': 'settings-brand-chat-prefix-input' } }}
+                    />
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                       <TextField
                         label={t('settingsPage.branding.primaryColorLabel', 'Primary color')}
@@ -2262,7 +2275,10 @@ export default function Settings() {
                                   matchzyFfwTime: resetPayload.matchzyFfwTime,
                                 }
                               : tabIndex === 4
-                                ? { branding: resetPayload.branding }
+                                ? {
+                                    branding: resetPayload.branding,
+                                    matchzyChatPrefix: resetPayload.matchzyChatPrefix,
+                                  }
                                 : {
                                     matchzyDebugChatEnabled: resetPayload.matchzyDebugChatEnabled,
                                     simulateMatches: resetPayload.simulateMatches,
