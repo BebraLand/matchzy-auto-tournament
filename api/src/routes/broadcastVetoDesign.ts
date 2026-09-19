@@ -78,6 +78,7 @@ export function validDesign(value: unknown): boolean {
     const data = layout as Record<string, unknown>;
     return validColor(data.background) &&
       (data.backgroundImage === undefined || validImage(data.backgroundImage)) &&
+      (data.backgroundDim === undefined || numberIn(data.backgroundDim, 0, 0.8)) &&
       Array.isArray(data.elements) && data.elements.length <= 100 &&
       data.elements.every(validElement) &&
       new Set(data.elements.map((el: { id: string }) => el.id)).size === data.elements.length;

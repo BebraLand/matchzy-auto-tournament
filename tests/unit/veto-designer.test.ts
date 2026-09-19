@@ -8,6 +8,8 @@ assert.equal(design.showMapSideBadges, false);
 assert.equal(design.showTimelineOwnership, false);
 assert.equal(validDesign({ ...design, showMapSideBadges: true, showTimelineOwnership: true }), true);
 assert.equal(validDesign({ ...design, showMapSideBadges: 'true' }), false);
+assert.equal(validDesign({ ...design, screens: { ...design.screens, live: { ...design.screens.live, backgroundDim: 0.55 } } }), true);
+assert.equal(validDesign({ ...design, screens: { ...design.screens, live: { ...design.screens.live, backgroundDim: 0.81 } } }), false);
 assert.equal(validDesign({ ...design, teamFallback: { ...defaultTeamFallback, mode: 'initials' } }), true);
 assert.equal(validDesign({ ...design, teamFallback: { ...defaultTeamFallback, background: 'transparent' } }), false);
 assert.deepEqual(restoreImageAspectRatio({ x: 700, y: 400, w: 480, h: 110 }, 1000, 1000), { x: 700, y: 215, w: 480, h: 480 });
