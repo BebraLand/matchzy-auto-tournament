@@ -112,10 +112,10 @@ export function defaultVetoDesign(): VetoDesign {
     live: { background: '#0B1018', elements: [
       logo, brand,
       el('format', 'text', 1410, 54, 340, 48, { binding: 'format', fontSize: 27, weight: 800, align: 'right' }),
-      el('team1', 'text', 82, 200, 690, 105, { binding: 'team1', fontSize: 69, weight: 900, background: '#162232', align: 'center' }),
+      el('team1', 'text', 82, 200, 690, 105, { binding: 'team1', fontSize: 69, weight: 900, background: '#162232', align: 'center', radius: 8 }),
       el('team1-logo', 'image', 93, 204, 97, 97, { binding: 'team1Logo' }),
       el('versus', 'text', 815, 215, 290, 84, { text: 'VS', fontSize: 65, weight: 900, color: '#D6E0EA', align: 'center' }),
-      el('team2', 'text', 1148, 200, 690, 105, { binding: 'team2', fontSize: 69, weight: 900, background: '#2B211A', align: 'center' }),
+      el('team2', 'text', 1148, 200, 690, 105, { binding: 'team2', fontSize: 69, weight: 900, background: '#2B211A', align: 'center', radius: 8 }),
       el('team2-logo', 'image', 1728, 204, 97, 97, { binding: 'team2Logo' }),
       el('turn', 'text', 300, 347, 1320, 56, { binding: 'turn', fontSize: 34, weight: 800, align: 'center' }),
       el('maps', 'maps', 82, 447, 1756, 390, { columns: 7, gap: 12, background: '#0F1B29', borderColor: '#536A83', radius: 16 }),
@@ -275,7 +275,8 @@ export function VetoDesignCanvas({ design, screen, veto, branding, tournamentNam
         const renderedText = element.kind === 'text' ? boundText(element, branding, veto, tournamentName) : '';
         const renderKey = element.kind === 'text' && element.binding && element.binding !== 'none' ? `${element.id}-${renderedText}` : element.id;
         const activeTeam = element.binding === 'team1' && veto?.status !== 'completed' && veto?.currentTurn === 'team1' || element.binding === 'team2' && veto?.status !== 'completed' && veto?.currentTurn === 'team2';
-        const style: CSSProperties = { left: element.x, top: element.y, width: element.w, height: element.h, color: element.color || '#F4F7FB', background: element.kind === 'text' || element.kind === 'shape' ? element.background : undefined, borderColor: element.borderColor, borderRadius: element.radius, opacity: element.opacity ?? 1, textAlign: element.align || 'left', fontSize: element.fontSize || 32, fontWeight: element.weight || 700, fontFamily: element.fontFamily || 'Inter, Arial, sans-serif', ...logoPadding };
+        const defaultRadius = element.kind === 'text' && (element.binding === 'team1' || element.binding === 'team2') ? 8 : undefined;
+        const style: CSSProperties = { left: element.x, top: element.y, width: element.w, height: element.h, color: element.color || '#F4F7FB', background: element.kind === 'text' || element.kind === 'shape' ? element.background : undefined, borderColor: element.borderColor, borderRadius: element.radius ?? defaultRadius, opacity: element.opacity ?? 1, textAlign: element.align || 'left', fontSize: element.fontSize || 32, fontWeight: element.weight || 700, fontFamily: element.fontFamily || 'Inter, Arial, sans-serif', ...logoPadding };
         return <div key={renderKey} data-vdc-id={element.id} data-vdc-binding={element.binding || undefined} className={`vdc-element vdc-${element.kind} ${activeTeam ? 'vdc-team-active' : ''} ${selectedId === element.id ? 'selected' : ''} ${onElementPointerDown ? 'editable' : ''}`} style={style} onPointerDown={onElementPointerDown ? (event) => onElementPointerDown(element.id, event, 'move') : undefined}>
           {element.kind === 'text' && <span>{renderedText}</span>}
           {element.kind === 'image' && (imageSource(element, branding, logos) ? <img src={imageSource(element, branding, logos)!} alt="" /> : element.binding === 'team1Logo' ? <TeamLogoFallback name={veto?.team1Name || 'TEAM 1'} fallback={fallback} /> : element.binding === 'team2Logo' ? <TeamLogoFallback name={veto?.team2Name || 'TEAM 2'} fallback={fallback} /> : <span className="vdc-empty-image">IMAGE</span>)}

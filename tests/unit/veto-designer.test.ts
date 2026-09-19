@@ -6,6 +6,8 @@ const design = defaultVetoDesign();
 assert.equal(validDesign(design), true);
 assert.equal(design.showMapSideBadges, false);
 assert.equal(design.showTimelineOwnership, false);
+assert.equal(design.screens.live.elements.find((element) => element.id === 'team1')?.radius, 8);
+assert.equal(design.screens.live.elements.find((element) => element.id === 'team2')?.radius, 8);
 assert.equal(validDesign({ ...design, showMapSideBadges: true, showTimelineOwnership: true }), true);
 assert.equal(validDesign({ ...design, showMapSideBadges: 'true' }), false);
 assert.equal(validDesign({ ...design, screens: { ...design.screens, live: { ...design.screens.live, backgroundDim: 0.55 } } }), true);
