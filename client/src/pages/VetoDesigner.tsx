@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type PointerEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useBranding } from '../contexts/BrandingContext';
-import { VetoDesignCanvas, defaultTeamFallback, defaultVetoDesign, previewVeto, restoreImageAspectRatio, type VetoBinding, type VetoDesign, type VetoElement, type VetoElementKind, type VetoMapMetadata, type VetoScreen, type VetoTeamFallback } from '../components/veto/VetoDesignCanvas';
+import { VetoDesignCanvas, defaultTeamFallback, defaultVetoDesign, previewVeto, restoreImageAspectRatio, snapElementPosition, type VetoBinding, type VetoDesign, type VetoElement, type VetoElementKind, type VetoMapMetadata, type VetoScreen, type VetoSnapGuides, type VetoTeamFallback } from '../components/veto/VetoDesignCanvas';
 import { api } from '../utils/api';
 import type { VetoState } from '../types/veto.types';
 
@@ -40,6 +40,9 @@ export default function VetoDesigner() {
   const [liveLogos, setLiveLogos] = useState({ team1: null as string | null, team2: null as string | null });
   const [tournamentName, setTournamentName] = useState('');
   const [savedDesign, setSavedDesign] = useState<VetoDesign>(defaultVetoDesign);
+  const [canvasSnapEnabled, setCanvasSnapEnabled] = useState(true);
+  const [elementSnapEnabled, setElementSnapEnabled] = useState(true);
+  const [snapGuides, setSnapGuides] = useState<VetoSnapGuides>({});
 
   const screen: VetoScreen = scenario === 'standby' || scenario === 'real' && !liveVeto ? 'standby' : scenario === 'completed' || scenario === 'real' && liveVeto?.status === 'completed' ? 'completed' : 'live';
   const layout = design.screens[screen];
@@ -134,20 +137,28 @@ export default function VetoDesigner() {
 
   const onPointerDown = (id: string, event: PointerEvent<HTMLDivElement>, mode: 'move' | 'resize') => {
     if (event.button !== 0) return;
-    event.preventDefault(); event.stopPropagation(); setSelected(id);
+    event.preventDefault(); event.stopPropagation(); setSelected(id); setSnapGuides({});
     const element = layout.elements.find((item) => item.id === id);
     const canvas = event.currentTarget.closest('.vdc-canvas') as HTMLElement | null;
     if (!element || !canvas) return;
     const scale = canvas.getBoundingClientRect().width / 1920;
     const start = { x: event.clientX, y: event.clientY, element: { ...element } };
+    const peers = layout.elements.filter((item) => item.id !== id && item.visible !== false).map(({ x, y, w, h }) => ({ x, y, w, h }));
     const move = (pointer: globalThis.PointerEvent) => {
       const dx = Math.round((pointer.clientX - start.x) / scale);
       const dy = Math.round((pointer.clientY - start.y) / scale);
+      const desiredX = Math.max(0, Math.min(1920 - start.element.w, start.element.x + dx));
+      const desiredY = Math.max(0, Math.min(1080 - start.element.h, start.element.y + dy));
+      const snapping = canvasSnapEnabled || elementSnapEnabled;
+      const snapped: { x: number; y: number; guides: VetoSnapGuides } = mode === 'move' && snapping
+        ? snapElementPosition(start.element, desiredX, desiredY, 16, elementSnapEnabled ? peers : [], canvasSnapEnabled)
+        : { x: desiredX, y: desiredY, guides: {} };
+      setSnapGuides(mode === 'move' && snapping ? snapped.guides : {});
       setDesign((previous) => {
         const next = clone(previous);
         const target = next.screens[screen].elements.find((item) => item.id === id);
         if (target) {
-          if (mode === 'move') { target.x = Math.max(0, Math.min(1920 - target.w, start.element.x + dx)); target.y = Math.max(0, Math.min(1080 - target.h, start.element.y + dy)); }
+          if (mode === 'move') { target.x = snapped.x; target.y = snapped.y; }
           else {
             const nextWidth = Math.max(20, Math.min(1920 - target.x, start.element.w + dx));
             const nextHeight = Math.max(6, Math.min(1080 - target.y, start.element.h + dy));
@@ -171,6 +182,7 @@ export default function VetoDesigner() {
     };
     const stop = (pointer: globalThis.PointerEvent) => {
       window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop);
+      setSnapGuides({});
       const dx = Math.abs(pointer.clientX - start.x) + Math.abs(pointer.clientY - start.y);
       if (dx > 2) { setHistory((items) => [...items.slice(-29), { ...design, screens: { ...design.screens, [screen]: { ...layout, elements: layout.elements.map((item) => item.id === id ? start.element : item) } } }]); setFuture([]); setDirty(true); setStatus('Unsaved changes'); }
     };
@@ -228,11 +240,11 @@ export default function VetoDesigner() {
   return <div className="vd-root">
     <header className="vd-top"><Link to="/settings" className="vd-back">← Settings</Link><div><strong>VETO DESIGNER</strong><small>Canvas 1920 × 1080 · {status}</small></div><div className="vd-actions"><button onClick={() => setPreviewOnly((value) => !value)}>{previewOnly ? 'Show panels' : 'Focus preview'}</button><button onClick={undo} disabled={!history.length}>↶ Undo</button><button onClick={redo} disabled={!future.length}>↷ Redo</button><button onClick={resetAllChanges} disabled={!dirty}>Reset all changes</button><button onClick={() => void save(false)}>Save draft</button><button className="vd-publish" onClick={() => void save(true)}>Publish</button><a href="/broadcast/veto" target="_blank" rel="noreferrer">Open live output ↗</a></div></header>
     <div className={`vd-workspace ${previewOnly ? 'vd-preview-only' : ''}`}>
-      <aside className="vd-panel"><h2>Screen & state</h2><label className="vd-field"><span>Preview scenario</span><select value={scenario} onChange={(event) => { setScenario(event.target.value); setSelected(null); }}>{scenarios.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label className="vd-field"><span>Match format</span><select value={format} disabled={scenario === 'real'} onChange={(event) => setFormat(event.target.value as VetoState['format'])}><option value="bo1">BO1</option><option value="bo3">BO3</option><option value="bo5">BO5</option></select></label><p className="vd-hint">{scenario === 'real' ? 'Live data refreshes automatically. The editor never changes the real Veto.' : 'This is a simulated state. It does not change a real match.'}</p>
+      <aside className="vd-panel"><h2>Screen & state</h2><label className="vd-field"><span>Preview scenario</span><select value={scenario} onChange={(event) => { setScenario(event.target.value); setSelected(null); }}>{scenarios.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label className="vd-field"><span>Match format</span><select value={format} disabled={scenario === 'real'} onChange={(event) => setFormat(event.target.value as VetoState['format'])}><option value="bo1">BO1</option><option value="bo3">BO3</option><option value="bo5">BO5</option></select></label><p className="vd-hint">{scenario === 'real' ? 'Live data refreshes automatically. The editor never changes the real Veto.' : 'This is a simulated state. It does not change a real match.'}</p><label className="vd-check"><input type="checkbox" checked={canvasSnapEnabled} onChange={(event) => { setCanvasSnapEnabled(event.target.checked); setSnapGuides({}); }} /> Snap to canvas edges & center</label><label className="vd-check"><input type="checkbox" checked={elementSnapEnabled} onChange={(event) => { setElementSnapEnabled(event.target.checked); setSnapGuides({}); }} /> Snap to nearby blocks</label><p className="vd-hint">Use either guide system alone or both together while dragging.</p>
         <h2>Add block</h2><div className="vd-add">{kinds.map(([kind, label]) => <button key={kind} onClick={() => addElement(kind)}>＋ {label}</button>)}</div>
         <h2>Layers · {screen}</h2><div className="vd-layers">{[...layout.elements].reverse().map((element) => <button key={element.id} className={selected === element.id ? 'active' : ''} onClick={() => setSelected(element.id)}><span>{element.kind === 'text' ? element.text || element.binding || 'Text' : kinds.find(([kind]) => kind === element.kind)?.[1]}</span><b>{element.visible === false ? '○' : '●'}</b></button>)}</div>
       </aside>
-      <main className="vd-preview" onPointerDown={(event) => { if (event.target === event.currentTarget || (event.target as HTMLElement).classList.contains('vdc-canvas')) setSelected(null); }}><div className="vd-preview-label">PREVIEW · {screen.toUpperCase()} · {published ? 'PUBLISHED DESIGN AVAILABLE' : 'NOT PUBLISHED YET'}</div><div className="vd-stage"><VetoDesignCanvas design={design} screen={screen} veto={mock} branding={branding} tournamentName={tournamentName} maps={scenario === 'real' ? liveMaps : undefined} logos={scenario === 'real' ? liveLogos : undefined} selectedId={selected} onElementPointerDown={onPointerDown} /></div><div className="vd-preview-foot">Drag a block or its resize handle. Changes appear here immediately and in live output after publishing.</div></main>
+      <main className="vd-preview" onPointerDown={(event) => { if (event.target === event.currentTarget || (event.target as HTMLElement).classList.contains('vdc-canvas')) setSelected(null); }}><div className="vd-preview-label">PREVIEW · {screen.toUpperCase()} · {published ? 'PUBLISHED DESIGN AVAILABLE' : 'NOT PUBLISHED YET'}</div><div className="vd-stage"><VetoDesignCanvas design={design} screen={screen} veto={mock} branding={branding} tournamentName={tournamentName} maps={scenario === 'real' ? liveMaps : undefined} logos={scenario === 'real' ? liveLogos : undefined} guides={snapGuides} selectedId={selected} onElementPointerDown={onPointerDown} /></div><div className="vd-preview-foot">Drag a block or its resize handle. Changes appear here immediately and in live output after publishing.</div></main>
       <aside className="vd-panel vd-inspector"><h2>{current ? 'Block properties' : 'Screen background'}</h2>{current ? <>
         <p className="vd-hint">{current.kind.toUpperCase()} · {current.id === 'brand' || current.id === 'logo' ? 'shared across all screens' : screen}</p>
         <div className="vd-grid">{numeric('X', 'x', current.x)}{numeric('Y', 'y', current.y)}{numeric('Width', 'w', current.w)}{numeric('Height', 'h', current.h)}</div>

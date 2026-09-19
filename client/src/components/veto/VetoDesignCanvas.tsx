@@ -29,6 +29,26 @@ export function restoreImageAspectRatio(element: Pick<VetoElement, 'x' | 'y' | '
   return { x: Math.round(x), y: Math.round(y), w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
 }
 
+export type VetoSnapGuides = { x?: number; y?: number };
+type VetoSnapPeer = Pick<VetoElement, 'x' | 'y' | 'w' | 'h'>;
+export function snapElementPosition(element: Pick<VetoElement, 'w' | 'h'>, desiredX: number, desiredY: number, threshold = 16, peers: VetoSnapPeer[] = [], includeCanvas = true): { x: number; y: number; guides: VetoSnapGuides } {
+  const choose = (value: number, max: number, size: number, canvasSize: number, peerEdges: Array<[number, number]>) => {
+    const clamped = Math.max(0, Math.min(max, value));
+    const guides = [...(includeCanvas ? [0, canvasSize / 2, canvasSize] : []), ...peerEdges.flatMap(([start, end]) => [start, (start + end) / 2, end])];
+    const candidates = guides.flatMap((guide) => [guide, guide - size / 2, guide - size]
+      .filter((position) => position >= 0 && position <= max)
+      .map((position) => ({ position, guide })));
+    const nearest = candidates.reduce((best, candidate) => Math.abs(candidate.position - clamped) < Math.abs(best.position - clamped) ? candidate : best, candidates[0] || { position: clamped, guide: undefined as number | undefined });
+    return Math.abs(nearest.position - clamped) <= threshold ? nearest : { position: clamped, guide: undefined };
+  };
+  const x = choose(desiredX, 1920 - element.w, element.w, 1920, peers.map((peer) => [peer.x, peer.x + peer.w]));
+  const y = choose(desiredY, 1080 - element.h, element.h, 1080, peers.map((peer) => [peer.y, peer.y + peer.h]));
+  const guides: VetoSnapGuides = {};
+  if (x.guide !== undefined) guides.x = x.guide;
+  if (y.guide !== undefined) guides.y = y.guide;
+  return { x: Math.round(x.position), y: Math.round(y.position), guides };
+}
+
 export type VetoLayout = { background: string; backgroundImage?: string; elements: VetoElement[] };
 export type VetoDesign = { version: 1; screens: Record<VetoScreen, VetoLayout>; teamFallback?: VetoTeamFallback };
 export type VetoMapMetadata = Map<string, { displayName: string; imageUrl: string | null }>;
@@ -163,9 +183,10 @@ function Timeline({ element, veto }: { element: VetoElement; veto: VetoState | n
   </div>;
 }
 
-export function VetoDesignCanvas({ design, screen, veto, branding, tournamentName = 'Tournament', maps = new Map(), logos = { team1: null, team2: null }, selectedId, onElementPointerDown }: {
+export function VetoDesignCanvas({ design, screen, veto, branding, tournamentName = 'Tournament', maps = new Map(), logos = { team1: null, team2: null }, selectedId, guides, onElementPointerDown }: {
   design: VetoDesign; screen: VetoScreen; veto: VetoState | null; branding: BrandingSettings; tournamentName?: string;
   maps?: VetoMapMetadata; logos?: { team1: string | null; team2: string | null };
+  guides?: VetoSnapGuides;
   selectedId?: string | null; onElementPointerDown?: (id: string, event: PointerEvent<HTMLDivElement>, mode: 'move' | 'resize') => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
@@ -197,11 +218,13 @@ export function VetoDesignCanvas({ design, screen, veto, branding, tournamentNam
           {onElementPointerDown && selectedId === element.id && <div className="vdc-resize" onPointerDown={(event) => { event.stopPropagation(); onElementPointerDown(element.id, event, 'resize'); }} />}
         </div>;
       })}
+      {guides?.x !== undefined && <div className="vdc-guide vdc-guide-x" style={{ left: guides.x }} />}
+      {guides?.y !== undefined && <div className="vdc-guide vdc-guide-y" style={{ top: guides.y }} />}
     </div>
     <style>{canvasStyles}</style>
   </div>;
 }
 
 const canvasStyles = `
-  .vdc-viewport{width:100%;height:100%;min-height:1px;position:relative;overflow:hidden;background:#080d15}.vdc-canvas{position:absolute;left:50%;top:50%;transform-origin:center;overflow:hidden;background-position:center;background-size:cover;font-family:Inter,Arial,sans-serif;color:#f4f7fb;user-select:none}.vdc-element{position:absolute;box-sizing:border-box;overflow:hidden}.vdc-element.editable{cursor:move}.vdc-element.selected{outline:3px solid #6dc8ff;outline-offset:2px}.vdc-text{display:flex;align-items:center;white-space:pre-wrap;padding:0 12px}.vdc-text span{width:100%;overflow:hidden;text-overflow:ellipsis}.vdc-image{display:flex;align-items:center;justify-content:center;overflow:hidden;contain:paint}.vdc-image img{display:block;max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;object-position:center}.vdc-empty-image{color:#849aaf;border:2px dashed #64758a;padding:20px}.vdc-logo-placeholder{display:grid;place-items:center;width:100%;height:100%;padding:0;border:1px solid #64758a;background:#101a27;color:#9eb4c8;font-size:30px;font-weight:800;letter-spacing:.08em}.vdc-shape{border:1px solid}.vdc-line{background:currentColor}.vdc-resize{position:absolute;right:0;bottom:0;width:28px;height:28px;background:#6dc8ff;border:4px solid #101923;cursor:nwse-resize;z-index:10}.vdc-maps{display:grid;width:100%;height:100%;}.vdc-map{position:relative;min-width:0;min-height:0;overflow:hidden;border:2px solid;box-shadow:0 10px 24px #0008}.vdc-map-photo{position:absolute;width:100%;height:100%;object-fit:cover;opacity:.83}.vdc-map-shade{position:absolute;inset:0;background:linear-gradient(transparent 35%,#060a10e6)}.vdc-map.banned .vdc-map-photo{filter:grayscale(1)}.vdc-map.banned{border-color:#F46C73!important}.vdc-map.picked{border-color:#59C7AB!important}.vdc-map.decider{border-color:#F4C773!important}.vdc-map-name{position:absolute;top:14px;left:14px;right:14px;text-transform:uppercase;font-size:23px;text-shadow:0 2px 5px #000}.vdc-map-logo{position:absolute;width:44%;height:44%;left:28%;top:26%;object-fit:contain;filter:drop-shadow(0 6px 10px #000)}.vdc-map-logo-fallback{display:grid;place-items:center;box-sizing:border-box;border:2px solid;font-size:clamp(18px,2.3vw,42px);font-weight:900;letter-spacing:.08em;text-shadow:0 2px 8px #000}.vdc-map-caption{position:absolute;bottom:16px;left:14px;right:14px;display:flex;justify-content:space-between;font-size:20px;letter-spacing:.07em}.vdc-timeline{display:flex;width:100%;height:100%;align-items:stretch;gap:0;overflow:hidden}.vdc-step{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;border-top:3px solid #557087;position:relative;padding-top:8px}.vdc-step:before{content:'';position:absolute;top:-12px;left:calc(50% - 9px);width:18px;height:18px;border:4px solid currentColor;border-radius:50%;background:#0c1520}.vdc-step.done{color:#efad72;border-top-color:#efad72}.vdc-step.current{color:#6ce3ed;border-top-color:#6ce3ed;text-shadow:0 0 12px #6ce3ed}.vdc-step.upcoming{color:#718ca2}.vdc-step span{opacity:.7}.vdc-step small{font-size:.75em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .vdc-viewport{width:100%;height:100%;min-height:1px;position:relative;overflow:hidden;background:#080d15}.vdc-canvas{position:absolute;left:50%;top:50%;transform-origin:center;overflow:hidden;background-position:center;background-size:cover;font-family:Inter,Arial,sans-serif;color:#f4f7fb;user-select:none}.vdc-element{position:absolute;box-sizing:border-box;overflow:hidden}.vdc-element.editable{cursor:move}.vdc-element.selected{outline:3px solid #6dc8ff;outline-offset:2px}.vdc-text{display:flex;align-items:center;white-space:pre-wrap;padding:0 12px}.vdc-text span{width:100%;overflow:hidden;text-overflow:ellipsis}.vdc-image{display:flex;align-items:center;justify-content:center;overflow:hidden;contain:paint}.vdc-image img{display:block;max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;object-position:center}.vdc-empty-image{color:#849aaf;border:2px dashed #64758a;padding:20px}.vdc-logo-placeholder{display:grid;place-items:center;width:100%;height:100%;padding:0;border:1px solid #64758a;background:#101a27;color:#9eb4c8;font-size:30px;font-weight:800;letter-spacing:.08em}.vdc-shape{border:1px solid}.vdc-line{background:currentColor}.vdc-resize{position:absolute;right:0;bottom:0;width:28px;height:28px;background:#6dc8ff;border:4px solid #101923;cursor:nwse-resize;z-index:10}.vdc-guide{position:absolute;z-index:20;pointer-events:none;border-color:#6ce3ed;filter:drop-shadow(0 0 5px #6ce3ed)}.vdc-guide-x{top:0;bottom:0;border-left:2px dashed}.vdc-guide-y{left:0;right:0;border-top:2px dashed}.vdc-maps{display:grid;width:100%;height:100%;}.vdc-map{position:relative;min-width:0;min-height:0;overflow:hidden;border:2px solid;box-shadow:0 10px 24px #0008}.vdc-map-photo{position:absolute;width:100%;height:100%;object-fit:cover;opacity:.83}.vdc-map-shade{position:absolute;inset:0;background:linear-gradient(transparent 35%,#060a10e6)}.vdc-map.banned .vdc-map-photo{filter:grayscale(1)}.vdc-map.banned{border-color:#F46C73!important}.vdc-map.picked{border-color:#59C7AB!important}.vdc-map.decider{border-color:#F4C773!important}.vdc-map-name{position:absolute;top:14px;left:14px;right:14px;text-transform:uppercase;font-size:23px;text-shadow:0 2px 5px #000}.vdc-map-logo{position:absolute;width:44%;height:44%;left:28%;top:26%;object-fit:contain;filter:drop-shadow(0 6px 10px #000)}.vdc-map-logo-fallback{display:grid;place-items:center;box-sizing:border-box;border:2px solid;font-size:clamp(18px,2.3vw,42px);font-weight:900;letter-spacing:.08em;text-shadow:0 2px 8px #000}.vdc-map-caption{position:absolute;bottom:16px;left:14px;right:14px;display:flex;justify-content:space-between;font-size:20px;letter-spacing:.07em}.vdc-timeline{display:flex;width:100%;height:100%;align-items:stretch;gap:0;overflow:hidden}.vdc-step{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;border-top:3px solid #557087;position:relative;padding-top:8px}.vdc-step:before{content:'';position:absolute;top:-12px;left:calc(50% - 9px);width:18px;height:18px;border:4px solid currentColor;border-radius:50%;background:#0c1520}.vdc-step.done{color:#efad72;border-top-color:#efad72}.vdc-step.current{color:#6ce3ed;border-top-color:#6ce3ed;text-shadow:0 0 12px #6ce3ed}.vdc-step.upcoming{color:#718ca2}.vdc-step span{opacity:.7}.vdc-step small{font-size:.75em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 `;
