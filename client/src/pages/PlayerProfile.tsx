@@ -1,6 +1,6 @@
 /* global AbortController */
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, Link as RouterLink } from 'react-router-dom';
+import { useLocation, useParams, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -248,6 +248,7 @@ export default function PlayerProfile() {
   };
 
   const { steamId } = useParams<{ steamId: string }>();
+  const location = useLocation();
   const [player, setPlayer] = useState<PlayerDetail | null>(null);
   const [ratingHistory, setRatingHistory] = useState<RatingHistoryEntry[]>([]);
   const [matchHistory, setMatchHistory] = useState<MatchHistoryEntry[]>([]);
@@ -275,6 +276,7 @@ export default function PlayerProfile() {
   const silentRefreshTimerRef = useRef<number | null>(null);
   const unmountedRef = useRef(false);
   const loadAbortControllerRef = useRef<AbortController | null>(null);
+  const vetoScrollLocationKeyRef = useRef<string | null>(null);
 
   // Shared sound settings (persisted via localStorage)
   const { isMuted, volume, soundFile } = useSoundSettings();
@@ -536,7 +538,9 @@ export default function PlayerProfile() {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             if (typeof window !== 'undefined') {
-              window.scrollTo({ top: scrollY, behavior: 'auto' });
+              if (window.location.hash !== '#veto') {
+                window.scrollTo({ top: scrollY, behavior: 'auto' });
+              }
             }
           });
         });
@@ -555,6 +559,20 @@ export default function PlayerProfile() {
       }
     };
   }, [steamId, loadPlayerData]);
+
+  useEffect(() => {
+    if (
+      location.hash !== '#veto' ||
+      location.key === vetoScrollLocationKeyRef.current ||
+      loading ||
+      !currentMatch?.slug
+    ) return;
+
+    const veto = document.getElementById('veto');
+    if (!veto) return;
+    vetoScrollLocationKeyRef.current = location.key;
+    veto.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [location.hash, location.key, loading, currentMatch?.slug]);
 
   // When match-status reports an active match (e.g. waiting_veto) and we're viewing our own
   // profile, refetch so current-match and veto UI appear without reload.
@@ -1120,21 +1138,23 @@ export default function PlayerProfile() {
 
           {/* Current / Upcoming Match (connect info) */}
           {currentMatch ? (
-            <MatchInfoCard
-              match={currentMatch}
-              team={currentTeam}
-              tournamentStatus={currentTournamentStatus}
-              vetoCompleted={currentMatch.veto?.status === 'completed'}
-              matchFormat={(currentMatch.matchFormat as 'bo1' | 'bo3' | 'bo5') || 'bo1'}
-              onVetoComplete={handleVetoComplete}
-              getRoundLabel={getRoundLabel}
-              highlightPlayerId={player.id}
-              // Only allow veto and server controls on the player page when the
-              // signed‑in Steam ID matches the profile being viewed. Teammates
-              // visiting this URL can still *see* the page, but cannot drive
-              // the veto or connect for someone else.
-              viewerIsTeamMemberOverride={playerSteamId === steamId}
-            />
+            <Box id="veto" sx={{ scrollMarginTop: '16px' }}>
+              <MatchInfoCard
+                match={currentMatch}
+                team={currentTeam}
+                tournamentStatus={currentTournamentStatus}
+                vetoCompleted={currentMatch.veto?.status === 'completed'}
+                matchFormat={(currentMatch.matchFormat as 'bo1' | 'bo3' | 'bo5') || 'bo1'}
+                onVetoComplete={handleVetoComplete}
+                getRoundLabel={getRoundLabel}
+                highlightPlayerId={player.id}
+                // Only allow veto and server controls on the player page when the
+                // signed‑in Steam ID matches the profile being viewed. Teammates
+                // visiting this URL can still *see* the page, but cannot drive
+                // the veto or connect for someone else.
+                viewerIsTeamMemberOverride={playerSteamId === steamId}
+              />
+            </Box>
           ) : (
             <Card>
               <CardContent sx={{ textAlign: 'center', py: 4 }}>

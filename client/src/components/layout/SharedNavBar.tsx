@@ -331,7 +331,11 @@ export const SharedNavBar: React.FC<SharedNavBarProps> = ({
           {ctaLabel ? (
             <Button
               component={RouterLink}
-              to={`/player/${playerSteamId}`}
+              to={`/player/${playerSteamId}${
+                matchStatusLabel === 'your_turn_veto' || matchStatusLabel === 'waiting_veto'
+                  ? '#veto'
+                  : ''
+              }`}
               variant="contained"
               color="primary"
               size="small"
