@@ -38,7 +38,7 @@ function normalizeVetoState(raw: Partial<VetoState>): VetoState {
 }
 
 export default function BroadcastVeto() {
-  const { branding } = useBranding();
+  const { branding, refreshBranding } = useBranding();
   const { matchSlug } = useParams<{ matchSlug: string }>();
   const [veto, setVeto] = useState<VetoState | null>(null);
   const [maps, setMaps] = useState<Map<string, MapMetadata>>(new Map());
@@ -58,7 +58,7 @@ export default function BroadcastVeto() {
         const endpoint = matchSlug
           ? `/api/veto/${matchSlug}?broadcast=1`
           : '/api/integrations/jts-hud/broadcast-veto';
-        const response = await fetch(endpoint);
+        const response = await fetch(endpoint, { cache: 'no-store' });
         const data = (await response.json()) as VetoApiResponse;
         if (generation !== generationRef.current) return;
 
@@ -94,9 +94,13 @@ export default function BroadcastVeto() {
       } catch { /* Keep the last published design during a brief disconnect. */ }
     };
     void loadDesign();
-    const timer = window.setInterval(() => void loadDesign(), 3000);
+    const timer = window.setInterval(() => {
+      void loadDesign();
+      void loadVeto();
+      void refreshBranding();
+    }, 3000);
     return () => { active = false; window.clearInterval(timer); };
-  }, []);
+  }, [loadVeto, refreshBranding]);
 
   useEffect(() => {
     void loadVeto();

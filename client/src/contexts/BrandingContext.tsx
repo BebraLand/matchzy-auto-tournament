@@ -26,7 +26,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
 
   const refreshBranding = useCallback(async () => {
     try {
-      const response = await fetch('/api/settings/branding');
+      const response = await fetch('/api/settings/branding', { cache: 'no-store' });
       if (!response.ok) return;
       const data = (await response.json()) as BrandingResponse;
       applyBranding(data.branding);
