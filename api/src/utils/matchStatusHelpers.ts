@@ -42,3 +42,13 @@ export function determineInitialMatchStatus(
   return 'pending';
 }
 
+/** The plugin sets mapReady only after the current match map has started. */
+export function isServerReadyForMatch(
+  matchId: number,
+  server: { online: boolean; status: string | null; matchSlug: string | null; mapReady: boolean }
+): boolean {
+  return server.online && server.mapReady && server.matchSlug === String(matchId) && [
+    'warmup', 'knife', 'live', 'playing', 'paused', 'halftime',
+  ].includes(server.status ?? '');
+}
+

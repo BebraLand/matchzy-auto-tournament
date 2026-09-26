@@ -15,6 +15,7 @@ import { requireAuth } from '../middleware/auth';
 import { log } from '../utils/logger';
 import { db } from '../config/database';
 import { serverStatusService } from '../services/serverStatusService';
+import { isServerReadyForMatch } from '../utils/matchStatusHelpers';
 import { playerConnectionService } from '../services/playerConnectionService';
 import { normalizeConfigPlayers, type NormalizedServerPlayer } from '../utils/playerTransform';
 import { teamService } from '../services/teamService';
@@ -1247,14 +1248,15 @@ router.get('/:playerId/current-match', async (req: Request, res: Response) => {
     // Get real-time server status from custom plugin ConVars (with 2s timeout)
     let realServerStatus = null;
     let serverStatusDescription = null;
+    let serverReady = false;
     if (match.server_id) {
       try {
         const statusInfo = await Promise.race([
           serverStatusService.getServerStatus(match.server_id),
-          new Promise<{ status: null; matchSlug: null; updatedAt: null; online: false }>(
+          new Promise<{ status: null; matchSlug: null; mapReady: false; updatedAt: null; online: false }>(
             (resolve) =>
               setTimeout(
-                () => resolve({ status: null, matchSlug: null, updatedAt: null, online: false }),
+                () => resolve({ status: null, matchSlug: null, mapReady: false, updatedAt: null, online: false }),
                 2000
               )
           ),
@@ -1264,6 +1266,7 @@ router.get('/:playerId/current-match', async (req: Request, res: Response) => {
           realServerStatus = statusInfo.status;
           serverStatusDescription = serverStatusService.getStatusDescription(statusInfo.status);
         }
+        serverReady = isServerReadyForMatch(match.id, statusInfo);
       } catch (error) {
         // Silently fail - server status is nice-to-have, not critical
         console.debug(
@@ -1390,7 +1393,7 @@ router.get('/:playerId/current-match', async (req: Request, res: Response) => {
               tag: opponent.tag,
             }
           : null,
-        server: match.server_id && canViewMatchServerConfig(cfg, serverAccess, match.status)
+        server: match.server_id && serverReady && canViewMatchServerConfig(cfg, serverAccess, match.status)
           ? {
               id: match.server_id,
               name: match.server_name,

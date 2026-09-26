@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../config/database';
 import { serverStatusService } from '../services/serverStatusService';
+import { isServerReadyForMatch } from '../utils/matchStatusHelpers';
 import { playerConnectionService } from '../services/playerConnectionService';
 import { refreshConnectionsFromServer } from '../services/connectionSnapshotService';
 import { normalizeConfigPlayers } from '../utils/playerTransform';
@@ -265,15 +266,16 @@ router.get('/:teamId/match', async (req: Request, res: Response) => {
     // The CS2 plugin manages these ConVars; we just query them for real-time status
     let realServerStatus = null;
     let serverStatusDescription = null;
+    let serverReady = false;
     if (match.server_id) {
       try {
         // 2 second timeout - fail fast if server is unreachable or ConVars don't exist yet
         const statusInfo = await Promise.race([
           serverStatusService.getServerStatus(match.server_id),
-          new Promise<{ status: null; matchSlug: null; updatedAt: null; online: false }>(
+          new Promise<{ status: null; matchSlug: null; mapReady: false; updatedAt: null; online: false }>(
             (resolve) =>
               setTimeout(
-                () => resolve({ status: null, matchSlug: null, updatedAt: null, online: false }),
+                () => resolve({ status: null, matchSlug: null, mapReady: false, updatedAt: null, online: false }),
                 2000
               )
           ),
@@ -283,6 +285,7 @@ router.get('/:teamId/match', async (req: Request, res: Response) => {
           realServerStatus = statusInfo.status;
           serverStatusDescription = serverStatusService.getStatusDescription(statusInfo.status);
         }
+        serverReady = isServerReadyForMatch(match.id, statusInfo);
       } catch (error) {
         // Silently fail - server status is nice-to-have, not critical
         console.debug(
@@ -428,7 +431,7 @@ router.get('/:teamId/match', async (req: Request, res: Response) => {
             }
           : null,
         server:
-          match.server_id && canViewMatchServerConfig(config, serverAccess, match.status)
+          match.server_id && serverReady && canViewMatchServerConfig(config, serverAccess, match.status)
             ? {
                 id: match.server_id,
                 name: match.server_name,
