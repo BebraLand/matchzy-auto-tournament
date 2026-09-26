@@ -16,8 +16,10 @@ import VideocamIcon from '@mui/icons-material/Videocam';
 import ScienceIcon from '@mui/icons-material/Science';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePlayerCamera } from '../../contexts/PlayerCameraContext';
+import { useIsDevelopment } from '../../hooks/useIsDevelopment';
 
 export function PlayerCameraCard({ profileSteamId }: { profileSteamId: string }) {
+  const isDevelopment = useIsDevelopment();
   const { playerSteamId, impersonation } = useAuth();
   const { config, active, error, peerCount, stream, previewStream, preparePreview, start, stop } = usePlayerCamera();
   const previewRef = React.useRef<HTMLVideoElement>(null);
@@ -119,9 +121,11 @@ export function PlayerCameraCard({ profileSteamId }: { profileSteamId: string })
                     Preview camera
                   </Button>
                 )}
-                <Button variant="outlined" startIcon={<ScienceIcon />} onClick={() => void start(true)}>
-                  Test pattern
-                </Button>
+                {isDevelopment && (
+                  <Button variant="outlined" startIcon={<ScienceIcon />} onClick={() => void start(true)}>
+                    Test pattern
+                  </Button>
+                )}
               </>
             ) : (
               <Button color="error" variant="contained" onClick={() => stop()}>Disable camera</Button>
