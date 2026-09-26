@@ -1,0 +1,15 @@
+# Build MAT from this checkout with production settings.
+# Run from the repository root:
+#   docker compose --env-file .env -f docker/docker-compose.local.yml -f docker/docker-compose.prod-local.yml up -d --build --no-deps matchzy-tournament
+# The local base keeps the existing PostgreSQL container and data path unchanged.
+
+services:
+  matchzy-tournament:
+    build:
+      args:
+        VITE_ENABLE_DEV_PAGE: "false"
+    environment:
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?Set FRONTEND_BASE_URL to the public HTTPS URL in .env}
+      BACKEND_BASE_URL: ${FRONTEND_BASE_URL:?Set FRONTEND_BASE_URL to the public HTTPS URL in .env}
+      ENABLE_TEST_ENDPOINTS: "false"
+      MATCHZY_ENABLE_SIMULATION_IN_PROD: "false"
