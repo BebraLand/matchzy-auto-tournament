@@ -715,10 +715,6 @@ export default function PlayerProfile() {
               }
             : prev
         );
-        if ((!currentMatch?.server && ['loaded', 'live'].includes(currentMatch?.status ?? ''))
-          || liveStats.status === 'postgame') {
-          scheduleSilentRefresh();
-        }
         return;
       }
 
@@ -741,15 +737,7 @@ export default function PlayerProfile() {
       // disconnected when there is no active match above.
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMatch?.slug, currentMatch?.status, currentMatch?.server, steamId, scheduleSilentRefresh]);
-
-  // The map-start report usually triggers the socket refresh. Retry while CS2
-  // is loading so a missed report never leaves the connect panel hidden.
-  useEffect(() => {
-    if (playerSteamId !== steamId || !['loaded', 'live'].includes(currentMatch?.status ?? '') || currentMatch?.server) return;
-    const timer = window.setInterval(scheduleSilentRefresh, 5000);
-    return () => window.clearInterval(timer);
-  }, [playerSteamId, steamId, currentMatch?.status, currentMatch?.server, scheduleSilentRefresh]);
+  }, [currentMatch?.slug, steamId]);
 
   // Fill the scoreboard when the profile opens after the match already went live.
   useEffect(() => {

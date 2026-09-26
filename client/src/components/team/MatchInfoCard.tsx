@@ -179,6 +179,24 @@ export function MatchInfoCard({
       ? viewerIsTeamMemberOverride
       : serverViewerIsTeamMember;
 
+  const serverStatus = match.server?.status ?? null;
+  // `server.status` here is a MatchZy plugin status — idle | loading | warmup |
+  // knife | live | paused | halftime | postgame | queued | error — and
+  // /api/players/:id/current-match only fills it in when the server actually
+  // answered. So any value at all means the server is reachable.
+  //
+  // This used to compare against 'online' and 'checking', which that endpoint
+  // never produces: only 'loading' could ever match. A server sitting in 'idle'
+  // or 'warmup' with a match loaded therefore read as offline, and the page
+  // claimed it was still waiting for a server to be assigned — verified against
+  // a real CS2 server, which reports 'idle' for a freshly loaded match.
+  //
+  // Live stats still count on their own: they only arrive from a server that is
+  // demonstrably talking to us.
+  const isServerOnlineBase = !!serverStatus && serverStatus !== 'error';
+  const isServerOnline = isServerOnlineBase || !!liveStats;
+  const effectiveServer = isServerOnline ? match.server : null;
+
   const isShuffleMatch = isShuffleMatchGlobal({
     round: match.round,
     team1: match.team1 ? { id: match.team1.id } : null,
@@ -501,7 +519,7 @@ export function MatchInfoCard({
               </Typography>
             )}
 
-            {match.status !== 'live' && match.server && (
+            {match.status !== 'live' && (
               <Alert
                 severity={playersReady ? 'success' : 'info'}
                 icon={<PeopleIcon fontSize="small" />}
@@ -513,8 +531,7 @@ export function MatchInfoCard({
             )}
 
             <MatchServerPanel
-              server={viewerIsTeamMember ? match.server : null}
-              preparing={['loaded', 'live'].includes(match.status) && !match.server}
+              server={viewerIsTeamMember ? effectiveServer : null}
               currentMapData={currentMapData}
               currentMapNumber={mapNumber}
               connected={connected}

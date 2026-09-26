@@ -12,7 +12,6 @@ export enum ServerStatus {
   WARMUP = 'warmup', // Match loaded, waiting for players to ready up
   KNIFE = 'knife', // Knife round in progress
   LIVE = 'live', // Match is live
-  PLAYING = 'playing', // MatchZy Enhanced's live-match status
   PAUSED = 'paused', // Match is paused
   HALFTIME = 'halftime', // Halftime break
   POSTGAME = 'postgame', // Match completed, server needs cleanup
@@ -30,7 +29,6 @@ export class ServerStatusService {
   // Custom ConVar names (must be unique to avoid conflicts)
   private readonly STATUS_VAR = 'matchzy_tournament_status';
   private readonly MATCH_SLUG_VAR = 'matchzy_tournament_match';
-  private readonly MAP_READY_VAR = 'matchzy_tournament_map_ready';
   private readonly NEXT_MATCH_VAR = 'matchzy_tournament_next_match';
   private readonly UPDATE_TIME_VAR = 'matchzy_tournament_updated';
 
@@ -45,7 +43,6 @@ export class ServerStatusService {
     {
       status: ServerStatus | null;
       matchSlug: string | null;
-      mapReady: boolean;
       nextMatchSlug: string | null;
       updatedAt: number | null;
       online: boolean;
@@ -63,7 +60,6 @@ export class ServerStatusService {
   ): Promise<{
     status: ServerStatus | null;
     matchSlug: string | null;
-    mapReady: boolean;
     nextMatchSlug: string | null;
     updatedAt: number | null;
     online: boolean;
@@ -88,7 +84,6 @@ export class ServerStatusService {
         const result = {
           status: ServerStatus.IDLE,
           matchSlug: null,
-          mapReady: false,
           nextMatchSlug: null,
           updatedAt: Math.floor(Date.now() / 1000),
           online: true,
@@ -104,7 +99,6 @@ export class ServerStatusService {
         return {
           status: null,
           matchSlug: null,
-          mapReady: false,
           nextMatchSlug: null,
           updatedAt: null,
           online: false,
@@ -120,10 +114,6 @@ export class ServerStatusService {
       const slugMatch = slugResult.response?.match(/"([^"]+)"\s*=\s*"([^"]*)"/);
       const matchSlug = slugMatch && slugMatch[2] ? slugMatch[2] : null;
 
-      const readyResult = await rconService.sendCommand(serverId, this.MAP_READY_VAR);
-      const readyMatch = readyResult.response?.match(/"([^"]+)"\s*=\s*"([^"]*)"/);
-      const mapReady = readyResult.success && readyMatch?.[2] === '1';
-
       // Get queued next match slug (if any)
       const nextResult = await rconService.sendCommand(serverId, this.NEXT_MATCH_VAR);
       const nextMatch = nextResult.response?.match(/"([^"]+)"\s*=\s*"([^"]*)"/);
@@ -137,7 +127,6 @@ export class ServerStatusService {
       const result = {
         status,
         matchSlug,
-        mapReady,
         nextMatchSlug,
         updatedAt,
         online: true,
@@ -149,7 +138,6 @@ export class ServerStatusService {
       const result = {
         status: null,
         matchSlug: null,
-        mapReady: false,
         nextMatchSlug: null,
         updatedAt: null,
         online: false,
@@ -168,7 +156,6 @@ export class ServerStatusService {
     entry: {
       status: ServerStatus | null;
       matchSlug: string | null;
-      mapReady: boolean;
       nextMatchSlug: string | null;
       updatedAt: number | null;
       online: boolean;
@@ -208,7 +195,6 @@ export class ServerStatusService {
           color: 'info',
         };
       case ServerStatus.LIVE:
-      case ServerStatus.PLAYING:
         return {
           label: 'Live',
           description: 'Match is live and in progress',
@@ -266,7 +252,6 @@ export function primeServerStatusForTests(
   entry: {
     status: ServerStatus | null;
     matchSlug?: string | null;
-    mapReady?: boolean;
     nextMatchSlug?: string | null;
     updatedAt?: number | null;
     online?: boolean;
@@ -275,7 +260,6 @@ export function primeServerStatusForTests(
   serverStatusService.primeCache(serverId, {
     status: entry.status,
     matchSlug: entry.matchSlug ?? null,
-    mapReady: entry.mapReady ?? false,
     nextMatchSlug: entry.nextMatchSlug ?? null,
     updatedAt: entry.updatedAt ?? null,
     online: entry.online ?? true,

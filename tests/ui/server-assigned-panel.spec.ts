@@ -5,7 +5,25 @@ import { findMatchByTeams } from '../helpers/matches';
 import { actingSteamIdFor } from '../helpers/veto';
 import type { Team } from '../helpers/teams';
 
-/** An assigned server must not expose connect controls until CS2 confirms its map. */
+/**
+ * A server that is assigned and answering must not read as "not assigned yet".
+ *
+ * `/api/players/:id/current-match` reports `server.status` as a MatchZy plugin
+ * status — idle | loading | warmup | knife | live | ... — and only fills it in
+ * when the server actually answered. The player page used to test that against
+ * `'online' | 'checking' | 'loading'`, two of which this endpoint never
+ * produces, so a server sitting in `idle` or `warmup` read as offline and the
+ * page claimed it was still waiting for a server to be assigned.
+ *
+ * Verified against a real CS2 server, which reports `idle` for a freshly loaded
+ * match. Fake test servers report `idle` too, so this reproduces in CI.
+ *
+ * The match here deliberately has **no live stats**: `isServerOnline` also
+ * accepts live stats, which would mask the bug entirely.
+ *
+ * @tag ui
+ * @tag regression
+ */
 test.describe.serial('Assigned server on the player page', () => {
   test.setTimeout(120000);
 
@@ -42,7 +60,7 @@ test.describe.serial('Assigned server on the player page', () => {
   });
 
   test(
-    'hides connect details for an assigned server still reporting idle',
+    'shows the connect panel for a server reporting idle, not "waiting for assignment"',
     { tag: ['@ui', '@regression'] },
     async ({ page }) => {
       const steamId = actingSteamIdFor(team1);
@@ -50,10 +68,12 @@ test.describe.serial('Assigned server on the player page', () => {
 
       await page.goto(`/player/${steamId}`, { waitUntil: 'domcontentloaded' });
 
-      await expect(page.getByText(/Preparing CS2 server and map/i)).toBeVisible({
+      // The connect controls are the visible proof the server is treated as
+      // assigned and reachable.
+      await expect(page.getByRole('button', { name: /Copy Console Command/i })).toBeVisible({
         timeout: 20000,
       });
-      await expect(page.getByRole('button', { name: /Copy Console Command/i })).toHaveCount(0);
+
       await expect(page.getByText(/Waiting for Server Assignment/i)).toHaveCount(0);
     }
   );
