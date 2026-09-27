@@ -402,7 +402,7 @@ export const VetoInterface: React.FC<VetoInterfaceProps> = ({
     <Box data-testid="veto-interface">
       {operatorMode && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          Админский просмотр: команды выполняют veto, а оператор наблюдает за прогрессом.
+          Admin view: teams perform the veto while the operator monitors progress.
         </Alert>
       )}
 
