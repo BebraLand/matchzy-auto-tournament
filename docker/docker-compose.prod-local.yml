@@ -1,15 +1,62 @@
-# Build MAT from this checkout with production settings.
-# Run from the repository root:
-#   docker compose --env-file .env -f docker/docker-compose.local.yml -f docker/docker-compose.prod-local.yml up -d --build --no-deps matchzy-tournament
-# The local base keeps the existing PostgreSQL container and data path unchanged.
+# Build and run the production app from this checkout.
+# Run from the repository root; app settings come from the root .env file.
+# FRONTEND_BASE_URL must be the public HTTPS URL.
+#
+# docker compose --env-file .env -f docker/docker-compose.prod-local.yml up -d --build --force-recreate --no-deps matchzy-tournament
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: matchzy-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-matchzy_tournament}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-postgres}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - matchzy-network
+
   matchzy-tournament:
     build:
+      context: ..
+      dockerfile: docker/Dockerfile
       args:
         VITE_ENABLE_DEV_PAGE: "false"
+    container_name: matchzy-tournament-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    ports:
+      - '${HOST_PORT:-3069}:3069'
     environment:
-      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?Set FRONTEND_BASE_URL to the public HTTPS URL in .env}
-      BACKEND_BASE_URL: ${FRONTEND_BASE_URL:?Set FRONTEND_BASE_URL to the public HTTPS URL in .env}
-      ENABLE_TEST_ENDPOINTS: "false"
-      MATCHZY_ENABLE_SIMULATION_IN_PROD: "false"
+      NODE_ENV: production
+      PORT: '3000'
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?Set FRONTEND_BASE_URL in the root .env}
+      BACKEND_BASE_URL: ${FRONTEND_BASE_URL:?Set FRONTEND_BASE_URL in the root .env}
+      ENABLE_TEST_ENDPOINTS: 'false'
+      MATCHZY_ENABLE_SIMULATION_IN_PROD: 'false'
+      DB_HOST: postgres
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-matchzy_tournament}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3069/health']
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - matchzy-network
+
+networks:
+  matchzy-network:
+    driver: bridge
