@@ -10,6 +10,7 @@ import {
   Divider,
   CircularProgress,
   Tooltip,
+  Alert,
 } from '@mui/material';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
@@ -37,6 +38,7 @@ interface TournamentReviewProps {
   saving: boolean;
   registeredPlayerCount?: number; // For shuffle tournaments
   onEdit?: () => void;
+  onViewBracket?: () => void;
   onStart: () => void;
   onRegenerate: () => void;
   onDelete: () => void;
@@ -50,6 +52,7 @@ export const TournamentReview: React.FC<TournamentReviewProps> = ({
   saving,
   registeredPlayerCount,
   onEdit,
+  onViewBracket,
   onStart,
   onRegenerate,
   onDelete,
@@ -64,6 +67,11 @@ export const TournamentReview: React.FC<TournamentReviewProps> = ({
     registeredPlayerCount !== undefined ? registeredPlayerCount >= minPlayers : true;
   const canStart = !isShuffle || hasEnoughPlayers;
   const canRegenerate = !isShuffle && (hasBracket ?? true);
+  const canEditMatchups =
+    hasBracket &&
+    (tournament.type === 'single_elimination' || tournament.type === 'double_elimination') &&
+    tournament.teams.length > 1 &&
+    (tournament.teams.length & (tournament.teams.length - 1)) === 0;
   const [availableMaps, setAvailableMaps] = useState<Map[]>([]);
   const isDev = useIsDevelopment();
   const { simulationEnabled } = useSimulationMode();
@@ -142,6 +150,21 @@ export const TournamentReview: React.FC<TournamentReviewProps> = ({
         </Grid>
 
         <Divider sx={{ my: 3 }} />
+
+        {canEditMatchups && onViewBracket && (
+          <Alert
+            severity="info"
+            sx={{ mb: 3 }}
+            action={
+              <Button color="inherit" size="small" onClick={onViewBracket}>
+                Edit matchups
+              </Button>
+            }
+          >
+            Want to change who plays whom? Open the bracket, drag one Round 1 team onto another,
+            then save the seeding before starting.
+          </Alert>
+        )}
 
         <Box
           display="flex"

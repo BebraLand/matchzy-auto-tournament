@@ -12,6 +12,7 @@ import {
   Chip,
   Card,
   Tooltip,
+  Popover,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
@@ -21,6 +22,7 @@ import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { useNavigate } from 'react-router-dom';
 import BracketsViewerVisualization from '../components/visualizations/BracketsViewerVisualization';
 import SwissView from '../components/visualizations/SwissView';
@@ -67,6 +69,7 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
   const [shuffleTotalRounds, setShuffleTotalRounds] = useState<number | null>(null);
   const [seedingDraft, setSeedingDraft] = useState<Match[] | null>(null);
   const [savingSeeding, setSavingSeeding] = useState(false);
+  const [seedingHelpAnchor, setSeedingHelpAnchor] = useState<HTMLElement | null>(null);
   const fullscreenRef = useRef<globalThis.HTMLDivElement>(null);
   const selectedMatchIdRef = useRef<number | null>(null);
   const [allocationCountdown, setAllocationCountdown] = useState<{
@@ -643,6 +646,8 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 2,
               mb: 4,
               p: 2,
             }}
@@ -658,15 +663,42 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
                 </Typography>
               </Box>
             </Box>
-            <Box display="flex" gap={2} alignItems="center">
+            <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
               {canReseedFromBracket && (
-                <Chip
-                  icon={<DragIndicatorIcon />}
-                  label={seedingChanged ? 'Seeding preview — not saved' : 'Drag Round 1 teams to reseed'}
-                  color={seedingChanged ? 'warning' : 'default'}
-                  variant="outlined"
-                  size="small"
-                />
+                <>
+                  <Button
+                    size="small"
+                    startIcon={<HelpOutlineIcon />}
+                    onClick={(event) => setSeedingHelpAnchor(event.currentTarget)}
+                  >
+                    How to edit matchups
+                  </Button>
+                  <Popover
+                    open={Boolean(seedingHelpAnchor)}
+                    anchorEl={seedingHelpAnchor}
+                    onClose={() => setSeedingHelpAnchor(null)}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  >
+                    <Box sx={{ p: 2, maxWidth: 320 }}>
+                      <Typography variant="subtitle2" gutterBottom>
+                        Change Round 1 matchups
+                      </Typography>
+                      <Typography variant="body2">
+                        Drag a team with a dashed outline onto another Round 1 team to swap them.
+                        Then choose Save seeding, or Discard to undo your changes.
+                      </Typography>
+                    </Box>
+                  </Popover>
+                  <Chip
+                    icon={<DragIndicatorIcon />}
+                    label={
+                      seedingChanged ? 'Seeding preview — not saved' : 'Drag Round 1 teams to reseed'
+                    }
+                    color={seedingChanged ? 'warning' : 'default'}
+                    variant="outlined"
+                    size="small"
+                  />
+                </>
               )}
               {seedingChanged ? (
                 <Stack direction="row" spacing={1}>

@@ -142,7 +142,7 @@ export default function BracketsViewerVisualization({
 
         const slot = { matchId: match.id, side };
         participant.draggable = true;
-        participant.title = 'Drag to another first-round slot';
+        participant.title = `${match[side]?.name} — drag to another Round 1 team to swap`;
         participant.setAttribute('aria-label', `${participant.textContent?.trim() || 'Team'}. Drag to reseed`);
         participant.style.cursor = 'grab';
         participant.style.outline = `1px dashed ${alpha(theme.palette.primary.main, 0.45)}`;
@@ -250,23 +250,23 @@ export default function BracketsViewerVisualization({
     const viewerMatches: ViewerMatch[] = [];
     const participants: Participant[] = [];
 
-    // Collect unique teams
-    const teamSet = new Set<string>();
+    // Use full names when tags collide, so teams remain distinguishable in the bracket.
+    const teamsById = new Map<string, NonNullable<Match['team1']>>();
     matches.forEach((m) => {
-      if (m.team1?.id) teamSet.add(m.team1.id);
-      if (m.team2?.id) teamSet.add(m.team2.id);
+      if (m.team1?.id) teamsById.set(m.team1.id, m.team1);
+      if (m.team2?.id) teamsById.set(m.team2.id, m.team2);
+    });
+    const tagCounts = new Map<string, number>();
+    teamsById.forEach(({ tag }) => {
+      const key = tag?.trim().toLowerCase();
+      if (key) tagCounts.set(key, (tagCounts.get(key) ?? 0) + 1);
     });
 
     // Create participants mapping
     const teamIdMap = new Map<string, number>();
-    Array.from(teamSet).forEach((teamId, index) => {
-      const matchWithTeam = matches.find((m) => m.team1?.id === teamId || m.team2?.id === teamId);
-      const teamName =
-        matchWithTeam?.team1?.id === teamId
-          ? matchWithTeam.team1.tag || matchWithTeam.team1.name
-          : matchWithTeam?.team2?.id === teamId
-          ? matchWithTeam.team2?.tag || matchWithTeam.team2?.name
-          : teamId;
+    Array.from(teamsById).forEach(([teamId, team], index) => {
+      const tag = team.tag?.trim();
+      const teamName = tag && (tagCounts.get(tag.toLowerCase()) ?? 0) > 1 ? team.name : tag || team.name;
 
       participants.push({
         id: index,
@@ -686,7 +686,11 @@ export default function BracketsViewerVisualization({
         const transformInstance = transformRef.current;
         if (transformInstance) {
           if (shouldAutoCenterRef.current) {
-            transformInstance.centerView(undefined, 300, 'easeOutCubic');
+            transformInstance.centerView(
+              tournamentType === 'single_elimination' && matches.length <= 3 ? 1.6 : undefined,
+              300,
+              'easeOutCubic'
+            );
             shouldAutoCenterRef.current = false;
           }
         }
@@ -720,6 +724,8 @@ export default function BracketsViewerVisualization({
     updateSeedDragTargets,
     updateLiveRoundStyles,
     updateMatchStatusStyles,
+    matches.length,
+    tournamentType,
   ]);
 
   return (

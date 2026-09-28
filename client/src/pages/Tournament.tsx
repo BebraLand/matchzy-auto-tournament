@@ -1109,6 +1109,7 @@ const Tournament: React.FC = () => {
               }
               hasBracket={hasBracket}
               onEdit={() => setIsEditing(true)}
+              onViewBracket={() => navigate('/bracket')}
               onStart={handleStart}
               onRegenerate={() => setShowRegenerateConfirm(true)}
               onDelete={() => setShowDeleteConfirm(true)}

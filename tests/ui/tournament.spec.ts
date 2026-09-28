@@ -70,6 +70,13 @@ test.describe.serial('Tournament UI', () => {
       const teams = await createTestTeams(request, 'tournament-ui');
       expect(teams, 'test teams should be created').toBeTruthy();
       teamIds = teams!.map((team) => team.id);
+      for (const team of teams!) {
+        const response = await request.put(`/api/teams/${team.id}`, {
+          headers: getAuthHeader(),
+          data: { tag: 'SAME' },
+        });
+        expect(response.ok(), 'matching team tags should be allowed').toBe(true);
+      }
 
       const server = await createTestServer(request, 'tournament-ui');
       expect(server, 'a test server should be created').toBeTruthy();
@@ -86,6 +93,13 @@ test.describe.serial('Tournament UI', () => {
       await page.goto('/tournament');
       await expect(page.getByTestId('tournament-name-display')).toBeVisible();
       await expect(page.getByTestId('tournament-welcome-create-new')).toHaveCount(0);
+      await page.getByRole('button', { name: 'Edit matchups' }).click();
+      await expect(page).toHaveURL(/\/bracket/);
+      await page.getByRole('button', { name: 'How to edit matchups' }).click();
+      await expect(page.getByText('Change Round 1 matchups')).toBeVisible();
+      for (const team of teams!) {
+        await expect(page.locator('.brackets-viewer .participant').filter({ hasText: team.name })).toBeVisible();
+      }
     }
   );
 
