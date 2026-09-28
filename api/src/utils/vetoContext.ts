@@ -9,6 +9,7 @@
 import { db } from '../config/database';
 import type { DbMatchRow } from '../types/database.types';
 import { getVetoOrder, type VetoStep } from './vetoConfig';
+import { getMatchFormat } from './matchFormat';
 
 export type VetoContext = {
   format: 'bo1' | 'bo3' | 'bo5';
@@ -42,7 +43,7 @@ export async function getVetoContext(match: DbMatchRow): Promise<VetoContext | n
 
   const tournamentSettings = tournament.settings ? JSON.parse(tournament.settings) : {};
   return {
-    format: tournament.format as 'bo1' | 'bo3' | 'bo5',
+    format: getMatchFormat({ format: tournament.format as VetoContext['format'], settings: tournamentSettings }, match.slug),
     tournamentMaps: JSON.parse(tournament.maps),
     customVetoOrder: tournamentSettings.customVetoOrder,
   };

@@ -5,6 +5,7 @@ import { getBracketGenerator } from './bracketGenerators';
 import { validateTeamCount, calculateTotalRounds } from '../utils/tournamentHelpers';
 import { enrichMatch } from '../utils/matchEnrichment';
 import { matchLiveStatsService } from './matchLiveStatsService';
+import { generateMatchConfig } from './matchConfigBuilder';
 import type { DbMatchRow, DbTeamRow } from '../types/database.types';
 import type {
   Tournament,
@@ -187,6 +188,25 @@ class TournamentService {
       throw new Error('Cannot change bracket seeding after tournament has started');
     }
 
+    if (settings?.matchFormats !== undefined) {
+      if (existing.status !== 'setup') {
+        throw new Error('Cannot change match formats after tournament has started');
+      }
+      const formats: unknown = settings.matchFormats;
+      if (!formats || typeof formats !== 'object' || Array.isArray(formats)) {
+        throw new Error('Match formats must be an object keyed by bracket match slug');
+      }
+      const bracketMatches = await db.queryAsync<{ slug: string }>(
+        'SELECT slug FROM matches WHERE tournament_id = 1 AND round > 0'
+      );
+      const slugs = new Set(bracketMatches.map((match) => match.slug));
+      for (const [slug, matchFormat] of Object.entries(formats)) {
+        if (!slugs.has(slug) || !['bo1', 'bo3', 'bo5'].includes(matchFormat as string)) {
+          throw new Error(`Invalid match format override for ${slug}`);
+        }
+      }
+    }
+
     // Validate team count if changing teams or type
     if (type || teamIds) {
       validateTeamCount(type || existing.type, (teamIds || existing.teamIds).length);
@@ -234,6 +254,23 @@ class TournamentService {
             1,
           ]);
         }
+      }
+    }
+
+    if (settings?.matchFormats !== undefined || (format && existing.status === 'setup')) {
+      const configuredTournament = await this.getTournament();
+      if (!configuredTournament) throw new Error('Tournament disappeared while saving match formats');
+      const bracketMatches = await db.queryAsync<DbMatchRow>(
+        'SELECT * FROM matches WHERE tournament_id = 1 AND round > 0'
+      );
+      for (const match of bracketMatches) {
+        const config = await generateMatchConfig(
+          configuredTournament,
+          match.team1_id ?? undefined,
+          match.team2_id ?? undefined,
+          match.slug
+        );
+        await db.updateAsync('matches', { config: JSON.stringify(config) }, 'id = ?', [match.id]);
       }
     }
 
@@ -571,6 +608,10 @@ class TournamentService {
       if (row.config) {
         try {
           match.config = JSON.parse(row.config);
+          const numMaps = match.config?.num_maps;
+          if (numMaps === 1 || numMaps === 3 || numMaps === 5) {
+            match.matchFormat = `bo${numMaps}` as BracketMatch['matchFormat'];
+          }
         } catch {
           // Ignore parse errors
         }

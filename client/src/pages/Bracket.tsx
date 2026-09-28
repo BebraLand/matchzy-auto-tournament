@@ -13,6 +13,12 @@ import {
   Card,
   Tooltip,
   Popover,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
@@ -69,6 +75,9 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
   const [shuffleTotalRounds, setShuffleTotalRounds] = useState<number | null>(null);
   const [seedingDraft, setSeedingDraft] = useState<Match[] | null>(null);
   const [savingSeeding, setSavingSeeding] = useState(false);
+  const [formatDialogOpen, setFormatDialogOpen] = useState(false);
+  const [formatDraft, setFormatDraft] = useState<Record<string, 'bo1' | 'bo3' | 'bo5'>>({});
+  const [savingFormats, setSavingFormats] = useState(false);
   const [seedingHelpAnchor, setSeedingHelpAnchor] = useState<HTMLElement | null>(null);
   const fullscreenRef = useRef<globalThis.HTMLDivElement>(null);
   const selectedMatchIdRef = useRef<number | null>(null);
@@ -543,6 +552,21 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
     }
   };
 
+  const saveMatchFormats = async () => {
+    if (!tournament || tournament.status !== 'setup') return;
+    try {
+      setSavingFormats(true);
+      await api.put('/api/tournament', { settings: { matchFormats: formatDraft } });
+      await loadBracket({ silent: true });
+      setFormatDialogOpen(false);
+      showSuccess('Match formats saved.');
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to save match formats');
+    } finally {
+      setSavingFormats(false);
+    }
+  };
+
   // Group matches by round
   const matchesByRound: { [round: number]: Match[] } = {};
   matches.forEach((match) => {
@@ -567,6 +591,11 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
     }
     return getRoundLabel(round, effectiveTotalRounds);
   };
+
+  const formatOverrides = tournament.settings?.matchFormats ?? {};
+  const canEditMatchFormats =
+    !publicPage && tournament.status === 'setup' && tournament.type !== 'shuffle' &&
+    matches.some((match) => match.round > 0);
 
   const getRoundMapLabel = (round: number): string | null => {
     if (tournament.type !== 'shuffle') {
@@ -659,11 +688,19 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   {tournament.type.replace('_', ' ').toUpperCase()} •{' '}
-                  {tournament.format.toUpperCase()}
+                  {tournament.format.toUpperCase()}{Object.keys(formatOverrides).length ? ' default' : ''}
                 </Typography>
               </Box>
             </Box>
             <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+              {canEditMatchFormats && (
+                <Button size="small" variant="outlined" onClick={() => {
+                  setFormatDraft({ ...formatOverrides });
+                  setFormatDialogOpen(true);
+                }}>
+                  Set match formats
+                </Button>
+              )}
               {canReseedFromBracket && (
                 <>
                   <Button
@@ -767,6 +804,56 @@ export default function Bracket({ publicPage = false }: { publicPage?: boolean }
             </Box>
           </Box>
         </>
+      )}
+
+      <Dialog open={formatDialogOpen} onClose={() => !savingFormats && setFormatDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Match formats</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Choose BO1, BO3, or BO5 for each match before starting the tournament. Unchanged matches use the tournament default.
+          </Typography>
+          <Stack spacing={2}>
+            {matches.filter((match) => match.round > 0).map((match) => (
+              <Box key={match.id} display="flex" alignItems="center" justifyContent="space-between" gap={2}>
+                <Box minWidth={0}>
+                  <Typography variant="body2" fontWeight={600}>{getBracketRoundLabel(match.round)} · {match.slug}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {match.team1?.name ?? 'TBD'} vs {match.team2?.name ?? 'TBD'}
+                  </Typography>
+                </Box>
+                <TextField select size="small" label="Format" value={formatDraft[match.slug] ?? tournament.format}
+                  onChange={(event) => setFormatDraft((current) => {
+                    const next = { ...current };
+                    const value = event.target.value as 'bo1' | 'bo3' | 'bo5';
+                    if (value === tournament.format) delete next[match.slug];
+                    else next[match.slug] = value;
+                    return next;
+                  })}
+                  disabled={savingFormats} sx={{ minWidth: 100 }}>
+                  <MenuItem value="bo1">BO1</MenuItem>
+                  <MenuItem value="bo3">BO3</MenuItem>
+                  <MenuItem value="bo5">BO5</MenuItem>
+                </TextField>
+              </Box>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setFormatDialogOpen(false)} disabled={savingFormats}>Cancel</Button>
+          <Button variant="contained" onClick={saveMatchFormats} disabled={savingFormats}>
+            {savingFormats ? 'Saving…' : 'Save formats'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {Object.entries(formatOverrides).length > 0 && !isFullscreen && (
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ px: 2, mb: 2 }}>
+          {Object.entries(formatOverrides).map(([slug, format]) => {
+            const match = matches.find((item) => item.slug === slug);
+            return match ? <Chip key={slug} size="small" variant="outlined" color="primary"
+              label={`${getBracketRoundLabel(match.round)} · ${slug}: ${format.toUpperCase()}`} /> : null;
+          })}
+        </Stack>
       )}
 
       {/* Allocation / cooldown status helper */}

@@ -23,6 +23,8 @@ export interface VetoStep {
 
 export interface TournamentSettings {
   matchFormat: MatchFormat;
+  /** Pre-start BO overrides keyed by stable bracket match slug. */
+  matchFormats?: Record<string, MatchFormat>;
   thirdPlaceMatch: boolean;
   autoAdvance: boolean;
   checkInRequired: boolean;
@@ -146,6 +148,7 @@ export interface UpdateTournamentInput {
 export interface BracketMatch {
   id: number;
   slug: string;
+  matchFormat?: MatchFormat;
   round: number;
   matchNumber: number;
   team1?: {

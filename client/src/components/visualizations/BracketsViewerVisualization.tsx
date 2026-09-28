@@ -109,6 +109,11 @@ export default function BracketsViewerVisualization({
       if (!matchId) return;
 
       const originalMatch = findOriginalMatch(matchId as Id);
+      const label = element.querySelector<HTMLElement>('.opponents > span');
+      if (label && originalMatch?.matchFormat && !label.dataset.seriesFormat) {
+        label.append(` · ${originalMatch.matchFormat.toUpperCase()}`);
+        label.dataset.seriesFormat = 'true';
+      }
       const hasTeams =
         !onSeedSlotSwap && Boolean(originalMatch?.team1?.id && originalMatch?.team2?.id);
 

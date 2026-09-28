@@ -8,6 +8,7 @@ import type { MatchPhase } from './matchPhase.types';
 export interface Match {
   id: number;
   slug: string;
+  matchFormat?: 'bo1' | 'bo3' | 'bo5';
   round: number;
   matchNumber: number;
   nextMatchId?: number | null;

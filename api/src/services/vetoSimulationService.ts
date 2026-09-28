@@ -3,6 +3,7 @@ import { log } from '../utils/logger';
 import type { DbMatchRow, DbTournamentRow } from '../types/database.types';
 import type { TournamentResponse } from '../types/tournament.types';
 import { getVetoOrder } from '../utils/vetoConfig';
+import { getMatchFormat } from '../utils/matchFormat';
 import { emitVetoUpdate } from './socketService';
 import { generateMatchConfig } from './matchConfigBuilder';
 
@@ -176,7 +177,7 @@ async function runAutoCompleteVetoForMatch(
     return;
   }
 
-  const format = tournament.format as 'bo1' | 'bo3' | 'bo5';
+  const format = getMatchFormat(tournament, matchSlug);
   const tournamentMaps: string[] = tournament.maps;
   const tournamentSettings = tournament.settings || {};
   const customVetoOrder = (tournamentSettings as { customVetoOrder?: unknown })

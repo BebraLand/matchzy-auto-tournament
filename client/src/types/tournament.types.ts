@@ -33,6 +33,7 @@ export interface Tournament {
 
 export interface TournamentSettings {
   matchFormat: string;
+  matchFormats?: Record<string, 'bo1' | 'bo3' | 'bo5'>;
   thirdPlaceMatch: boolean;
   autoAdvance: boolean;
   checkInRequired: boolean;

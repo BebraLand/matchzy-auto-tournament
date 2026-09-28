@@ -458,7 +458,9 @@ router.get('/:teamId/match', async (req: Request, res: Response) => {
         // see which maps were picked, but only verified team members will see
         // the interactive veto UI in the frontend.
         veto: vetoSummary,
-        matchFormat: (tournament?.format as 'bo1' | 'bo3' | 'bo5') || 'bo3',
+        matchFormat:
+          config.num_maps === 1 ? 'bo1' : config.num_maps === 3 ? 'bo3' : config.num_maps === 5 ? 'bo5'
+          : (tournament?.format as 'bo1' | 'bo3' | 'bo5') || 'bo3',
         loadedAt: match.loaded_at,
         config: {
           maplist: config.maplist,

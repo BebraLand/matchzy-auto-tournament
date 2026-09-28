@@ -6,6 +6,7 @@ import { log } from '../utils/logger';
 import { settingsService } from './settingsService';
 import { matchzyConfigService } from './matchzyConfigService';
 import { applyAdminMatchAccess } from './matchConfigAccessService';
+import { getMatchFormat } from '../utils/matchFormat';
 
 /**
  * Normalize the tournament's maxRounds into a safe mp_maxrounds value.
@@ -78,7 +79,8 @@ export const generateMatchConfig = async (
       ])
     : null;
 
-  const numMaps = tournament.format === 'bo1' ? 1 : tournament.format === 'bo3' ? 3 : 5;
+  const matchFormat = getMatchFormat(tournament, slug);
+  const numMaps = matchFormat === 'bo1' ? 1 : matchFormat === 'bo3' ? 3 : 5;
 
   // Parse players from database and convert to MatchZy format
   // Database format: {0: {name, steamId}, 1: {name, steamId}}

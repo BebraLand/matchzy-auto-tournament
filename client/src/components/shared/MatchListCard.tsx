@@ -297,6 +297,7 @@ export const MatchListCard: React.FC<MatchListCardProps> = ({
 
           {/* Status / badges */}
           <Box display="flex" alignItems="center" gap={0.5}>
+            {match.matchFormat && <Chip label={match.matchFormat.toUpperCase()} size="small" variant="outlined" />}
             {shuffle && (
               <Chip
                 label={manual ? 'Shuffle manual' : 'Shuffle'}
