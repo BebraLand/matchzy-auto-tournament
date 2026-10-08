@@ -20,6 +20,7 @@ import {
 } from './config/storage';
 import { swaggerSpec } from './config/swagger';
 import { log, logger, LOG_HTTP_REQUESTS, LOG_DB_VERBOSE, LOG_DB_VALUES } from './utils/logger';
+import { createFrontendRouter } from './utils/frontendHtml';
 import { cleanupOldLogs } from './utils/eventLogger';
 import { initializeSocket } from './services/socketService';
 import { serverService } from './services/serverService';
@@ -419,7 +420,7 @@ app.use('/api/player-cameras', playerCameraRoutes);
 
 // Serve frontend at /app (built client lives under api/public)
 const publicPath = path.join(__dirname, '..', 'public');
-app.use('/app', express.static(publicPath));
+app.use('/app', createFrontendRouter(publicPath, () => settingsService.getBranding(), frontendBaseUrl));
 
 // Serve map images statically
 ensureMapImagesDirectory();
@@ -428,9 +429,6 @@ ensureBrandingAssetsDirectory();
 app.use('/branding-assets', express.static(getBrandingAssetsDirectory()));
 ensureBroadcastAssetsDirectory();
 app.use('/broadcast-assets', express.static(getBroadcastAssetsDirectory()));
-app.get('/app/*', (_req: Request, res: Response) => {
-  res.sendFile(path.join(publicPath, 'index.html'));
-});
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

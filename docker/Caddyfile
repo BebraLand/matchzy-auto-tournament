@@ -44,9 +44,23 @@
 		reverse_proxy localhost:3000
 	}
 
+	@app path /app /app/*
+	handle @app {
+		reverse_proxy localhost:3000
+	}
+
 	handle {
 		root * /app/public
-		try_files {path} /index.html
-		file_server
+		@asset {
+			not path / /index.html
+			file {path}
+		}
+		handle @asset {
+			file_server
+		}
+		handle {
+			rewrite * /app{uri}
+			reverse_proxy localhost:3000
+		}
 	}
 }
