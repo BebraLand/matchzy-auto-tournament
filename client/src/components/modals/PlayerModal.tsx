@@ -24,18 +24,28 @@ import { useSnackbar } from '../../contexts/SnackbarContext';
 import ConfirmDialog from './ConfirmDialog';
 import { PlayerAvatar } from '../player/PlayerAvatar';
 import type { PlayerDetail } from '../../types/api.types';
-import type { Team, TeamsResponse } from '../../types';
+import type { Player, PlayerResponse, Team, TeamsResponse } from '../../types';
 import { useTranslation } from 'react-i18next';
 
 interface PlayerModalProps {
   open: boolean;
   player: PlayerDetail | null;
   onClose: () => void;
-  onSave: () => void;
-  onDelete: (playerId: string) => void;
+  onSave: (player: PlayerDetail) => void;
+  onDelete?: (playerId: string) => void;
+  draftPlayer?: Player;
+  manageTeam?: boolean;
 }
 
-export default function PlayerModal({ open, player, onClose, onSave, onDelete }: PlayerModalProps) {
+export default function PlayerModal({
+  open,
+  player,
+  onClose,
+  onSave,
+  onDelete,
+  draftPlayer,
+  manageTeam = true,
+}: PlayerModalProps) {
   const { t } = useTranslation();
   const { showSuccess, showError, showWarning } = useSnackbar();
   const [steamId, setSteamId] = useState('');
@@ -63,6 +73,7 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
   const originalElo = player?.currentElo ?? null;
 
   useEffect(() => {
+    setError('');
     if (player) {
       setSteamId(player.id);
       setName(player.name);
@@ -78,11 +89,17 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
       setIsSpectator(Boolean(player.isSpectator));
     } else {
       resetForm();
+      if (draftPlayer) {
+        setSteamId(draftPlayer.steamId);
+        setName(draftPlayer.name);
+        setAvatar(draftPlayer.avatar || '');
+        setElo(draftPlayer.elo ?? '');
+      }
     }
-  }, [player, open]);
+  }, [player, open, draftPlayer]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !manageTeam) return;
     void api
       .get<TeamsResponse>('/api/teams')
       .then((response) => {
@@ -97,7 +114,7 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
         );
       })
       .catch(() => setTeams([]));
-  }, [open, player]);
+  }, [open, player, manageTeam]);
 
   const resetForm = () => {
     setSteamId('');
@@ -214,20 +231,29 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
         isSpectator,
       };
 
+      let savedPlayer: PlayerDetail;
       if (isEditing) {
-        await api.put(`/api/players/${player.id}`, payload);
-        showSuccess(t('playerModal.success.playerUpdated'));
+        const response = await api.put<PlayerResponse>(`/api/players/${player.id}`, payload);
+        savedPlayer = response.player;
       } else {
-        await api.post('/api/players', payload);
-        showSuccess(t('playerModal.success.playerCreated'));
+        const response = await api.post<PlayerResponse>('/api/players', payload);
+        savedPlayer = response.player;
       }
 
       if (pendingPhotoData) {
-        await api.post(`/api/players/${steamId.trim()}/photo`, { imageData: pendingPhotoData });
+        const response = await api.post<PlayerResponse>(`/api/players/${steamId.trim()}/photo`, {
+          imageData: pendingPhotoData,
+        });
+        savedPlayer = response.player;
       }
-      await api.put(`/api/players/${steamId.trim()}/team`, { teamId: teamId || null });
+      if (manageTeam) {
+        await api.put(`/api/players/${steamId.trim()}/team`, { teamId: teamId || null });
+      }
 
-      onSave();
+      showSuccess(
+        t(isEditing ? 'playerModal.success.playerUpdated' : 'playerModal.success.playerCreated')
+      );
+      onSave(savedPlayer);
       onClose();
       resetForm();
       setConfirmEloUpdateOpen(false);
@@ -263,7 +289,7 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
   const handleDeleteConfirm = async () => {
     if (!player) return;
     setConfirmDeleteOpen(false);
-    onDelete(player.id);
+    onDelete?.(player.id);
     onClose();
     resetForm();
   };
@@ -294,7 +320,7 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
               label={t('playerModal.steamLabel')}
               value={steamId}
               onChange={(e) => setSteamId(e.target.value)}
-              disabled={isEditing || resolving}
+              disabled={isEditing || !!draftPlayer || resolving}
               fullWidth
               required
               error={!!error}
@@ -303,11 +329,13 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
               }}
               helperText={
                 error ||
-                (isEditing ? t('playerModal.steamHelperEditing') : t('playerModal.steamHelperNew'))
+                (isEditing || draftPlayer
+                  ? t('playerModal.steamHelperEditing')
+                  : t('playerModal.steamHelperNew'))
               }
             />
 
-            {!isEditing && (
+            {!isEditing && !draftPlayer && (
               <Button
                 variant="outlined"
                 onClick={handleResolveSteam}
@@ -354,29 +382,35 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
               />
             </Box>
 
-            <Box display="grid" gridTemplateColumns={{ xs: '1fr', sm: '140px 1fr' }} gap={2}>
+            <Box
+              display="grid"
+              gridTemplateColumns={{ xs: '1fr', sm: manageTeam ? '140px 1fr' : '1fr' }}
+              gap={2}
+            >
               <TextField
                 label="Country"
                 value={countryCode}
                 onChange={(event) => setCountryCode(event.target.value.toUpperCase().slice(0, 2))}
                 helperText="ISO code, e.g. LT"
               />
-              <FormControl fullWidth>
-                <InputLabel id="player-team-label">Team</InputLabel>
-                <Select
-                  labelId="player-team-label"
-                  value={teamId}
-                  label="Team"
-                  onChange={(event) => setTeamId(event.target.value)}
-                >
-                  <MenuItem value="">No team</MenuItem>
-                  {teams.map((team) => (
-                    <MenuItem key={team.id} value={team.id}>
-                      {team.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              {manageTeam && (
+                <FormControl fullWidth>
+                  <InputLabel id="player-team-label">Team</InputLabel>
+                  <Select
+                    labelId="player-team-label"
+                    value={teamId}
+                    label="Team"
+                    onChange={(event) => setTeamId(event.target.value)}
+                  >
+                    <MenuItem value="">No team</MenuItem>
+                    {teams.map((team) => (
+                      <MenuItem key={team.id} value={team.id}>
+                        {team.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
             </Box>
 
             <TextField
@@ -471,7 +505,7 @@ export default function PlayerModal({ open, player, onClose, onSave, onDelete }:
           </Box>
         </DialogContent>
         <DialogActions>
-          {isEditing && (
+          {isEditing && onDelete && (
             <Button
               color="error"
               startIcon={<DeleteIcon />}

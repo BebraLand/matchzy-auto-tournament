@@ -195,7 +195,9 @@
       "teamNameRequired": "Team name is required",
       "playersRequired": "At least one player is required",
       "saveFailed": "Failed to save team",
-      "deleteFailed": "Failed to delete team"
+      "deleteFailed": "Failed to delete team",
+      "playerLoadFailed": "Could not open this player. Please try again.",
+      "profilesLoadFailed": "Could not load player profiles. Custom image status is unavailable."
     },
     "success": {
       "playerAdded": "Player added to team",
@@ -217,7 +219,18 @@
       "message": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone."
     },
     "replacePlayerAria": "Replace player {{name}}",
-    "replacePlayerTooltip": "Replace this player"
+    "replacePlayerTooltip": "Replace this player",
+    "editPlayerHint": "Click a player to edit their profile or custom image",
+    "editPlayerAria": "Edit player {{name}}",
+    "removePlayerAria": "Remove {{name}} from this team",
+    "steamAvatar": "Steam",
+    "customImage": "Custom",
+    "customImageCount": "Custom images: {{assigned}} / {{count}}",
+    "customImageAria": "Custom image for {{name}}",
+    "customImageSet": "Custom image set",
+    "customImageMissing": "No custom image",
+    "customImageUnknown": "Image status unavailable",
+    "retry": "Retry"
   },
   "playerModal": {
     "titleCreate": "Create Player",

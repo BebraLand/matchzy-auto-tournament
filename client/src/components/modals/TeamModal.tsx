@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -14,7 +14,10 @@ import {
   Typography,
   Alert,
   Divider,
-  ListItemAvatar,
+  ListItemButton,
+  Avatar,
+  Chip,
+  Skeleton,
   Tooltip,
   CircularProgress,
   MenuItem,
@@ -25,12 +28,16 @@ import SearchIcon from '@mui/icons-material/Search';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import CloseIcon from '@mui/icons-material/Close';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { api } from '../../utils/api';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import ConfirmDialog from './ConfirmDialog';
 import PlayerSelectionModal from './PlayerSelectionModal';
+import PlayerModal from './PlayerModal';
 import { PlayerAvatar } from '../player/PlayerAvatar';
-import type { Team, Player } from '../../types';
+import type { Team, Player, PlayerDetail, PlayerResponse, PlayersResponse } from '../../types';
 import { useTranslation } from 'react-i18next';
 
 interface TeamModalProps {
@@ -106,9 +113,28 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
   const [playerSelectionModalOpen, setPlayerSelectionModalOpen] = useState(false);
   const [replacePlayerSteamId, setReplacePlayerSteamId] = useState<string | null>(null);
 
+  const [playerProfiles, setPlayerProfiles] = useState<Record<string, PlayerDetail>>({});
+  const [profilesLoading, setProfilesLoading] = useState(false);
+  const [profilesError, setProfilesError] = useState(false);
+  const [profileReload, setProfileReload] = useState(0);
+  const [editingPlayer, setEditingPlayer] = useState<PlayerDetail | null>(null);
+  const [draftPlayer, setDraftPlayer] = useState<Player | undefined>();
+  const [loadingPlayerId, setLoadingPlayerId] = useState<string | null>(null);
+  const editorRequest = useRef(0);
+
   const isEditing = !!team;
+  const rosterPlayers = players.map((player) => {
+    const profile = playerProfiles[player.steamId];
+    return profile
+      ? { ...player, name: profile.name, avatar: profile.avatar, elo: profile.currentElo }
+      : player;
+  });
 
   useEffect(() => {
+    editorRequest.current += 1;
+    setEditingPlayer(null);
+    setDraftPlayer(undefined);
+    setLoadingPlayerId(null);
     if (team) {
       setId(team.id);
       setName(team.name);
@@ -122,6 +148,65 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
       resetForm();
     }
   }, [team, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new globalThis.AbortController();
+    setPlayerProfiles({});
+    setProfilesLoading(true);
+    setProfilesError(false);
+    void api
+      .fetch('/api/players', { signal: controller.signal })
+      .then((response: PlayersResponse) => {
+        if (controller.signal.aborted) return;
+        if (!response.success) throw new Error('Failed to load player profiles');
+        setPlayerProfiles(Object.fromEntries(response.players.map((player) => [player.id, player])));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setProfilesError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setProfilesLoading(false);
+      });
+    return () => controller.abort();
+  }, [open, team, profileReload]);
+
+  const handleEditPlayer = async (player: Player) => {
+    const requestId = ++editorRequest.current;
+    setLoadingPlayerId(player.steamId);
+    try {
+      const response = await api.get<PlayerResponse>(`/api/players/${player.steamId}`);
+      if (requestId !== editorRequest.current) return;
+      if (!response.success || !response.player) throw new Error('Player profile unavailable');
+      setPlayerProfiles((current) => ({ ...current, [response.player.id]: response.player }));
+      setEditingPlayer(response.player);
+    } catch (error) {
+      if (requestId !== editorRequest.current) return;
+      if (error instanceof Error && /not found/i.test(error.message)) {
+        setDraftPlayer(player);
+      } else {
+        showError(t('teamModal.errors.playerLoadFailed'));
+      }
+    } finally {
+      if (requestId === editorRequest.current) setLoadingPlayerId(null);
+    }
+  };
+
+  const handlePlayerSaved = (savedPlayer: PlayerDetail) => {
+    setPlayerProfiles((current) => ({ ...current, [savedPlayer.id]: savedPlayer }));
+    setPlayers((current) =>
+      current.map((player) =>
+        player.steamId === savedPlayer.id
+          ? {
+              ...player,
+              name: savedPlayer.name,
+              avatar: savedPlayer.avatar,
+              elo: savedPlayer.currentElo,
+            }
+          : player
+      )
+    );
+  };
 
   const resetForm = () => {
     setId('');
@@ -369,7 +454,7 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
         countryCode: countryCode.trim().toUpperCase() || undefined,
         logoUrl: logoUrl.trim() || null,
         discordRoleId: undefined, // Discord notifications not yet implemented
-        players,
+        players: rosterPlayers,
         captainSteamId: captainSteamId || null,
       };
 
@@ -597,80 +682,197 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
                   data-testid="team-captain-select"
                 >
                   <MenuItem value="">{t('teamModal.noCaptain', 'No captain assigned')}</MenuItem>
-                  {players.map((player) => (
+                  {rosterPlayers.map((player) => (
                     <MenuItem key={player.steamId} value={player.steamId}>
                       {player.name}
                     </MenuItem>
                   ))}
                 </TextField>
-                <List sx={{ bgcolor: 'background.paper' }}>
-                  {players.map((player) => (
-                  <ListItem
-                    key={player.steamId}
-                    secondaryAction={
-                      <Box display="flex" alignItems="center" gap={1}>
-                        <IconButton
-                          edge="end"
-                          size="small"
-                          color="primary"
-                          onClick={() => {
-                            setReplacePlayerSteamId(player.steamId);
-                            setPlayerSelectionModalOpen(true);
-                          }}
-                          data-testid={`team-replace-player-${player.steamId}`}
-                          aria-label={t('teamModal.replacePlayerAria', { name: player.name })}
-                        >
-                          <Tooltip title={t('teamModal.replacePlayerTooltip')}>
-                            <SwapHorizIcon fontSize="small" />
-                          </Tooltip>
-                        </IconButton>
-                        <IconButton
-                          edge="end"
-                          onClick={() => handleRemovePlayer(player.steamId)}
-                          color="error"
-                          size="small"
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Box>
+                <Box
+                  display="flex"
+                  flexWrap="wrap"
+                  alignItems="center"
+                  justifyContent="space-between"
+                  gap={1}
+                >
+                  <Typography variant="caption" color="text.secondary">
+                    {t('teamModal.editPlayerHint')}
+                  </Typography>
+                  {!profilesLoading && !profilesError && (
+                    <Typography variant="caption" color="text.secondary" data-testid="team-custom-images-count">
+                      {t('teamModal.customImageCount', {
+                        assigned: players.filter((player) =>
+                          playerProfiles[player.steamId]?.photoUrl?.trim()
+                        ).length,
+                        count: players.length,
+                      })}
+                    </Typography>
+                  )}
+                </Box>
+                {profilesError && (
+                  <Alert
+                    severity="warning"
+                    action={
+                      <Button onClick={() => setProfileReload((value) => value + 1)}>
+                        {t('teamModal.retry')}
+                      </Button>
                     }
                   >
-                    <ListItemAvatar>
-                      <PlayerAvatar
-                        id={player.steamId}
-                        name={player.name}
-                        avatarUrl={player.avatar}
-                        size={40}
-                      />
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={player.name}
-                      secondary={
-                        <>
-                          <Typography
-                            component="span"
-                            variant="caption"
-                            display="block"
-                            fontFamily="monospace"
-                          >
-                            {player.steamId}
-                          </Typography>
-                          {player.elo !== undefined && (
-                            <Typography
-                              component="span"
-                              variant="caption"
-                              color="text.secondary"
-                              display="block"
-                            >
-                              ELO: {player.elo}
-                            </Typography>
+                    {t('teamModal.errors.profilesLoadFailed')}
+                  </Alert>
+                )}
+                <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                  {rosterPlayers.map((player) => {
+                    const profile = playerProfiles[player.steamId];
+                    const photoUrl = profile?.photoUrl?.trim();
+                    const statusKnown = Boolean(profile) || (!profilesLoading && !profilesError);
+                    return (
+                      <ListItem
+                        key={player.steamId}
+                        disablePadding
+                        sx={{ pr: 10, borderRadius: 2, bgcolor: 'action.hover' }}
+                        secondaryAction={
+                          <Box display="flex" alignItems="center" gap={0.5}>
+                            <Tooltip title={t('teamModal.replacePlayerTooltip')}>
+                              <IconButton
+                                size="small"
+                                color="primary"
+                                disabled={saving || loadingPlayerId !== null}
+                                onClick={() => {
+                                  setReplacePlayerSteamId(player.steamId);
+                                  setPlayerSelectionModalOpen(true);
+                                }}
+                                data-testid={`team-replace-player-${player.steamId}`}
+                                aria-label={t('teamModal.replacePlayerAria', { name: player.name })}
+                              >
+                                <SwapHorizIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title={t('teamModal.removePlayerAria', { name: player.name })}>
+                              <IconButton
+                                onClick={() => handleRemovePlayer(player.steamId)}
+                                color="error"
+                                size="small"
+                                disabled={saving || loadingPlayerId !== null}
+                                aria-label={t('teamModal.removePlayerAria', { name: player.name })}
+                                data-testid={`team-remove-player-${player.steamId}`}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                        }
+                      >
+                        <ListItemButton
+                          component="button"
+                          onClick={() => void handleEditPlayer(player)}
+                          disabled={saving || profilesLoading || loadingPlayerId !== null}
+                          aria-label={t('teamModal.editPlayerAria', { name: player.name })}
+                          data-testid={`team-edit-player-${player.steamId}`}
+                          sx={{
+                            borderRadius: 2,
+                            gap: 1.5,
+                            minWidth: 0,
+                            py: 1.5,
+                            alignItems: { xs: 'flex-start', sm: 'center' },
+                            flexDirection: { xs: 'column', sm: 'row' },
+                          }}
+                        >
+                          <Box display="flex" gap={1.25} sx={{ flexShrink: 0 }}>
+                            <Box display="flex" flexDirection="column" alignItems="center" gap={0.5}>
+                              <PlayerAvatar
+                                id={player.steamId}
+                                name={player.name}
+                                avatarUrl={player.avatar}
+                                size={40}
+                              />
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+                                {t('teamModal.steamAvatar')}
+                              </Typography>
+                            </Box>
+                            <Box display="flex" flexDirection="column" alignItems="center" gap={0.5}>
+                              {profilesLoading ? (
+                                <Skeleton variant="rounded" width={40} height={40} />
+                              ) : (
+                                <Avatar
+                                  variant="rounded"
+                                  src={photoUrl}
+                                  alt={t('teamModal.customImageAria', { name: player.name })}
+                                  data-testid={`team-player-photo-${player.steamId}`}
+                                  sx={{
+                                    width: 40,
+                                    height: 40,
+                                    bgcolor: 'action.selected',
+                                    color: 'text.disabled',
+                                  }}
+                                >
+                                  <ImageOutlinedIcon fontSize="small" />
+                                </Avatar>
+                              )}
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+                                {t('teamModal.customImage')}
+                              </Typography>
+                            </Box>
+                          </Box>
+                          <ListItemText
+                            sx={{ minWidth: 0, m: 0 }}
+                            primary={player.name}
+                            secondary={
+                              <>
+                                <Typography
+                                  component="span"
+                                  variant="caption"
+                                  display="block"
+                                  fontFamily="monospace"
+                                >
+                                  {player.steamId}
+                                </Typography>
+                                {player.elo !== undefined && (
+                                  <Typography component="span" variant="caption" display="block">
+                                    ELO: {player.elo}
+                                  </Typography>
+                                )}
+                                {profilesLoading ? (
+                                  <Skeleton width={110} height={24} />
+                                ) : (
+                                  <Chip
+                                    component="span"
+                                    size="small"
+                                    variant="outlined"
+                                    color={photoUrl ? 'success' : 'default'}
+                                    icon={photoUrl ? <CheckCircleOutlineIcon /> : <ImageOutlinedIcon />}
+                                    label={t(
+                                      photoUrl
+                                        ? 'teamModal.customImageSet'
+                                        : statusKnown
+                                          ? 'teamModal.customImageMissing'
+                                          : 'teamModal.customImageUnknown'
+                                    )}
+                                    data-testid={`team-player-photo-status-${player.steamId}`}
+                                    sx={{ mt: 0.5, height: 22, fontSize: 11 }}
+                                  />
+                                )}
+                              </>
+                            }
+                            primaryTypographyProps={{ fontWeight: 600, noWrap: true }}
+                            secondaryTypographyProps={{ component: 'div' }}
+                          />
+                          {loadingPlayerId === player.steamId ? (
+                            <CircularProgress size={16} sx={{ flexShrink: 0 }} />
+                          ) : (
+                            <EditOutlinedIcon
+                              sx={{
+                                fontSize: 16,
+                                color: 'text.secondary',
+                                flexShrink: 0,
+                                display: { xs: 'none', sm: 'block' },
+                              }}
+                            />
                           )}
-                        </>
-                      }
-                      primaryTypographyProps={{ fontWeight: 500 }}
-                    />
-                  </ListItem>
-                  ))}
+                        </ListItemButton>
+                      </ListItem>
+                    );
+                  })}
                 </List>
               </>
             ) : (
@@ -797,6 +999,18 @@ export default function TeamModal({ open, team, onClose, onSave }: TeamModalProp
         onConfirm={handleDeleteConfirm}
         onCancel={() => setConfirmDeleteOpen(false)}
         confirmColor="error"
+      />
+
+      <PlayerModal
+        open={open && (editingPlayer !== null || draftPlayer !== undefined)}
+        player={editingPlayer}
+        draftPlayer={draftPlayer}
+        manageTeam={false}
+        onClose={() => {
+          setEditingPlayer(null);
+          setDraftPlayer(undefined);
+        }}
+        onSave={handlePlayerSaved}
       />
 
       <PlayerSelectionModal
