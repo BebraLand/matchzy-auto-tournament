@@ -1,6 +1,6 @@
 # Base image with Node.js and Yarn (via corepack)
 # Using Alpine for smallest possible image size
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 WORKDIR /app
 
 # Install necessary build tools for Alpine (only in build stages)
@@ -67,7 +67,7 @@ RUN echo "Building backend (TypeScript compilation)..." && \
 # NO node_modules needed - backend is bundled!
 # Using Alpine for smallest possible image size
 # -------------------------------------------------------------------
-FROM node:20-alpine AS release
+FROM node:24-alpine AS release
 WORKDIR /app
 
 # Build arguments for platform detection
